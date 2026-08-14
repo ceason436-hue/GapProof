@@ -2,15 +2,15 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.10"
+version: "0.3.11"
 status: "DRAFT_FOR_IMPLEMENTATION"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.17"
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.9"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.18"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.10"
 ---
 
 # 知隙 GapProof 技术设计文档（TDD）
@@ -1116,14 +1116,16 @@ Serverless 很适合短 API 和自动扩容，但 OCR、多轮模型、报告、
 
 - 已初始化 Bun workspace；`contracts`、`domain`、`db`、`jobs` 与 `testkit` 已建立依赖边界。
 - 已实现 PostgreSQL 16 + pgvector、Drizzle Schema/SQL migration、事件追加、写请求幂等和 Case `state_version` 乐观锁。
-- 已实现 Fastify `POST /v1/cases`、`GET /v1/cases/{caseId}`、`POST /v1/cases/{caseId}/commands/run-next`、`POST /v1/cases/{caseId}/extraction/confirm` 与 `GET /v1/cases/{caseId}/hypotheses`，并统一成功与错误响应。
+- 已实现 Fastify `POST /v1/cases`、`GET /v1/cases/{caseId}`、`POST /v1/cases/{caseId}/commands/run-next`、`POST /v1/cases/{caseId}/extraction/confirm`、`GET /v1/cases/{caseId}/hypotheses` 与 `POST /v1/cases/{caseId}/attempts`，并统一成功与错误响应。
 - `run-next` 通过 pg-boss 交给独立 Worker；确定性 fake OCR 可将 Case 从 `awaiting_evidence` 推进至 `awaiting_confirmation`，识别确认再通过领域事件推进至 `ready_for_diagnosis`。
 - 识别确认请求包含 `expectedVersion`、非空且去重的 `confirmedItemIds` 与 `corrections`；服务端记录 `recognition_confirmed` 事件，拒绝旧版本、非法状态和修正项越界，并保证顺序及并发重放只追加一个事件。
 - Worker 在 `ready_for_diagnosis` 调用确定性 fake `form_hypotheses`：至少生成两个 ID 不同、引用确认事件的竞争性候选，同时选择覆盖这些候选的确认小题，并以 `hypotheses_generated` 事件原子推进到 `probe_required`。
-- 查询接口返回候选、置信度、解释、证据引用和确认小题，但删除内部 `expectedChoiceId`，避免向学生端泄露答案。
-- 当前证据为 21 条快速测试通过、16 条真实数据库/API/Worker 集成测试通过、TypeScript 严格类型检查通过。
+- 查询接口返回候选、置信度、解释、证据引用和确认小题，但删除内部 `expectedChoiceId` 与 `scoringRule`，避免向学生端泄露答案和错因映射。
+- `POST /attempts` 接受 `expectedVersion`、`probeId` 与 `selectedChoiceId`，读取内部 `exact_choice_v1` 规则确定性评分，并以 `probe_evaluated` 原子推进到 `intervention_ready`；答错时映射受支持候选，答对时 `selectedHypothesisId` 为 `null`。
+- attempts 写入具备请求 Schema、幂等重放/键复用拒绝、并发去重、乐观锁、非法状态/探针/选项校验；评分事件保存请求、结果与上游 hypotheses 事件引用。
+- 当前证据为 24 条快速测试通过、20 条真实数据库/API/Worker 集成测试通过、TypeScript 严格类型检查通过。
 
-该快照不等于 Phase A 完成：Next.js、真实上传/对象存储、确认小题提交与错因评估、计划/学习、D+1/D+7、报告、真实 OCR/模型 Provider 和完整 Playwright Demo 仍未实现。
+该快照不等于 Phase A 完成：Next.js、真实上传/对象存储、干预内容与计划/学习、D+1/D+7、报告、真实 OCR/模型 Provider 和完整 Playwright Demo 仍未实现。
 
 ### 21.1 Phase A：Thin Slice（先证明闭环）
 
@@ -1441,7 +1443,7 @@ MVP 工具 Schema 最小字段：
 | TECH-022 | MVP Agent 固定为六节点 LangGraph.js 图 | accepted | 业务闭环增加新节点时更新图版本和 Golden Cases |
 | TECH-023 | 所有工具先完成接口、Schema、Mock 和错误处理；verify_item/schedule_retest 做 MVP 最小实现 | accepted | 工具边界或真实 Provider 能力发生变化 |
 | TECH-024 | escalate_human 先创建待处理记录；analyze_speech/score_writing 暂缓真实能力 | accepted | 真实人工流程、语音或写作试点启动 |
-| TECH-025 | UUIDv7 + PostgreSQL 16+；核心表字段/索引/枚举/删除策略按 TDD v0.3.9 | accepted | 数据规模、托管扩展或合规要求变化 |
+| TECH-025 | UUIDv7 + PostgreSQL 16+；核心表字段/索引/枚举/删除策略按 TDD v0.3.11 | accepted | 数据规模、托管扩展或合规要求变化 |
 | TECH-026 | 采用 TDD 详细 API 路由作为唯一正式接口 | accepted | API 版本升级或新客户端边界产生 |
 | TECH-027 | 杭州阿里云单区域联网 Docker Compose；真实 Provider 演示，Mock 仅测试/故障注入 | accepted | 比赛网络、并发、合规或可用性要求变化 |
 | TECH-028 | DeepSeek `deepseek-v4-flash` 主分析，MiniMax `minimax-m3` 教学/降级，腾讯混元 Embedding 1024 维 | accepted | 账号权限、供应商模型版本或评测结果变化 |
@@ -1499,8 +1501,16 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-002 | 2026-08-14 | `main` | `pushed` | `docs: finalize GitHub version-management log` | 将首个基线推送成功状态回写 TDD，提升 PROJECT_MASTER/TDD 文档版本并对齐当前引用，形成可供后续窗口恢复的 GitHub 版本管理闭环 | 文档链接和版本引用检查通过；仅提交 PROJECT_MASTER/TDD，不夹带并行任务中的未提交文件；推送后核对本地与 `origin/main` 一致 |
 | PUSH-003 | 2026-08-15 | `main` | `pushed` | `docs: enforce pre-push TDD logging order` | 将“先更新 TDD Push Log，再使用一致的清晰摘要提交和推送，最后核对远端”写入 TDD 正式规则及 PROJECT_MASTER 新窗口接管规则 | 四文档职责与版本引用检查通过；仅提交 PROJECT_MASTER/TDD，不夹带并行任务中的未提交文件；推送后核对本地与 `origin/main` 一致 |
 | PUSH-004 | 2026-08-15 | `main` | `pushed` | `docs: align MVP material-governance boundaries` | 同步版权页不可取得、教材以 ISBN/PDF 哈希/内容快照锁定、答题卡与音频私有留存但排除 MVP，以及仅对白名单材料逐份视觉核验的决定 | 四份主文档与两份材料登记一致性检查通过；原始教材、试题、音频和私有转换结果未进入 Git；推送后核对本地与 `origin/main` 一致 |
+| PUSH-005 | 2026-08-15 | `main` | `pushed` | `feat: evaluate diagnostic probe attempts` | 新增 attempts TypeBox 契约、内部评分规则、确定性评分器和 Fastify 路由；以 `probe_evaluated` 将 Case 从 `probe_required` 推进到 `intervention_ready`，并同步四份主文档 | 24 条快速测试、20 条真实 PostgreSQL/API/Worker 集成测试及 TypeScript 严格类型检查通过；覆盖正确/错误答案、答案与评分映射不泄露、幂等重放/键复用、并发重复、旧版本、非法状态与非法选项；推送后核对本地与 `origin/main` 一致 |
 
 ## 27. 变更日志
+
+### v0.3.11 — 2026-08-15
+
+- 实现 `POST /v1/cases/{caseId}/attempts` 请求/响应契约及 `exact_choice_v1` 确定性评分器，内部评分映射不通过 hypotheses 查询暴露。
+- 追加 `probe_evaluated` 事件并将 Case 从 `probe_required` 原子推进到 `intervention_ready`；正确答案不虚构错因，错误答案只映射受规则支持的候选。
+- 覆盖幂等、并发、版本冲突和非法输入/状态；测试更新为 24 条快速测试、20 条真实集成测试和严格类型检查通过。
+- 登记 `PUSH-005`，同步 PROJECT_MASTER v0.1.18 与 PRD v0.1.10。
 
 ### v0.3.10 — 2026-08-15
 

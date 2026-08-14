@@ -50,7 +50,10 @@ export const CaseEventSchema = Type.Union([
     EventBaseSchema,
     Type.Object({
       type: Type.Literal("probe_evaluated"),
-      selectedHypothesisId: Type.String({ minLength: 1 }),
+      selectedHypothesisId: Type.Union([
+        Type.String({ minLength: 1 }),
+        Type.Null(),
+      ]),
       passed: Type.Boolean(),
     }),
   ]),
@@ -82,4 +85,3 @@ export interface CaseAggregate {
   readonly replanCount: number;
   readonly appliedEventIds: readonly string[];
 }
-

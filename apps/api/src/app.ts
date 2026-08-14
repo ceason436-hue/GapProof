@@ -9,6 +9,8 @@ import {
   apiResponseSchema,
   ApiErrorResponseSchema,
   type ApiErrorResponse,
+  AttemptViewSchema,
+  type AttemptView,
   CaseIdParamsSchema,
   type CaseIdParams,
   CaseViewSchema,
@@ -23,6 +25,8 @@ import {
   RunNextQueuedSchema,
   RunNextRequestSchema,
   type RunNextRequest,
+  SubmitAttemptRequestSchema,
+  type SubmitAttemptRequest,
 } from "@gapproof/contracts";
 import {
   createSyntheticCaseIdempotent,
@@ -32,11 +36,14 @@ import {
   persistCaseTransition,
   type CaseRow,
   type Database,
+  type LearningEvidenceEventRow,
   ResourceNotFoundError,
   VersionConflictError,
 } from "@gapproof/db";
 import {
   CaseTransitionError,
+  ProbeScoringError,
+  scoreProbeAttempt,
   transitionCase,
 } from "@gapproof/domain";
 import {
@@ -94,6 +101,56 @@ function extractionConfirmationPayload(
     expectedVersion: body.expectedVersion,
     confirmedItemIds: [...body.confirmedItemIds],
     corrections: body.corrections.map((correction) => ({ ...correction })),
+  };
+}
+
+function attemptRequestPayload(
+  body: SubmitAttemptRequest,
+): Record<string, unknown> {
+  return {
+    expectedVersion: body.expectedVersion,
+    probeId: body.probeId,
+    selectedChoiceId: body.selectedChoiceId,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function attemptViewFromEvent(
+  caseRow: CaseRow,
+  event: LearningEvidenceEventRow,
+): AttemptView {
+  const result = event.payload.result;
+  if (
+    !isRecord(result) ||
+    typeof result.probeId !== "string" ||
+    typeof result.selectedChoiceId !== "string" ||
+    typeof result.passed !== "boolean" ||
+    !(
+      typeof result.selectedHypothesisId === "string" ||
+      result.selectedHypothesisId === null
+    ) ||
+    result.scoringMethod !== "exact_choice_v1"
+  ) {
+    throw new ApiHttpError(
+      500,
+      "STORED_EVENT_INVALID",
+      "The stored probe evaluation event is invalid.",
+    );
+  }
+
+  return {
+    attemptId: event.id,
+    caseId: caseRow.id,
+    state: caseRow.state,
+    stateVersion: caseRow.stateVersion,
+    probeId: result.probeId,
+    selectedChoiceId: result.selectedChoiceId,
+    passed: result.passed,
+    selectedHypothesisId: result.selectedHypothesisId,
+    scoringMethod: result.scoringMethod,
   };
 }
 
@@ -274,8 +331,11 @@ export async function buildApi(options: BuildApiOptions) {
           "The stored hypotheses event is invalid.",
         );
       }
-      const { expectedChoiceId: _expectedChoiceId, ...probe } =
-        generated.probe;
+      const {
+        expectedChoiceId: _expectedChoiceId,
+        scoringRule: _scoringRule,
+        ...probe
+      } = generated.probe;
       const view: HypothesesView = {
         caseId: caseRow.id,
         stateVersion: caseRow.stateVersion,
@@ -414,6 +474,209 @@ export async function buildApi(options: BuildApiOptions) {
         throw new ResourceNotFoundError("Case", caseRow.id);
       }
       return success(request, toCaseView(confirmedCase));
+    },
+  );
+
+  api.post<{ Params: CaseIdParams; Body: SubmitAttemptRequest }>(
+    "/v1/cases/:caseId/attempts",
+    {
+      schema: {
+        params: CaseIdParamsSchema,
+        body: SubmitAttemptRequestSchema,
+        response: {
+          200: apiResponseSchema(AttemptViewSchema),
+          "4xx": ApiErrorResponseSchema,
+          500: ApiErrorResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      const idempotencyKey = `submit-attempt:${getIdempotencyKey(request)}`;
+      const requestPayload = attemptRequestPayload(request.body);
+      const existingEvent = await findEvidenceEventByIdempotencyKey(
+        options.database,
+        idempotencyKey,
+      );
+
+      if (existingEvent !== undefined) {
+        if (
+          existingEvent.caseId !== request.params.caseId ||
+          existingEvent.eventType !== "probe_evaluated" ||
+          !isRecord(existingEvent.payload.request) ||
+          !isSamePayload(existingEvent.payload.request, requestPayload)
+        ) {
+          throw new ApiHttpError(
+            409,
+            "IDEMPOTENCY_KEY_REUSED",
+            "The idempotency key belongs to another write request.",
+          );
+        }
+        const replayedCase = await findCaseById(
+          options.database,
+          request.params.caseId,
+        );
+        if (replayedCase === undefined) {
+          throw new ResourceNotFoundError("Case", request.params.caseId);
+        }
+        return success(
+          request,
+          attemptViewFromEvent(replayedCase, existingEvent),
+        );
+      }
+
+      const caseRow = await findCaseById(
+        options.database,
+        request.params.caseId,
+      );
+      if (caseRow === undefined) {
+        throw new ResourceNotFoundError("Case", request.params.caseId);
+      }
+      if (caseRow.stateVersion !== request.body.expectedVersion) {
+        throw new VersionConflictError(
+          request.params.caseId,
+          request.body.expectedVersion,
+        );
+      }
+      if (caseRow.state !== "probe_required") {
+        throw new CaseTransitionError(
+          "invalid_transition",
+          `Event probe_evaluated requires probe_required, received ${caseRow.state}.`,
+        );
+      }
+
+      const hypothesesEvent = await findLatestCaseEvidenceEventByType(
+        options.database,
+        caseRow.id,
+        "hypotheses_generated",
+      );
+      if (hypothesesEvent === undefined) {
+        throw new ApiHttpError(
+          500,
+          "STORED_EVENT_INVALID",
+          "The case has no hypotheses event for its required probe.",
+        );
+      }
+      const generated = hypothesesEvent.payload as unknown as FormHypothesesOutput;
+      if (
+        typeof generated.probe !== "object" ||
+        generated.probe === null ||
+        generated.probe.id !== request.body.probeId
+      ) {
+        throw new ApiHttpError(
+          400,
+          "INVALID_INPUT",
+          "The submitted probe does not match the active case probe.",
+        );
+      }
+
+      let score;
+      try {
+        score = scoreProbeAttempt(
+          generated.probe,
+          request.body.selectedChoiceId,
+        );
+      } catch (error) {
+        if (error instanceof ProbeScoringError) {
+          throw new ApiHttpError(
+            error.code === "invalid_choice" ? 400 : 500,
+            error.code === "invalid_choice"
+              ? "INVALID_INPUT"
+              : "STORED_EVENT_INVALID",
+            error.message,
+          );
+        }
+        throw error;
+      }
+
+      const event = {
+        eventId: uuidv7(),
+        occurredAt: new Date().toISOString(),
+        type: "probe_evaluated" as const,
+        selectedHypothesisId: score.selectedHypothesisId,
+        passed: score.passed,
+      };
+      const next = transitionCase(
+        {
+          id: caseRow.id,
+          status: caseRow.state,
+          mastery: "insufficient_evidence",
+          version: caseRow.stateVersion,
+          replanCount: 0,
+          appliedEventIds: [],
+        },
+        event,
+      );
+      const eventPayload = {
+        request: requestPayload,
+        result: {
+          probeId: request.body.probeId,
+          selectedChoiceId: request.body.selectedChoiceId,
+          passed: score.passed,
+          selectedHypothesisId: score.selectedHypothesisId,
+          scoringMethod: score.scoringMethod,
+        },
+        hypothesesEventId: hypothesesEvent.id,
+      };
+      const persisted = await persistCaseTransition(options.database, {
+        caseId: caseRow.id,
+        expectedVersion: request.body.expectedVersion,
+        nextState: next.status,
+        event: {
+          id: event.eventId,
+          tenantId: caseRow.tenantId,
+          studentId: caseRow.studentId,
+          caseId: caseRow.id,
+          eventType: event.type,
+          sourceType: "student_probe_attempt",
+          sourceRef: request.body.probeId,
+          payload: eventPayload,
+          confidence: "1.0000",
+          occurredAt: new Date(event.occurredAt),
+          idempotencyKey,
+        },
+      });
+
+      let persistedEvent: LearningEvidenceEventRow | undefined;
+      if (persisted.applied) {
+        persistedEvent = await findEvidenceEventByIdempotencyKey(
+          options.database,
+          idempotencyKey,
+        );
+      } else {
+        persistedEvent = await findEvidenceEventByIdempotencyKey(
+          options.database,
+          idempotencyKey,
+        );
+        if (
+          persistedEvent === undefined ||
+          persistedEvent.caseId !== request.params.caseId ||
+          persistedEvent.eventType !== "probe_evaluated" ||
+          !isRecord(persistedEvent.payload.request) ||
+          !isSamePayload(persistedEvent.payload.request, requestPayload)
+        ) {
+          throw new ApiHttpError(
+            409,
+            "IDEMPOTENCY_KEY_REUSED",
+            "The idempotency key belongs to another write request.",
+          );
+        }
+      }
+
+      if (persistedEvent === undefined) {
+        throw new ApiHttpError(
+          500,
+          "STORED_EVENT_INVALID",
+          "The probe evaluation event was not persisted.",
+        );
+      }
+      const attemptedCase = await findCaseById(options.database, caseRow.id);
+      if (attemptedCase === undefined) {
+        throw new ResourceNotFoundError("Case", caseRow.id);
+      }
+      return success(
+        request,
+        attemptViewFromEvent(attemptedCase, persistedEvent),
+      );
     },
   );
 

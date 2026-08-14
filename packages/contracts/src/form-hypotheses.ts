@@ -26,6 +26,24 @@ export const HypothesisCandidateSchema = Type.Object({
 
 export type HypothesisCandidate = Static<typeof HypothesisCandidateSchema>;
 
+export const DiagnosticProbeScoringRuleSchema = Type.Object({
+  method: Type.Literal("exact_choice_v1"),
+  choiceOutcomes: Type.Array(
+    Type.Object({
+      choiceId: Type.String({ minLength: 1 }),
+      selectedHypothesisId: Type.Union([
+        Type.String({ minLength: 1 }),
+        Type.Null(),
+      ]),
+    }),
+    { minItems: 2 },
+  ),
+});
+
+export type DiagnosticProbeScoringRule = Static<
+  typeof DiagnosticProbeScoringRuleSchema
+>;
+
 export const DiagnosticProbeDraftSchema = Type.Object({
   id: Type.String({ minLength: 1 }),
   prompt: Type.String({ minLength: 1 }),
@@ -41,6 +59,7 @@ export const DiagnosticProbeDraftSchema = Type.Object({
     uniqueItems: true,
   }),
   expectedChoiceId: Type.String({ minLength: 1 }),
+  scoringRule: DiagnosticProbeScoringRuleSchema,
 });
 
 export type DiagnosticProbeDraft = Static<

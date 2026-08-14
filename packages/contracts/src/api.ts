@@ -87,7 +87,7 @@ export type ConfirmExtractionRequest = Static<
 
 export const DiagnosticProbeViewSchema = Type.Omit(
   DiagnosticProbeDraftSchema,
-  ["expectedChoiceId"],
+  ["expectedChoiceId", "scoringRule"],
 );
 
 export const HypothesesViewSchema = Type.Object({
@@ -98,6 +98,31 @@ export const HypothesesViewSchema = Type.Object({
 });
 
 export type HypothesesView = Static<typeof HypothesesViewSchema>;
+
+export const SubmitAttemptRequestSchema = Type.Object({
+  expectedVersion: Type.Integer({ minimum: 0 }),
+  probeId: Type.String({ minLength: 1 }),
+  selectedChoiceId: Type.String({ minLength: 1 }),
+});
+
+export type SubmitAttemptRequest = Static<typeof SubmitAttemptRequestSchema>;
+
+export const AttemptViewSchema = Type.Object({
+  attemptId: Type.String({ format: "uuid" }),
+  caseId: Type.String({ format: "uuid" }),
+  state: CaseStatusSchema,
+  stateVersion: Type.Integer({ minimum: 0 }),
+  probeId: Type.String({ minLength: 1 }),
+  selectedChoiceId: Type.String({ minLength: 1 }),
+  passed: Type.Boolean(),
+  selectedHypothesisId: Type.Union([
+    Type.String({ minLength: 1 }),
+    Type.Null(),
+  ]),
+  scoringMethod: Type.Literal("exact_choice_v1"),
+});
+
+export type AttemptView = Static<typeof AttemptViewSchema>;
 
 export const RunNextRequestSchema = Type.Object({
   expectedVersion: Type.Integer({ minimum: 0 }),

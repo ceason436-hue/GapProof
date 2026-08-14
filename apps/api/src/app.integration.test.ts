@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type {
   ApiErrorResponse,
   ApiResponse,
+  AttemptView,
   CaseView,
   HypothesesView,
 } from "@gapproof/contracts";
@@ -43,6 +44,54 @@ async function waitForState(
   }
 
   throw new Error(`Case ${caseId} did not reach ${expectedState}.`);
+}
+
+async function createProbeRequiredCase(
+  api: Awaited<ReturnType<typeof buildApi>>,
+  keyPrefix: string,
+) {
+  const created = await api.inject({
+    method: "POST",
+    url: "/v1/cases",
+    headers: { "idempotency-key": `${keyPrefix}-create` },
+    payload: { entry: "synthetic_demo" },
+  });
+  const caseId = created.json<ApiResponse<CaseView>>().data.id;
+
+  await api.inject({
+    method: "POST",
+    url: `/v1/cases/${caseId}/commands/run-next`,
+    headers: { "idempotency-key": `${keyPrefix}-ocr` },
+    payload: { expectedVersion: 0 },
+  });
+  await waitForState(api, caseId, "awaiting_confirmation");
+
+  await api.inject({
+    method: "POST",
+    url: `/v1/cases/${caseId}/extraction/confirm`,
+    headers: { "idempotency-key": `${keyPrefix}-confirm` },
+    payload: {
+      expectedVersion: 1,
+      confirmedItemIds: ["item-synthetic-irregular-participle-1"],
+      corrections: [],
+    },
+  });
+  await api.inject({
+    method: "POST",
+    url: `/v1/cases/${caseId}/commands/run-next`,
+    headers: { "idempotency-key": `${keyPrefix}-diagnose` },
+    payload: { expectedVersion: 2 },
+  });
+  await waitForState(api, caseId, "probe_required");
+
+  const response = await api.inject({
+    method: "GET",
+    url: `/v1/cases/${caseId}/hypotheses`,
+  });
+  return {
+    caseId,
+    hypotheses: response.json<ApiResponse<HypothesesView>>().data,
+  };
 }
 
 describeWithDatabase("Fastify API and run-next worker", () => {
@@ -420,6 +469,7 @@ describeWithDatabase("Fastify API and run-next worker", () => {
       hypotheses.data.candidates.map(({ id }) => id),
     );
     expect(hypotheses.data.probe).not.toHaveProperty("expectedChoiceId");
+    expect(hypotheses.data.probe).not.toHaveProperty("scoringRule");
 
     const events = await database.db
       .select()
@@ -427,6 +477,173 @@ describeWithDatabase("Fastify API and run-next worker", () => {
       .where(eq(learningEvidenceEvents.caseId, caseId));
     expect(
       events.filter((event) => event.eventType === "hypotheses_generated"),
+    ).toHaveLength(1);
+  }, 15_000);
+
+  it("scores an attempt deterministically and advances to intervention_ready", async () => {
+    const { caseId, hypotheses } = await createProbeRequiredCase(
+      api,
+      "attempt-incorrect-v1",
+    );
+    const request = {
+      method: "POST" as const,
+      url: `/v1/cases/${caseId}/attempts`,
+      headers: { "idempotency-key": "submit-attempt-incorrect-v1" },
+      payload: {
+        expectedVersion: 3,
+        probeId: hypotheses.probe.id,
+        selectedChoiceId: "choice-wrote",
+      },
+    };
+
+    const submitted = await api.inject(request);
+    const replay = await api.inject(request);
+    const body = submitted.json<ApiResponse<AttemptView>>();
+    const replayBody = replay.json<ApiResponse<AttemptView>>();
+
+    expect(submitted.statusCode).toBe(200);
+    expect(replay.statusCode).toBe(200);
+    expect(body.data).toMatchObject({
+      caseId,
+      state: "intervention_ready",
+      stateVersion: 4,
+      probeId: hypotheses.probe.id,
+      selectedChoiceId: "choice-wrote",
+      passed: false,
+      selectedHypothesisId: "hyp-participle-form-gap",
+      scoringMethod: "exact_choice_v1",
+    });
+    expect(replayBody.data).toEqual(body.data);
+
+    const events = await database.db
+      .select()
+      .from(learningEvidenceEvents)
+      .where(eq(learningEvidenceEvents.caseId, caseId));
+    expect(
+      events.filter((event) => event.eventType === "probe_evaluated"),
+    ).toHaveLength(1);
+
+    const changedReplay = await api.inject({
+      ...request,
+      payload: { ...request.payload, selectedChoiceId: "choice-written" },
+    });
+    expect(changedReplay.statusCode).toBe(409);
+    expect(changedReplay.json<ApiErrorResponse>().error.code).toBe(
+      "IDEMPOTENCY_KEY_REUSED",
+    );
+  }, 15_000);
+
+  it("scores the correct choice without falsely selecting a misconception", async () => {
+    const { caseId, hypotheses } = await createProbeRequiredCase(
+      api,
+      "attempt-correct-v1",
+    );
+    const response = await api.inject({
+      method: "POST",
+      url: `/v1/cases/${caseId}/attempts`,
+      headers: { "idempotency-key": "submit-attempt-correct-v1" },
+      payload: {
+        expectedVersion: 3,
+        probeId: hypotheses.probe.id,
+        selectedChoiceId: "choice-written",
+      },
+    });
+    const body = response.json<ApiResponse<AttemptView>>();
+
+    expect(response.statusCode).toBe(200);
+    expect(body.data.state).toBe("intervention_ready");
+    expect(body.data.passed).toBe(true);
+    expect(body.data.selectedHypothesisId).toBeNull();
+  }, 15_000);
+
+  it("rejects stale, unknown-choice, and invalid-state attempts", async () => {
+    const { caseId, hypotheses } = await createProbeRequiredCase(
+      api,
+      "attempt-validation-v1",
+    );
+    const baseRequest = {
+      method: "POST" as const,
+      url: `/v1/cases/${caseId}/attempts`,
+      headers: { "idempotency-key": "submit-attempt-validation-v1" },
+      payload: {
+        expectedVersion: 3,
+        probeId: hypotheses.probe.id,
+        selectedChoiceId: "choice-wrote",
+      },
+    };
+
+    const stale = await api.inject({
+      ...baseRequest,
+      headers: { "idempotency-key": "submit-attempt-stale-v1" },
+      payload: { ...baseRequest.payload, expectedVersion: 2 },
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json<ApiErrorResponse>().error.code).toBe("VERSION_CONFLICT");
+
+    const unknownChoice = await api.inject({
+      ...baseRequest,
+      headers: { "idempotency-key": "submit-attempt-unknown-choice-v1" },
+      payload: {
+        ...baseRequest.payload,
+        selectedChoiceId: "choice-injected",
+      },
+    });
+    expect(unknownChoice.statusCode).toBe(400);
+    expect(unknownChoice.json<ApiErrorResponse>().error.code).toBe(
+      "INVALID_INPUT",
+    );
+
+    const created = await api.inject({
+      method: "POST",
+      url: "/v1/cases",
+      headers: { "idempotency-key": "attempt-invalid-state-create-v1" },
+      payload: { entry: "synthetic_demo" },
+    });
+    const freshCaseId = created.json<ApiResponse<CaseView>>().data.id;
+    const invalidState = await api.inject({
+      ...baseRequest,
+      url: `/v1/cases/${freshCaseId}/attempts`,
+      headers: { "idempotency-key": "submit-attempt-invalid-state-v1" },
+      payload: { ...baseRequest.payload, expectedVersion: 0 },
+    });
+    expect(invalidState.statusCode).toBe(409);
+    expect(invalidState.json<ApiErrorResponse>().error.code).toBe(
+      "INVALID_CASE_TRANSITION",
+    );
+  }, 15_000);
+
+  it("persists one probe event for concurrent duplicate attempts", async () => {
+    const { caseId, hypotheses } = await createProbeRequiredCase(
+      api,
+      "attempt-concurrent-v1",
+    );
+    const request = {
+      method: "POST" as const,
+      url: `/v1/cases/${caseId}/attempts`,
+      headers: { "idempotency-key": "submit-attempt-concurrent-v1" },
+      payload: {
+        expectedVersion: 3,
+        probeId: hypotheses.probe.id,
+        selectedChoiceId: "choice-wrote",
+      },
+    };
+    const [left, right] = await Promise.all([
+      api.inject(request),
+      api.inject(request),
+    ]);
+
+    expect(left.statusCode).toBe(200);
+    expect(right.statusCode).toBe(200);
+    expect(left.json<ApiResponse<AttemptView>>().data).toEqual(
+      right.json<ApiResponse<AttemptView>>().data,
+    );
+
+    const events = await database.db
+      .select()
+      .from(learningEvidenceEvents)
+      .where(eq(learningEvidenceEvents.caseId, caseId));
+    expect(
+      events.filter((event) => event.eventType === "probe_evaluated"),
     ).toHaveLength(1);
   }, 15_000);
 });

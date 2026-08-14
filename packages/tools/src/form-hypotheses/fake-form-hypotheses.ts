@@ -50,6 +50,23 @@ export class FakeFormHypothesesAdapter implements FormHypothesesAdapter {
           ],
           testedHypothesisIds: candidates.map((candidate) => candidate.id),
           expectedChoiceId: "choice-written",
+          scoringRule: {
+            method: "exact_choice_v1",
+            choiceOutcomes: [
+              {
+                choiceId: "choice-write",
+                selectedHypothesisId: "hyp-auxiliary-meaning-confusion",
+              },
+              {
+                choiceId: "choice-wrote",
+                selectedHypothesisId: "hyp-participle-form-gap",
+              },
+              {
+                choiceId: "choice-written",
+                selectedHypothesisId: null,
+              },
+            ],
+          },
         },
       },
       confidence: 0.72,
