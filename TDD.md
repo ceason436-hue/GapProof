@@ -2,15 +2,15 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.9"
+version: "0.3.10"
 status: "DRAFT_FOR_IMPLEMENTATION"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.16"
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.8"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.17"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.9"
 ---
 
 # 知隙 GapProof 技术设计文档（TDD）
@@ -928,6 +928,7 @@ type OcrResult = {
 - 不默认用学生数据训练模型；Provider 的数据训练/保留开关必须审查。
 - 删除是后台可验证工作流，产生删除清单和完成证明；仅保留必要的不可识别合规记录。
 - 原始教材/试题和完整转换文本只写入 Git 忽略的私有目录；运行日志不得记录题目全文、答案键、文件绝对路径或购买凭证内容。
+- `answer_sheet` 与 `listening_audio` 默认标记为 `mvp_ingestion_excluded`：不切分、不向量化、不进入 Prompt，也不要求视觉 QA；保留源文件仅用于私有追溯。其余资产先结构清点，只有进入 Demo/题库白名单的文件才执行逐份题面、答案关联与版式核验。
 - CI/推送门禁必须执行忽略规则与大文件/敏感材料检查，防止 PDF、DOCX、MP3、转换全文或未来学生证据进入 Git 历史。
 
 ### 15.5 Kill Switch
@@ -1497,8 +1498,15 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-001 | 2026-08-14 | `main` | `pushed` | `feat: establish Phase A backend thin slice` | 建立首个 GitHub 基线：四份项目文档、Bun workspace、领域状态机、PostgreSQL/Drizzle、Fastify API、pg-boss Worker、fake OCR、识别确认、竞争性错因与等待确认小题闭环；同时纳入 Stitch 公开参考资产、教材/试题来源元数据、私有转换工具与 Git 隔离门禁 | 21 条快速测试、16 条真实数据库/API/Worker 集成测试及 TypeScript 严格类型检查通过；私有材料和生成目录未进入暂存区；远端 `main` 已核对为首个基线提交 |
 | PUSH-002 | 2026-08-14 | `main` | `pushed` | `docs: finalize GitHub version-management log` | 将首个基线推送成功状态回写 TDD，提升 PROJECT_MASTER/TDD 文档版本并对齐当前引用，形成可供后续窗口恢复的 GitHub 版本管理闭环 | 文档链接和版本引用检查通过；仅提交 PROJECT_MASTER/TDD，不夹带并行任务中的未提交文件；推送后核对本地与 `origin/main` 一致 |
 | PUSH-003 | 2026-08-15 | `main` | `pushed` | `docs: enforce pre-push TDD logging order` | 将“先更新 TDD Push Log，再使用一致的清晰摘要提交和推送，最后核对远端”写入 TDD 正式规则及 PROJECT_MASTER 新窗口接管规则 | 四文档职责与版本引用检查通过；仅提交 PROJECT_MASTER/TDD，不夹带并行任务中的未提交文件；推送后核对本地与 `origin/main` 一致 |
+| PUSH-004 | 2026-08-15 | `main` | `pushed` | `docs: align MVP material-governance boundaries` | 同步版权页不可取得、教材以 ISBN/PDF 哈希/内容快照锁定、答题卡与音频私有留存但排除 MVP，以及仅对白名单材料逐份视觉核验的决定 | 四份主文档与两份材料登记一致性检查通过；原始教材、试题、音频和私有转换结果未进入 Git；推送后核对本地与 `origin/main` 一致 |
 
 ## 27. 变更日志
+
+### v0.3.10 — 2026-08-15
+
+- 教材来源身份改为 ISBN + 源 PDF 哈希 + 内容快照；版权页不可取得时版次/印次保持未知，不阻塞 MVP，也不得由系统推断。
+- 答题卡与听力音频增加 `mvp_ingestion_excluded` 技术门禁；视觉 QA 只对进入 Demo/题库白名单的材料逐份执行。
+- 同步 PROJECT_MASTER v0.1.17 与 PRD v0.1.9；不改变前后端分离、API、状态机或 Provider 架构。
 
 ### v0.3.9 — 2026-08-15
 
