@@ -1,0 +1,258 @@
+import type { CaseAggregate, RunNextJobData } from "@gapproof/contracts";
+import {
+  and,
+  eq,
+  findCaseById,
+  learningEvidenceEvents,
+  persistCaseTransition,
+  type Database,
+} from "@gapproof/db";
+import { transitionCase } from "@gapproof/domain";
+import type { JobQueue } from "@gapproof/jobs";
+import {
+  FakeFormHypothesesAdapter,
+  type FormHypothesesAdapter,
+  FakeParsePaperAdapter,
+  type ParsePaperAdapter,
+} from "@gapproof/tools";
+import { v7 as uuidv7 } from "uuid";
+
+export interface RunNextWorkerOptions {
+  readonly database: Database;
+  readonly queue: JobQueue;
+  readonly parsePaper?: ParsePaperAdapter;
+  readonly formHypotheses?: FormHypothesesAdapter;
+}
+
+export function createRunNextWorker(options: RunNextWorkerOptions) {
+  const parsePaper =
+    options.parsePaper ?? new FakeParsePaperAdapter("low_confidence");
+  const formHypotheses =
+    options.formHypotheses ?? new FakeFormHypothesesAdapter();
+  let workerId: string | undefined;
+
+  return {
+    async start() {
+      workerId = await options.queue.workRunNext(async (job) => {
+        const eventIdempotencyKey = `run-next-job:${job.id}`;
+        const [existingEvent] = await options.database
+          .select({ id: learningEvidenceEvents.id })
+          .from(learningEvidenceEvents)
+          .where(
+            eq(
+              learningEvidenceEvents.idempotencyKey,
+              eventIdempotencyKey,
+            ),
+          )
+          .limit(1);
+
+        const caseRow = await findCaseById(options.database, job.data.caseId);
+        if (caseRow === undefined) {
+          throw new Error(`Case ${job.data.caseId} was not found.`);
+        }
+
+        if (existingEvent !== undefined) {
+          return {
+            caseId: caseRow.id,
+            state: caseRow.state,
+            stateVersion: caseRow.stateVersion,
+            idempotentReplay: true,
+          };
+        }
+
+        if (caseRow.state === "ready_for_diagnosis") {
+          const [confirmationEvent] = await options.database
+            .select({ id: learningEvidenceEvents.id })
+            .from(learningEvidenceEvents)
+            .where(
+              and(
+                eq(learningEvidenceEvents.caseId, caseRow.id),
+                eq(
+                  learningEvidenceEvents.eventType,
+                  "recognition_confirmed",
+                ),
+              ),
+            )
+            .limit(1);
+
+          if (confirmationEvent === undefined) {
+            throw new Error("CONFIRMED_EXTRACTION_EVIDENCE_NOT_FOUND");
+          }
+
+          const toolResult = await formHypotheses.execute({
+            toolCallId: `form-hypotheses:${job.id}`,
+            caseId: caseRow.id,
+            studentId: caseRow.studentId,
+            traceId: job.data.traceId,
+            input: {
+              observedPrompt:
+                "Mina has ___ (write) three short notes about saving water this week.",
+              observedAnswer: "wrote",
+              confirmedEvidenceRefs: [confirmationEvent.id],
+            },
+            policyVersion: "demo-diagnosis-policy-v1",
+          });
+
+          if (
+            toolResult.status !== "succeeded" ||
+            toolResult.data === undefined
+          ) {
+            throw new Error(
+              toolResult.error?.code ?? "FORM_HYPOTHESES_FAILED",
+            );
+          }
+
+          const hypothesisIds = toolResult.data.candidates.map(
+            (candidate) => candidate.id,
+          );
+          const hypothesisIdSet = new Set(hypothesisIds);
+          if (
+            hypothesisIdSet.size < 2 ||
+            toolResult.data.candidates.some(
+              (candidate) =>
+                !candidate.evidenceRefs.includes(confirmationEvent.id),
+            ) ||
+            toolResult.data.probe.testedHypothesisIds.some(
+              (hypothesisId) => !hypothesisIdSet.has(hypothesisId),
+            ) ||
+            !toolResult.data.probe.choices.some(
+              (choice) =>
+                choice.id === toolResult.data?.probe.expectedChoiceId,
+            )
+          ) {
+            throw new Error("INVALID_HYPOTHESES_TOOL_RESULT");
+          }
+
+          const aggregate: CaseAggregate = {
+            id: caseRow.id,
+            status: caseRow.state,
+            mastery: "insufficient_evidence",
+            version: caseRow.stateVersion,
+            replanCount: 0,
+            appliedEventIds: [],
+          };
+          const event = {
+            eventId: uuidv7(),
+            occurredAt: new Date().toISOString(),
+            type: "hypotheses_generated" as const,
+            hypothesisIds,
+          };
+          const next = transitionCase(aggregate, event);
+          const persisted = await persistCaseTransition(options.database, {
+            caseId: caseRow.id,
+            expectedVersion: job.data.expectedVersion,
+            nextState: next.status,
+            event: {
+              id: event.eventId,
+              tenantId: caseRow.tenantId,
+              studentId: caseRow.studentId,
+              caseId: caseRow.id,
+              eventType: event.type,
+              sourceType: "fake_diagnosis",
+              sourceRef: toolResult.toolVersion,
+              payload: {
+                candidates: toolResult.data.candidates,
+                probe: toolResult.data.probe,
+                warnings: [...toolResult.warnings],
+                toolVersion: toolResult.toolVersion,
+              },
+              confidence: toolResult.confidence?.toFixed(4),
+              occurredAt: new Date(event.occurredAt),
+              idempotencyKey: eventIdempotencyKey,
+            },
+          });
+
+          return {
+            caseId: caseRow.id,
+            state: persisted.state,
+            stateVersion: persisted.stateVersion,
+            idempotentReplay: false,
+          };
+        }
+
+        if (caseRow.state !== "awaiting_evidence") {
+          throw new Error(`RUN_NEXT_NOT_ALLOWED_FROM_${caseRow.state}`);
+        }
+
+        const toolResult = await parsePaper.execute({
+          toolCallId: `parse-paper:${job.id}`,
+          caseId: caseRow.id,
+          studentId: caseRow.studentId,
+          traceId: job.data.traceId,
+          input: {
+            assetId: job.data.assetId,
+            provider: "fake",
+            pageHints: ["single-page", "synthetic-demo"],
+          },
+          policyVersion: "demo-policy-v1",
+        });
+
+        if (
+          toolResult.status === "retryable_error" ||
+          toolResult.status === "failed" ||
+          toolResult.data === undefined
+        ) {
+          throw new Error(toolResult.error?.code ?? "PARSE_PAPER_FAILED");
+        }
+
+        const aggregate: CaseAggregate = {
+          id: caseRow.id,
+          status: caseRow.state,
+          mastery: "insufficient_evidence",
+          version: caseRow.stateVersion,
+          replanCount: 0,
+          appliedEventIds: [],
+        };
+        const lowConfidenceRegionCount = toolResult.warnings.filter((warning) =>
+          warning.startsWith("LOW_CONFIDENCE_REGION:"),
+        ).length;
+        const event = {
+          eventId: uuidv7(),
+          occurredAt: new Date().toISOString(),
+          type: "evidence_ingested" as const,
+          lowConfidenceRegionCount,
+        };
+        const next = transitionCase(aggregate, event);
+
+        const persisted = await persistCaseTransition(options.database, {
+          caseId: caseRow.id,
+          expectedVersion: job.data.expectedVersion,
+          nextState: next.status,
+          event: {
+            id: event.eventId,
+            tenantId: caseRow.tenantId,
+            studentId: caseRow.studentId,
+            caseId: caseRow.id,
+            eventType: event.type,
+            sourceType: "fake_ocr",
+            sourceRef: job.data.assetId,
+            payload: {
+              lowConfidenceRegionCount,
+              toolVersion: toolResult.toolVersion,
+              warnings: [...toolResult.warnings],
+            },
+            confidence: toolResult.confidence?.toFixed(4),
+            occurredAt: new Date(event.occurredAt),
+            idempotencyKey: eventIdempotencyKey,
+          },
+        });
+
+        return {
+          caseId: caseRow.id,
+          state: persisted.state,
+          stateVersion: persisted.stateVersion,
+          idempotentReplay: false,
+        };
+      });
+
+      return workerId;
+    },
+
+    async stop() {
+      if (workerId !== undefined) {
+        await options.queue.stopWorker(workerId);
+        workerId = undefined;
+      }
+    },
+  };
+}

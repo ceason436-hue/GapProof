@@ -1,0 +1,13 @@
+{
+  "name": "@gapproof/tools",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@gapproof/contracts": "workspace:*",
+    "@sinclair/typebox": "^0.34.52"
+  }
+}

@@ -1,0 +1,1563 @@
+---
+project_name: "知隙 GapProof"
+document_title: "GapProof 技术设计文档（TDD）"
+document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
+version: "0.3.7"
+status: "DRAFT_FOR_IMPLEMENTATION"
+last_updated: "2026-08-14"
+timezone: "Asia/Singapore"
+canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
+repository_url: "https://github.com/ceason436-hue/GapProof.git"
+upstream_documents:
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.14"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.8"
+---
+
+# 知隙 GapProof 技术设计文档（TDD）
+
+> 本文回答“系统如何实现、什么由 AI 决定、什么绝不能由 AI 决定，以及 MVP 到长期产品如何平滑升级”。产品范围和验收以 `PRD.md` 为准，项目定位与跨文档决策以 `PROJECT_MASTER.md` 为准。
+
+## 0. 给项目负责人的结论
+
+### 0.1 最终推荐路线
+
+GapProof 不需要先搭建一个复杂的“多 Agent 平台”。最合适的第一版是：
+
+> 一个 TypeScript 模块化单体，内部由确定性状态机编排；AI 只在错因候选、解释、题目草案和报告措辞等边界清楚的节点工作；所有写库、评分、状态推进、权限、重试和回滚都由普通程序控制。
+
+推荐技术栈：
+
+| 层 | 采用方案 | 结论 |
+|---|---|---|
+| 代码语言 | TypeScript（`strict`） | 前后端、Schema、测试和工具契约统一一种语言 |
+| 包管理 | Bun workspace | 保留用户熟悉且快速的安装与脚本体验 |
+| 生产运行时 | Node.js 24 LTS | 比 Bun runtime 更稳妥地承载 Next.js、队列、监控和 Provider SDK |
+| 仓库 | Bun workspaces；先不额外引入 Turborepo | 项目初期减少工具层；包数或 CI 明显变慢后再加入 Turborepo |
+| Web 前端 | Next.js App Router + React + TypeScript | 桌面优先的响应式 Web，后续可扩展 PWA |
+| API | Fastify + TypeBox/JSON Schema + OpenAPI | 独立、可验证、可供未来 App/教师端复用的 API 边界 |
+| 后台任务 | 独立 Node Worker + pg-boss | OCR、模型调用、复测和报告不阻塞 Web 请求；无需额外 Redis |
+| 数据库 | PostgreSQL 16+；开发与生产同引擎 | 避免 SQLite 到 PostgreSQL 的二次迁移；支持事务、JSONB、全文检索和审计 |
+| ORM/迁移 | Drizzle ORM + 生成 SQL migration | TypeScript 友好、SQL 可见、适合复杂事件和 pgvector 查询 |
+| 向量检索 | pgvector | 与权限、版本、教材元数据在同一事务和查询中处理 |
+| 技能图谱 | PostgreSQL 邻接表 + 递归 CTE | MVP 不引入 Neo4j；图谱首先是受控课程数据，不是大规模图计算 |
+| 文件存储 | `StorageAdapter`；本地开发用 MinIO/目录，部署用 S3 兼容对象存储 | 避免数据库存大图；可按地区替换供应商 |
+| Agent 编排 | LangGraph.js + 自建 Case 业务状态机 | LangGraph 负责 Agent Run 的图、暂停、恢复和检查点；Case 状态机仍是业务真相 |
+| 模型调用 | DeepSeek `deepseek-v4-flash` + MiniMax `minimax-m3`，统一 `ModelGateway` 和 Provider Adapter | 方向已决；具体接口、价格、QPS、限流、合规和数据处理协议待验证 |
+| OCR | 阿里云读光教育试卷识别为主 + 腾讯云高精度 OCR 备用 | 方向已决；具体接口、价格、QPS、手写准确率、合规和服务合同参数待验证 |
+| 校验 | TypeBox/JSON Schema 用于 HTTP/OpenAPI；Zod 用于模型输出和内部边界 | 两者职责明确，避免 Schema 散落在 Prompt 中 |
+| 可观测 | Pino JSON 日志 + OpenTelemetry Trace + 数据库审计事件 | 同时满足开发排错、比赛演示和学习决策回放 |
+| 测试 | Vitest + Playwright + 固定金标/合成 Case | 普通代码测试与 AI 非确定性评测分开 |
+| 部署 | 杭州阿里云单区域联网 Docker Compose；`web`、`api`、`worker`、`postgres`、对象存储 | 方向已决；具体云资源、服务规格、价格、QPS、合规和合同参数待验证；暂不使用 Kubernetes、Kafka 和微服务 |
+
+### 0.2 为什么改变主文档中的早期候选
+
+主文档早期建议过 `FastAPI + SQLite + FAISS/pgvector + NetworkX`。那套方案本身可行，但对本项目不是最优：
+
+- 用户已有 Next.js、React、JavaScript/TypeScript 和 Bun 经验；若后端改用 Python，会增加第二套类型、构建、测试、部署和排错体系。
+- GapProof 从第一天就需要事件账本、幂等、并发版本、JSONB、全文/向量混合检索和延迟任务。SQLite 可做一次性原型，却会很快产生迁移成本。
+- 技能图谱规模很小，关系表和递归查询足够。NetworkX 会额外引入 Python 运行环境，Neo4j 则会增加数据库运维。
+- Agent 的主流程已经明确，不属于“路径未知、让模型自由探索”的问题；自建状态机更直接，也更容易向评委证明系统没有越权。
+
+这不是否定 Python。若以后需要本地 PaddleOCR、复杂 NLP、IRT/BKT 训练或离线图算法，可把 Python 作为边界清晰的离线任务或独立适配器加入，而不是让 MVP 从第一天成为双语言系统。Agent Run 采用 LangGraph.js，但 Case 的业务状态仍由自建 TypeScript 状态机和 PostgreSQL 事件账本负责。
+
+### 0.2.1 本轮已确定的模型与 OCR 组合
+
+`[DECISION]` 本项目采用以下 Provider 优先级，但仍通过适配层隔离。模型、OCR、Embedding 和部署方向已决；具体接口、价格、QPS、限流、合规、数据处理协议和服务合同等落地参数待验证：
+
+| 能力 | 主 Provider | 备用 Provider | 已确定内容 | 保留开放内容 |
+|---|---|---|---|---|
+| Agent 分析模型 | DeepSeek `deepseek-v4-flash` | MiniMax `minimax-m3` | DeepSeek 负责错因分析、工具调用、探针选择和失败重排；MiniMax 负责教学表达、报告和主模型降级 | 接口版本、思考开关、限流、价格和 API 数据处理协议 |
+| 试卷 OCR | 阿里云读光教育试卷识别 | 腾讯云通用文字识别高精度版 | 读光优先处理整页试卷、题目结构和坐标；腾讯云负责通用 OCR、备用和交叉验证 | 具体读光接口、QPS、手写准确率、价格和服务合同 |
+| 文档 Embedding | 腾讯混元 Embedding（1024 维） | 暂不启用本地 BGE-M3 | 进入 `EmbeddingProvider`，不与语言模型绑定 | 真实样例召回率、成本、QPS 和服务协议 |
+
+主链路为：
+
+```text
+DeepSeek + 阿里云读光
+```
+
+购买教材/试题原文件及完整转换结果不是仓库内容：它们只允许位于 `.gitignore` 覆盖的 `reference/*/incoming`、`reference/*/private-ai-readable` 或等价私有目录。Git 可保存转换器、来源登记、文件哈希、许可/用途状态和可公开的项目原创/合成 Fixture，不保存购买内容全文、图片、答案页或听力原文件。
+
+备用链路为：
+
+```text
+MiniMax + 腾讯云 OCR
+```
+
+模型和 OCR 均不得在浏览器调用。真实初中生数据接入前，必须单独确认中国大陆处理地区、保存期限、训练用途、未成年人条款、监护人同意和删除机制；“中国大陆可访问”不等于已经完成合规。
+
+### 0.3 复杂度判断
+
+| 子系统 | MVP 难度 | 主要难点 | 建议 |
+|---|---:|---|---|
+| 响应式前端与演示 Case | 中 | 多状态页面和可信 Demo 标记 | 先做一条主路径，不先做完整后台 |
+| API、数据库和事件账本 | 中 | Schema、事务、幂等 | 第一周先固定契约再做 UI |
+| OCR 与人工确认 | 中高 | 手写、批改痕迹、版面切分 | 只保证 Demo 样例；低置信必须确认 |
+| 错因诊断 | 高 | 从表面错误到根因需要探针 | 用受控候选与规则，不做开放猜测 |
+| Agent 状态机 | 中高 | LangGraph 检查点与业务事件账本的边界 | LangGraph 管 Agent Run；纯函数 Case 状态机管业务状态 |
+| 知识库/RAG | 中高 | 版本适用性比“相似度”更重要 | 先元数据过滤，再全文与向量检索 |
+| 掌握度更新 | 高 | 参数未经真人数据校准 | MVP 用可解释规则，不能宣称科学定标 |
+| 未成年人隐私/版权 | 高 | 同意、删除、数据地区、教材授权 | Demo 只用合成/原创；真人试点前单独评审 |
+
+## 1. 文档治理与术语
+
+### 1.1 权威关系
+
+- [PROJECT_MASTER.md](./PROJECT_MASTER.md)：项目定位、阶段、关键决策、状态和来源治理。
+- [PRD.md](./PRD.md)：用户、业务范围、功能需求、流程和产品验收。
+- [TDD.md](./TDD.md)：技术路线、系统边界、架构、数据、接口、部署和工程验收。
+- [DESIGN.md](./DESIGN.md)：信息架构、页面、视觉、交互、状态与无障碍。
+
+若发生冲突：产品范围以 PRD 为准；实现方式以 TDD 为准；重大变更同时回写主文档。TDD 不得用技术便利反向扩大 PRD。
+
+### 1.2 状态标签
+
+- `[DECISION]`：本轮已选择的技术方向。
+- `[PROPOSED]`：有推荐但需要外部信息后确认。
+- `[OPEN]`：当前不能安全锁定。
+- `[MVP]`：比赛最小实现。
+- `[LATER]`：可用产品或规模化阶段。
+- `[OUT]`：明确不在当前系统边界内。
+
+### 1.3 关键术语
+
+- **Case**：围绕一组学习证据形成的持久化诊断与修复任务，不等于聊天会话。
+- **Agent Run**：一次由事件触发、可以调用受限工具并产生结构化建议的执行。
+- **Evidence Event**：学生作答、提示使用、OCR 确认、复测或人工修正等可追溯事实。
+- **Skill State**：由证据规则计算的技能状态快照，不是永久能力标签。
+- **Context Pack**：一次模型调用所需的最小授权上下文。
+- **Knowledge Item**：有来源、版本、适用范围、许可和审核状态的知识条目。
+- **Tool**：具有固定输入输出 Schema、权限、超时和失败语义的能力。
+
+## 2. 架构目标与非目标
+
+### 2.1 架构目标
+
+1. 把产品闭环实现为可验证的状态转换，而不是若干聊天页面。
+2. 让每个诊断、任务、重排和掌握结论都能回到证据、规则和版本。
+3. 模型、OCR、对象存储和部署供应商可以替换，核心业务不随 Provider 改写。
+4. 比赛 MVP 能由小团队在单机或单区域部署，长期可拆分但不提前微服务化。
+5. 同一 Web 应用完整适配桌面和平板；手机保留网页访问、比例和内容适配，不承诺 MVP 完整端到端体验，也不为 MVP 建原生 iOS/Android App。
+6. 默认保护未成年人数据：最小化、隔离、短期保存、可删除、可审计。
+7. 对 AI 开发友好：目录清晰、类型统一、契约先行、测试夹具稳定、错误可复现。
+
+### 2.2 架构非目标
+
+- 不构建通用 Agent 平台。
+- 不做自由群聊式多 Agent。
+- 不把聊天记录当数据库或长期记忆。
+- 不让 LLM 直接执行 SQL、改变 Case 状态或发送外部通知。
+- 不在 MVP 引入 Kubernetes、Kafka、服务网格、事件流平台或独立向量数据库。
+- 不在 MVP 做强化学习、自训练、在线微调或自动优化 Prompt。
+- 不在 MVP 做真实学校系统、班级管理、支付、商业题库和大规模账号体系。
+- 不承诺离线完整运行；仅为 Demo 准备预置 Case 和 Provider 失败回退。
+
+## 3. 系统边界
+
+### 3.1 MVP 功能边界
+
+| 能力 | MVP 边界 | 长期扩展 |
+|---|---|---|
+| 用户入口 | 无需注册的预置 Case、上传、文字录入、快速诊断 | 真实学生/监护人账号、家庭多学生 |
+| 证据输入 | 图片和文本；只保证受控 Demo 样例 | 多页试卷、PDF、音频、口语 |
+| OCR | 图片质量、识别、切题、坐标、置信度、人工确认 | 多 Provider、批改痕迹和手写专用模型 |
+| 课程范围 | 上海五四学制八上前四单元；内容需原创/授权 | 多版本、全年级、更多地区与学科 |
+| 诊断 | 受控技能节点、竞争错因、短探针 | 数据驱动的信息增益与校准 |
+| 教学 | 提示阶梯、微任务、原创练习 | 更丰富模态和教师共创 |
+| 计划 | 7 日计划、时间预算、失败重排 | 实际日历、学期计划、跨 Case 优先级 |
+| 主动性 | 演示时钟和事件按钮；仅应用内 | 经同意的真实通知和安静时段 |
+| 评测 | 客观题规则评分；短写作形成性分析 | 人工复核、校准量表、语音/写作生产闭环 |
+| 报告 | 学生版、家长版、评委 Trace 视图 | 教师、班级、趋势和机构视图 |
+
+### 3.2 外部系统边界
+
+MVP 可以调用但不拥有：
+
+- 大模型/多模态模型 API。
+- OCR API 或本地 OCR 容器。
+- S3 兼容对象存储。
+- 邮件、短信、微信等通知渠道（MVP 不实发）。
+- 人工复核人员或教研审核流程。
+
+所有外部能力必须通过 Adapter 接口进入。业务模块不得直接散落 Provider SDK 调用。
+
+### 3.3 信任边界
+
+```mermaid
+flowchart LR
+    U["学生或家长浏览器\n不可信输入"] --> W["Next.js Web\n只负责交互与会话"]
+    W --> A["Fastify API\n鉴权、校验、限流"]
+    A --> D[("PostgreSQL\n权威业务状态")]
+    A --> O["对象存储\n原始文件"]
+    A --> Q["pg-boss\n持久任务"]
+    Q --> K["Worker / Orchestrator\n状态机与策略"]
+    K --> G["Tool Gateway\n权限、预算、超时"]
+    G --> P["模型/OCR 外部 Provider\n不可信输出"]
+    K --> D
+    P --> G
+```
+
+边界规则：
+
+1. 浏览器不能持有模型、OCR、数据库或对象存储长期密钥。
+2. 上传文件、OCR 文本、教材内容和模型输出全部按不可信数据处理。
+3. Provider 输出先过 Schema、引用、置信度和业务 Guard，才能成为建议。
+4. 只有 Orchestrator 的命令处理器可发起 Case 状态转换。
+5. 只有 Memory Gate 可提交长期记忆；Agent 只能提出候选更新。
+6. 报告只读取已提交证据和状态，不从聊天文本重新猜结论。
+
+### 3.4 AI 自主权矩阵
+
+| 操作 | AI 可独立建议 | 程序自动执行 | 需用户/人工确认 | 禁止 |
+|---|---:|---:|---:|---:|
+| 生成多个错因候选 | 是 | 否 | 低置信时是 | 否 |
+| 从审核题库选择探针候选 | 是 | Guard 通过后是 | 无合格题时是 | 否 |
+| 客观题评分 | 否 | 是 | 答案冲突时是 | LLM 单独评分 |
+| 更新掌握状态 | 否 | 规则满足后是 | 高风险/冲突时是 | 模型直接写库 |
+| 重排 7 日任务 | 是 | 授权预算内是 | 延长时间时是 | 无上限加时 |
+| 发送真实通知 | 可建议 | 仅已授权渠道 | 改频率/收件人时是 | 私自联系学校 |
+| 写入长期偏好/画像 | 可建议 | Memory Gate 通过后 | 稳定档案变化时是 | 人格、心理、懒惰标签 |
+| 删除数据 | 否 | 经授权工作流 | 是 | 只隐藏前端 |
+
+## 4. 质量属性与工程预算
+
+### 4.1 优先级
+
+本项目优先级为：正确边界与可追溯 > 数据安全 > 可恢复 > 开发速度 > 延迟 > 极限吞吐。
+
+### 4.2 MVP 目标值
+
+以下是工程目标，不是学习效果承诺：
+
+| 项目 | MVP 目标 |
+|---|---|
+| Web 首屏 | Demo 网络下主要页面可交互时间目标 ≤ 3 秒 |
+| 普通 API | 不含外部 AI/OCR 的 P95 目标 ≤ 500 ms |
+| AI/OCR 任务 | 异步运行；前端持续显示阶段、超时和可重试状态 |
+| 状态一致性 | 同一 Case 关键转换串行；旧 `state_version` 更新 100% 拒绝 |
+| 幂等 | 相同 Idempotency Key 不重复写证据、不重复更新掌握度 |
+| 回放 | 30 个合成 Case 可从事件重建到相同业务状态 |
+| 失败处理 | OCR 低置信、RAG 无来源、模型超时至少三类真实回退 |
+| 可用性 | 主 Demo 在干净环境连续运行 10 次无阻断 |
+| 浏览器 | 当前受支持的 Chrome、Edge、Safari；Playwright 完整覆盖桌面/平板，手机至少覆盖基础显示比例、内容适配和不溢出检查 |
+| 可访问性 | 键盘可操作、可见焦点、语义标签、色彩不是唯一状态表达 |
+
+精确阈值应在有真实运行基线后更新，不能把尚未测量的目标写成 `[RESULT]`。
+
+## 5. 总体架构
+
+### 5.1 模块化单体
+
+逻辑上分模块，部署上先保持少量进程：
+
+```mermaid
+flowchart TB
+    subgraph Client["客户端"]
+      Web["Next.js Web\n学生 / 家长 / 评委模式"]
+    end
+    subgraph App["应用层"]
+      API["Fastify API"]
+      Worker["Node Worker"]
+      Orchestrator["Case Orchestrator"]
+      Policy["Diagnosis / Planning / Mastery Policies"]
+      Tools["Typed Tool Gateway"]
+      Context["Context & Memory Gate"]
+      Reports["Report Builder"]
+    end
+    subgraph Data["数据层"]
+      PG[("PostgreSQL + pgvector")]
+      Obj[("S3-compatible Object Storage")]
+    end
+    subgraph External["外部能力"]
+      LLM["LLM / Multimodal"]
+      OCR["OCR"]
+      Notify["Notification - later"]
+      Human["Human Review"]
+    end
+    Web --> API
+    API --> PG
+    API --> Obj
+    API --> Worker
+    Worker --> Orchestrator
+    Orchestrator --> Policy
+    Orchestrator --> Context
+    Orchestrator --> Tools
+    Orchestrator --> Reports
+    Tools --> LLM
+    Tools --> OCR
+    Tools --> Notify
+    Orchestrator --> PG
+    Orchestrator --> Human
+```
+
+### 5.2 进程职责
+
+- `web`：页面渲染、表单、上传交互、状态轮询/流式更新；不执行核心决策。
+- `api`：HTTP 边界、身份/租户、Schema 校验、幂等、读取模型、创建命令。
+- `worker`：消费持久任务，执行 OCR、检索、模型、报告和到期复测。
+- `postgres`：业务事实、事件、知识、队列元数据和向量。
+- `object-store`：原图、裁剪图、导出报告等二进制文件。
+
+`api` 和 `worker` 使用同一套 domain packages，但以不同进程启动。后续负载增大时可独立扩容，不需要先改写业务代码。
+
+## 6. 仓库与代码组织
+
+### 6.1 推荐结构
+
+```text
+gapproof/
+  apps/
+    web/                    # Next.js
+    api/                    # Fastify HTTP API
+    worker/                 # pg-boss consumers and scheduler
+  packages/
+    contracts/              # TypeBox/JSON Schema、事件和错误码
+    domain/                 # 实体、值对象、状态机、纯策略
+    db/                     # Drizzle schema、queries、migrations
+    agent/                  # orchestrator、context pack、memory gate
+    tools/                  # typed tools 与 provider adapters
+    knowledge/              # ingestion、hybrid retrieval、citations
+    observability/          # logger、trace、redaction
+    config/                 # env schema、feature flags、kill switches
+    testkit/                # fixtures、fake providers、golden cases
+  knowledge/
+    skillpacks/             # 版本化 YAML/JSON/Markdown 受控知识
+    sources/                # 只存可合法纳入仓库的来源元数据
+  evals/
+    golden/
+    synthetic-cases/
+    red-team/
+  docs/
+  infra/
+    compose/
+  scripts/
+  bun.lock
+  package.json
+```
+
+### 6.2 依赖方向
+
+```text
+apps -> application/domain -> contracts
+apps -> adapters -> external SDKs
+domain -X-> Fastify / Next.js / Provider SDK / Drizzle
+```
+
+核心状态机和掌握规则不得 import Web 框架、数据库驱动或模型 SDK。这样可用纯内存夹具测试，也最适合 AI 编码工具理解和修改。
+
+### 6.3 TypeScript 规则
+
+- `strict: true`、`noUncheckedIndexedAccess: true`、`exactOptionalPropertyTypes: true`。
+- ESM 为默认模块格式。
+- 禁止跨 package 深层路径引用；只走公开 `exports`。
+- 时间统一保存 UTC ISO-8601；显示时使用用户时区。
+- ID 统一使用 UUIDv7。
+- 金额、概率和评分避免隐式浮点比较；规则阈值必须版本化。
+
+## 7. 前端路线与多设备适配
+
+### 7.1 采用 Next.js App Router
+
+采用原因：
+
+- 用户熟悉 Next.js/React，学习成本最低。
+- 同一代码库可做服务端渲染、客户端交互和后续 PWA。
+- 可按路由组织学生、家长和评委视图。
+- Node.js 或 Docker 均可部署，不强绑定 Vercel。
+
+约束：
+
+- 核心业务写操作只能调用 Fastify API，不在 Server Action 内复制领域逻辑。
+- Server Components 用于读取和首屏，复杂任务状态使用客户端组件。
+- 上传采用直传对象存储的短期签名 URL；签发、确认和元数据仍走 API。
+- 任务进度 MVP 可轮询；需要更实时体验时升级 Server-Sent Events，暂不引入 WebSocket。
+
+### 7.2 响应式策略
+
+| 设备 | MVP 支持 | 布局策略 |
+|---|---|---|
+| 桌面/笔记本 | 一级 | 双栏/三栏，显示任务、证据和 Trace |
+| 平板横竖屏 | 一级 | 主任务 + 可折叠证据抽屉；触控目标 ≥ 44px |
+| 手机 | 基础兼容与内容适配，不承诺完整体验 | 保持单列、比例、可读性和关键内容不溢出；底部主操作、相机上传和报告卡片化为后续完整体验空间 |
+| 原生 App | 不做 | 后续从 PWA 或 React Native 单独评估 |
+
+不使用仅鼠标悬停才能发现的关键操作。图片标注和答案确认必须同时支持鼠标、触控和键盘替代路径。
+
+### 7.3 状态 UX 的技术要求
+
+每个异步步骤必须有：
+
+- `queued / running / needs_confirmation / succeeded / retryable_error / failed` 状态；
+- 可理解的当前阶段；
+- 超时后重试或转预置 Demo 的入口；
+- `simulation=true`、`synthetic=true`、`fallback=true` 的显式标识；
+- 刷新页面后从服务端恢复，不依赖前端内存。
+
+### 7.4 UI 技术候选
+
+Tailwind CSS 可随 Next.js 默认方案使用；组件层推荐 Radix Primitives + 项目自有组件封装，是否采用 shadcn/ui 由 [DESIGN.md](./DESIGN.md) 决定。TDD 不冻结颜色、字体和视觉风格。
+
+### 7.5 当前“今日”页实现约束
+
+- 学生首页的页面结构、色彩、圆角、文案和视觉验收以 `DESIGN.md` 5.6.1 与第 9、19 节为准；TDD 不复制或另行定义视觉 Token。
+- “重点任务卡” CTA 和侧栏固定“开始学习”必须从同一 `current_task_id` 读取，并导航至同一路由/同一任务状态；不能在前端分别创建任务、写入完成状态或绕开 API。
+- 本周学习足迹、待确认、最近进展、稍后继续和下次检查均为服务端任务/计划状态的只读投影；无数据、加载、失败和演示数据时必须使用 7.3 的状态 UX，不得伪造已完成或已掌握。
+- 当前首页不依赖显式全局搜索或“新报告”提醒；后续增加紧凑搜索时，必须有键盘焦点、可访问名称和独立的空/失败状态。
+
+## 8. API 与后端选择
+
+### 8.1 为什么选择 Fastify
+
+Fastify 提供清晰的插件边界、生命周期、请求/响应 Schema、结构化日志和 OpenAPI 生态，适合独立 API 与 Worker。与 NestJS 相比更轻，与 Hono 相比在传统 Node 服务、插件和后端运维方面更成熟；与 Next.js Route Handlers 相比更容易承载长任务、版本化 REST API 和未来多客户端。
+
+### 8.2 API 风格
+
+选择 REST + OpenAPI 3.1，不选择 tRPC 作为公开边界：
+
+- OpenAPI 可供 Web、未来 App、测试脚本和其他语言复用。
+- API Schema 可作为比赛开源成果。
+- 与 Provider、Python 辅助服务或第三方集成更解耦。
+- tRPC 的端到端类型体验很好，但会把未来客户端更紧地绑定 TypeScript 实现。
+
+### 8.3 Schema 分工
+
+- HTTP 请求/响应、事件公共契约：TypeBox/JSON Schema，生成 OpenAPI。
+- 模型结构化输出：Zod；解析后转换为领域命令/建议。
+- 数据库：Drizzle schema；不能直接当 API Schema 暴露。
+- 跨层共享的是明确 DTO，不共享数据库 Row 类型。
+
+### 8.4 API 约束
+
+- 所有写请求接受 `Idempotency-Key`。
+- 所有响应返回或记录 `request_id` 与 `trace_id`。
+- 采用 `/v1` 版本前缀；破坏性变更新建版本。
+- 错误使用稳定错误码，如 `OCR_LOW_CONFIDENCE`，不能只返回自然语言。
+- 文件不经过 API 内存中转；使用签名 URL 和上传完成确认。
+- 客户端不能调用通用 `advance` 来任意跳状态；服务端根据事件与 Guard 决定合法下一步。
+
+### 8.5 MVP API（唯一正式路由）
+
+```text
+POST   /v1/cases
+POST   /v1/cases/{caseId}/evidence/upload-intent
+POST   /v1/cases/{caseId}/evidence/confirm-upload
+POST   /v1/cases/{caseId}/extraction/confirm
+POST   /v1/cases/{caseId}/commands/run-next
+POST   /v1/cases/{caseId}/attempts
+GET    /v1/cases/{caseId}
+GET    /v1/cases/{caseId}/hypotheses
+GET    /v1/cases/{caseId}/timeline
+GET    /v1/students/{studentId}/today
+PATCH  /v1/students/{studentId}/learning-budget
+GET    /v1/students/{studentId}/skill-map
+POST   /v1/tasks/{taskId}/submit
+GET    /v1/reports/{reportId}
+POST   /v1/reviews
+DELETE /v1/students/{studentId}/data
+
+# 仅 Demo 环境且有环境级开关
+POST   /v1/demo/clock/advance
+POST   /v1/demo/faults/inject
+POST   /v1/demo/cases/reset
+```
+
+`run-next` 只请求系统继续处理，不携带目标状态。状态机拒绝任何不合法跳转。所有写请求使用 `Idempotency-Key`；异步操作返回 `jobId`；列表使用 `limit` + `cursor`。
+
+`PATCH /v1/students/{studentId}/learning-budget` 是家长调整每日学习时间的正式接口。请求至少包含 `dailyMinutes`、`effectiveFrom` 和 `expectedVersion`；服务端必须校验家长权限、记录 `LEARNING_BUDGET_UPDATED` 事件、重算尚未开始的未来任务，并保留 D+1/D+7 复测节点。已完成任务和历史证据不得被静默改写；计划变化必须返回原因、影响和新的版本号。
+
+统一成功响应：
+
+```ts
+type ApiResponse<T> = { data: T; requestId: string; traceId: string; jobId?: string };
+```
+
+统一错误响应：
+
+```ts
+type ApiErrorResponse = {
+  error: { code: string; message: string; retryable: boolean; details?: unknown };
+  requestId: string;
+  traceId: string;
+};
+```
+
+API 错误码至少包括：`INVALID_INPUT`、`SCHEMA_INVALID`、`UNAUTHORIZED`、`FORBIDDEN`、`RESOURCE_NOT_FOUND`、`VERSION_CONFLICT`、`LOW_CONFIDENCE`、`NO_SOURCE`、`SOURCE_CONFLICT`、`PROVIDER_TIMEOUT`、`PROVIDER_RATE_LIMITED`、`PROVIDER_UNAVAILABLE`、`HUMAN_REVIEW_REQUIRED`、`TOOL_DISABLED`、`INTERNAL_ERROR`。
+
+## 9. Agent 技术路线
+
+### 9.1 Agent 在本项目中的定义
+
+GapProof 的 Agent 是“能围绕持久目标观察事件、选择受限工具、更新计划并验证结果的应用系统”，不是一个带长 Prompt 的聊天机器人。
+
+实现分三层：
+
+1. **确定性控制层**：状态机、Guard、权限、预算、重试、幂等、评分、掌握更新和调度。
+2. **受控 AI 能力层**：提出候选错因、解释证据、生成受约束草案、形成角色化文案。
+3. **工具与知识层**：OCR、RAG、题库、评分、对象存储、报告和人工复核。
+
+### 9.2 不采用自由多 Agent
+
+“诊断器、教学器、评测器、报告器”是逻辑职责模块，不是能彼此自由聊天的自治进程。它们通过版本化 DTO 和事件交接，不传长篇自然语言历史。
+
+优点：
+
+- 状态与权限清楚；
+- 成本和延迟可控；
+- 能重放失败；
+- 可对每一职责单独评测；
+- 更符合未成年人教育的可解释和人工覆盖要求。
+
+缺点：
+
+- 初期需要认真定义 Schema 和 Guard；
+- 比“让模型自己循环”代码更多；
+- 新流程需要显式增加状态与迁移。
+
+这些成本正是本项目的核心工程价值，不应交给框架隐藏。
+
+### 9.3 状态机实现
+
+主状态沿用主文档：
+
+```text
+CASE_CREATED
+→ EVIDENCE_PENDING
+→ PARSING
+  ↘ NEEDS_CONFIRMATION → PARSING
+→ EVIDENCE_ACCEPTED
+→ HYPOTHESIZING
+→ PROBE_READY
+→ PROBING
+  ↘ MORE_EVIDENCE → PROBING
+→ ROOT_CAUSE_READY
+→ INTERVENTION_READY
+→ LEARNING
+→ RETEST_WAIT
+→ VERIFYING
+  ↘ REMEDIATING → HYPOTHESIZING
+→ VERIFIED
+→ REPORT_DELIVERED
+```
+
+全局异常状态：`ESCALATED`、`BLOCKED_BY_POLICY`、`CANCELLED`、`RETRYABLE_ERROR`。
+
+状态机使用普通 TypeScript 的 transition table 与纯函数 reducer；LangGraph 只作为 Agent Run 执行层，不作为 Case 业务状态的权威来源。每个 transition 定义：
+
+```ts
+type TransitionSpec = {
+  from: CaseState;
+  eventType: CaseEventType;
+  guard: (snapshot: CaseSnapshot, event: CaseEvent) => GuardResult;
+  decide: (snapshot: CaseSnapshot, event: CaseEvent) => DomainCommand[];
+  to: CaseState | ((result: CommandResult[]) => CaseState);
+  timeoutMs?: number;
+  retryPolicy?: RetryPolicy;
+  compensation?: CompensationCommand;
+};
+```
+
+一次状态转换的数据库事务至少写入：业务变更、`case.state_version + 1`、领域事件和审计摘要。外部 Provider 调用不能放在数据库事务内；先写 Outbox/Job，再由 Worker 执行，完成后产生新事件。
+
+### 9.3.1 LangGraph.js 的职责边界
+
+LangGraph.js 负责一次 Agent Run 内部的有向执行图：
+
+```text
+读取事件
+→ 组装 Context Pack
+→ 检索课程/技能知识
+→ 生成竞争性错因候选
+→ 选择或调用诊断探针
+→ 生成结构化 DecisionProposal
+→ 等待确认或返回 Orchestrator
+```
+
+它可以使用 PostgreSQL Checkpointer 保存运行快照，但 PostgreSQL 中的 GapProof `case`、`learning_evidence_event`、`student_skill_state` 和审计事件仍是业务事实源。LangGraph checkpoint 与 Case event 不得互相替代。
+
+### 9.4 Agent 运行协议
+
+每次 Agent Run：
+
+1. 读取触发事件和当前 `state_version`。
+2. Context Gateway 组装最小 Context Pack。
+3. Policy 决定是否需要模型/工具以及允许范围。
+4. Tool Gateway 校验权限、预算、Schema、超时和 Kill Switch。
+5. Provider 返回后进行结构校验和语义 Guard。
+6. 生成 `DecisionProposal`，不直接改状态。
+7. Orchestrator 在事务内提交合法命令与事件。
+8. 记录模型、Prompt、知识、工具和策略版本。
+
+### 9.5 模型输出契约
+
+模型不得返回隐藏推理链。只允许返回：
+
+```ts
+type DecisionProposal = {
+  conclusion: string;
+  evidenceRefs: string[];
+  confidence: number;
+  unresolvedQuestions: string[];
+  proposedActions: ProposedAction[];
+  knowledgeRefs: string[];
+  warnings: string[];
+};
+```
+
+失败策略固定为：结构修复一次 → 更保守 Provider/规则降级一次 → 停止并进入确认/人工复核。禁止无限自我调用。
+
+### 9.6 模型网关
+
+```ts
+interface ModelGateway {
+  generateStructured<T>(request: StructuredModelRequest<T>): Promise<ModelResult<T>>;
+  analyzeImage<T>(request: VisionModelRequest<T>): Promise<ModelResult<T>>;
+  embed(request: EmbeddingRequest): Promise<EmbeddingResult>;
+}
+```
+
+每个 Provider Adapter 负责：
+
+- 鉴权、地区 Endpoint 和数据处理配置；
+- 模型名映射；
+- 超时、重试和限流；
+- Token/费用记录；
+- 结构化输出差异；
+- 内容安全返回；
+- 可观测字段脱敏。
+
+业务模块只依赖 `ModelGateway`。模型选择通过配置和能力注册表完成，不把具体模型名写死在领域代码或数据库业务规则中。
+
+### 9.7 Agent 框架选择
+
+| 方案 | 优点 | 缺点 | 决定 |
+|---|---|---|---|
+| 自建 TS 状态机 | 完全贴合冻结业务状态；最强可测试、可回放、可解释 | 需要自己写 Guard、迁移和可视化 | `[DECISION]` Case 业务状态权威 |
+| LangGraph.js | 有 checkpoint、interrupt、持久化和图工作流，适合 Agent Run | 引入 thread/checkpoint 语义，需要与业务事件账本分层 | `[DECISION]` Agent 工作流框架 |
+| AI SDK Agent/ToolLoop | TS/React 生态好、Provider 和工具调用方便 | 默认是模型循环，不应承载教育状态和权限 | `[PROPOSED]` 仅用于 UI 流式交互或模型调用封装 |
+| XState | 状态图成熟、可视化强 | 持久事件、作业、Provider 调用仍需自建；会增加抽象层 | `[LATER]` 状态维护困难时评估 |
+| Temporal | 长流程、重试、恢复极强 | 运维和学习成本远超 MVP | `[LATER]` 跨月流程和较大规模后评估 |
+
+替换门槛：只有当 LangGraph.js + pg-boss 无法满足跨月暂停、复杂补偿或大规模并发，且已有自动测试基线时，才引入 Temporal。迁移时 PostgreSQL 事件账本仍是业务事实源。
+
+### 9.8 模型 Provider 选择
+
+#### DeepSeek：主 Agent 分析模型
+
+用于错因假设、工具调用、探针选择、上下文分析和失败重排。优先使用非思考模式完成结构化抽取，使用思考模式处理复杂诊断；思考模式的 `reasoning_content` 由 Adapter 处理，不写入学生长期记忆，也不展示给学生。
+
+DeepSeek 使用 `deepseek-v4-flash`。默认非思考模式处理结构化任务；复杂诊断才启用思考模式。严格 Tool Schema 和 JSON Output 仍必须经过本地 Schema 校验、超时、重试和保守降级；`reasoning_content` 不写入学生记忆或展示给学生。
+
+#### MiniMax：教学表达与备用模型
+
+使用 `minimax-m3`，前提是当前账号已确认可调用。用于苏格拉底式反馈、学生解释、家长报告和 DeepSeek 不可用时的降级。Adapter 必须保留模型配置开关；若供应商调整模型 ID，只改配置，不改领域代码。
+
+#### 统一 Provider 接口
+
+```ts
+interface ModelGateway {
+  generateStructured<T>(request: StructuredModelRequest<T>): Promise<ModelResult<T>>;
+  callTools(request: ToolCallRequest): Promise<ToolCallResult>;
+  analyzeImage<T>(request: VisionModelRequest<T>): Promise<ModelResult<T>>;
+}
+```
+
+模型分工固定为：客观题评分和掌握状态更新不由模型直接决定；模型只能返回有证据引用的结构化建议。
+
+## 10. Context 与长期记忆
+
+### 10.1 Context Pack
+
+每次模型调用只装配：
+
+```text
+安全与授权约束
++ 当前 Case 状态和允许动作
++ 当前技能直接相关的学生事实
++ 最近有效证据
++ 经地区/年级/版次/单元过滤的知识
++ 可用工具及预算
++ 强制输出 Schema
+```
+
+Context Pack 保存 Manifest，不保存模型内部推理：
+
+```ts
+type ContextManifest = {
+  manifestId: string;
+  traceId: string;
+  caseId: string;
+  stateVersion: number;
+  itemRefs: Array<{ id: string; version: string; purpose: string }>;
+  omittedCount: number;
+  estimatedTokens: number;
+  policyVersion: string;
+};
+```
+
+### 10.2 长期记忆类型
+
+- 稳定档案：用户/监护人声明，改变需确认。
+- 技能状态：由版本化规则从证据计算，可衰减和被新证据推翻。
+- Case 状态：Case 关闭后归档。
+- 偏好：有 TTL，不能转成“学习风格”标签。
+- 推断性记忆：必须有来源、置信度、TTL 和冲突状态。
+- 原图、音频、完整对话：短期资产，不作为永久记忆。
+
+### 10.3 Memory Gate
+
+`MemoryCandidate` 必须通过：证据绑定、事实类型、置信度、权限、敏感性、冲突、TTL、是否需确认。通过后写入新版本；冲突不覆盖旧值，而是生成 conflict 记录等待解决。
+
+## 11. 知识库与 RAG
+
+### 11.1 不是“把教材扔进向量库”
+
+GapProof 的知识库首先是受治理的数据产品。每条内容必须有：
+
+- 地区、学制、年级、教材、版次、单元和技能；
+- 来源、页码/位置、版权/许可、允许用途；
+- 作者、审核人、审核状态、版本和 checksum；
+- 生效/失效时间；
+- 是否可以出题、展示、派生、向量化和再分发。
+
+没有授权的教材正文不得进入可分发仓库或公开向量库。引用许可和数字化/派生许可不是同一件事。
+
+当前教材/试题的来源与权利事实分开存储：`acquisition_method=online_purchase`，`permission_assertion=user_asserted_permitted`，`external_license_evidence=pending`。系统不得把“线上购买”或“用户声明可公开展示”自动映射为 `licensed` 或“出版社授权已核验”。
+
+混合试题不得批量直接向量化。进入受控知识库前必须先完成 `source_asset` 清点、SHA-256、学生版/答案版/解析版角色分流、单元/题型分类、答案关联、适用范围与权利状态审核；答案键和解析内容使用独立权限域，默认不进入学生检索上下文。
+
+### 11.2 存储设计
+
+PostgreSQL 同时保存：
+
+- 课程规范与来源元数据；
+- 技能节点和前置边；
+- 错因、探针、教学策略；
+- 原创/授权题目和量表；
+- 可检索文本块、全文索引和向量；
+- 版本、审核和许可状态。
+
+私人学生记忆与全局课程知识使用不同 schema/table 和权限策略。任何检索先确定租户与知识域，再检索，不能先全库向量召回后再过滤。
+
+### 11.3 混合检索流程
+
+```text
+Query Intent
+→ 强制元数据过滤（地区/年级/教材/版次/单元/技能/审核/许可）
+→ PostgreSQL 全文检索 + pgvector 相似度
+→ 规则重排、去重和来源多样性检查
+→ 适用范围/版本冲突检查
+→ 返回片段、引用 ID、版本和 warnings
+```
+
+小规模数据优先精确向量搜索，不急于建立 HNSW。只有在数据量和延迟实测需要时增加 HNSW，并用黄金查询测召回率变化。
+
+### 11.3.1 检索框架与数据库查询边界
+
+- `[DECISION]` 知识检索可使用 LangChain.js 的 `Document`、`Retriever` 和文本切分工具，但 `KnowledgeService` 仍由项目自建，负责版次/地区/单元/技能过滤、权限、来源引用、许可状态和冲突处理。
+- 学生主链默认使用 2-Step RAG：先由程序确定检索范围，再执行全文 + 向量检索；只有诊断分支在固定工具白名单内允许 Agentic Retrieval。
+- 业务数据查询必须经过 Drizzle Repository 或固定的只读工具，例如 `get_student_skill_state`、`get_case_timeline`、`retrieve_curriculum`、`find_diagnostic_probes`、`get_today_tasks` 和 `get_retest_status`。
+- `[OUT]` 不允许 LLM 直接生成或执行任意 SQL，也不允许通过自然语言查询绕过租户、学生、教材版本和权限过滤。后续家长/教师分析如需自然语言查询，只能基于只读视图、字段白名单、SQL AST 检查、行数/超时限制和审计日志实现。
+
+### 11.4 技能图谱
+
+核心表：
+
+```text
+skill_nodes(id, canonical_name, can_do, grade, unit, version, review_status, ...)
+skill_edges(from_skill_id, to_skill_id, edge_type, rationale, confidence, version, ...)
+misconceptions(id, skill_id, observable_pattern, competing_with[], ...)
+diagnostic_probes(id, target_skill_id, hypotheses_tested[], scoring_method, ...)
+```
+
+前置查询使用递归 CTE；路径深度设上限；发布前检查环、孤立节点、重复边和版本混用。MVP 不使用 Neo4j。若未来跨学科图谱达到大规模且需要复杂路径算法，再以只读副本或专用图服务扩展。
+
+### 11.5 内容生产与上线门禁
+
+```text
+draft → machine_checked → human_reviewed → approved → published
+                                         ↘ rejected / superseded
+```
+
+模型生成的题只能进入 `draft`。确定性校验至少检查答案唯一性、选项数量、语言格式、目标技能、难度声明、版权来源和敏感内容。Demo 主链优先使用 `approved` 的人工预审题；现场生成仅展示为受控能力，不作为唯一成功路径。
+
+## 12. 数据架构
+
+### 12.1 为什么 PostgreSQL 从第一天开始
+
+优点：
+
+- 事务、外键、唯一约束和乐观锁适合状态机；
+- JSONB 可保存版本化事件 payload，但核心字段仍可索引；
+- 全文检索和 pgvector 能构成一个可治理的知识查询；
+- pg-boss 复用同一数据库提供持久任务；
+- 后续托管、自建、国内云或海外云都可选择。
+
+缺点：
+
+- 本地开发比 SQLite 多一个容器；
+- 备份、升级和连接池需要运维；
+- 大规模队列和向量最终可能需要独立系统。
+
+对 GapProof 来说，这些成本小于 SQLite 迁移带来的双重测试、方言差异和数据迁移风险。
+
+### 12.2 Drizzle 使用规则
+
+- TypeScript schema 为代码侧源，生产变更必须生成并审查 SQL migration。
+- 开发临时 `push` 不得用于生产。
+- 复杂 pgvector、全文、递归 CTE 可写审查过的 SQL，不强求所有查询都用 ORM DSL。
+- Migration 只向前；破坏性列变更采用 expand → backfill → switch → contract。
+- 每次发布记录 schema version。
+
+### 12.3 PostgreSQL schema 分区
+
+建议使用逻辑 schema：
+
+```text
+app       学生、Case、任务、报告
+evidence  只追加证据、尝试和技能状态
+agent     run、decision、tool、context、prompt/model version
+knowledge 课程、技能、错因、题目、向量和来源
+privacy   同意、保留、删除任务、审计
+demo      合成 Case 和虚拟时钟，仅 Demo 环境
+```
+
+### 12.4 核心不变量
+
+1. Case 的 `state_version` 单调递增。
+2. 每个 Evidence Event 有唯一 `event_id` 和业务幂等键。
+3. `student_skill_state` 是缓存快照；权威依据是证据事件和策略版本。
+4. 人工修正生成新事件，不静默改历史。
+5. 报告中的每个重要结论都有 `evidence_refs`。
+6. Demo 虚拟时间不能修改系统真实时间，也不能进入生产表。
+7. Provider 原始响应默认短期保存且需脱敏；长期保存结构化必要字段。
+
+### 12.5 对象存储
+
+- 数据库只存对象 key、hash、MIME、大小、来源、所有者、保留期限和处理状态。
+- 上传使用短期签名 URL；完成后验证大小、MIME、hash 和恶意文件风险。
+- 原图和派生裁剪图分开记录 lineage。
+- 默认拒绝公开 ACL。
+- 删除工作流同时处理原图、派生图、缓存、向量和报告。
+
+## 13. 后台任务、调度与主动性
+
+### 13.1 选择 pg-boss
+
+pg-boss 运行在 PostgreSQL 上，适合初期的 OCR、模型、报告、D+1/D+7 到期任务、重试和死信队列，无需额外维护 Redis。
+
+优点：基础设施少、事务内入队、延迟任务和重试直接可用。缺点：高吞吐时会与业务数据库竞争资源；工作流可视化和跨语言能力弱于 Temporal。
+
+### 13.2 Job 规则
+
+- Job payload 只放 ID 和版本，不放大段隐私文本或图片。
+- Queue 按能力划分：`ocr.parse`、`agent.advance`、`knowledge.embed`、`report.render`、`retest.due`、`privacy.delete`。
+- 每个 Job 有业务幂等键、超时、有限重试、退避和死信队列。
+- Provider 429/5xx 为可重试；Schema 错误、权限拒绝和无授权来源通常不可盲重试。
+- 到期复测创建应用内任务；MVP 不自动对外发送通知。
+
+### 13.3 虚拟时钟
+
+Demo 使用 `demo_clock` 服务：只计算“Case 的演示当前时间”，不修改操作系统时钟。所有由虚拟时间产生的事件写 `simulation=true` 和 `clock_id`。生产构建可完全禁用 Demo routes。
+
+## 14. OCR 与多模态边界
+
+### 14.1 OCR 流水线
+
+```text
+上传验证
+→ 图片质量检查（方向、清晰度、缺页、分辨率）
+→ PII 区域候选
+→ OCR/版面识别
+→ 题目、选项、学生答案、批改痕迹候选
+→ 坐标与字段置信度
+→ 低置信用户确认
+→ Evidence Accepted
+```
+
+### 14.2 Provider 策略
+
+本轮已经确定优先级：阿里云读光教育试卷识别为 OCR 主 Provider，腾讯云高精度 OCR 为通用/备用 Provider；DeepSeek 为 Agent 分析主模型，MiniMax 为教学表达和降级 Provider。所有调用必须通过 `OcrProvider`/`ModelGateway`，浏览器不得直连。
+
+仍保持开放的是会变化的落地参数：接口版本、QPS/并发、价格、数据处理地域、训练使用开关、保存期限、未成年人/监护人协议，以及 30–50 条代表性样例上的准确率和延迟。模型 ID 已按本轮决策固定，但仍必须由配置管理，不能写死在领域代码中。
+
+```ts
+interface OcrProvider {
+  parse(input: OcrInput, context: ProviderContext): Promise<OcrResult>;
+}
+
+type OcrResult = {
+  pages: ParsedPage[];
+  fields: ExtractedField[];
+  overallConfidence: number;
+  warnings: string[];
+  providerMeta: ProviderMeta;
+};
+```
+
+供应商选择必须用 30–50 页代表性样例比较：字段准确率、版面/手写能力、P95 延迟、失败率、单页成本、数据地区、保留/训练政策和可签协议。不能只比较宣传页。
+
+### 14.3 Demo 回退
+
+预置 OCR 结果按原图 hash 绑定。正常链路先调用读光，失败或低置信时按策略切换腾讯云；两个 Provider 均不可用或明确选择演示模式时才启用预置结果，并显示“预置识别结果/非实时 OCR”。回退事件写入 Trace，不能伪装为真实调用。
+
+## 15. 安全、隐私与权限
+
+### 15.1 身份阶段
+
+- `[MVP]` 预置 Case 使用不可猜测的短期 Demo session；不实现完整注册。
+- `[LATER]` 真实产品引入学生、监护人、教师/审核员角色和明确授权关系。
+- 身份服务选型延后到部署地区和商业模式确定后，避免过早绑定海外 Auth SaaS。
+
+### 15.2 权限模型
+
+至少包含：`tenant_id`、`subject_id/student_id`、`case_id`、`role`、`purpose`。服务端每次读写都必须进行租户与对象授权；前端隐藏按钮不是权限控制。
+
+### 15.3 Prompt 注入防护
+
+- 上传/OCR/检索内容全部包在数据边界中，不拼接成系统指令。
+- 工具集合由当前状态和策略白名单决定，不由模型请求扩大。
+- 工具参数再次进行 Schema、权限、资源归属和预算校验。
+- 检索条目中的“忽略之前指令”等文本不获得控制权。
+- 禁止模型获得通用网络、Shell、SQL 或任意 URL 读取工具。
+
+### 15.4 数据最小化与删除
+
+- Demo 使用虚构身份和合成轨迹。
+- 真实试点前必须确定监护人同意、处理目的、地区、保存期和退出文本。
+- 原始图片建议默认短期保存；具体天数在法律/试点评审后确定。
+- 不默认用学生数据训练模型；Provider 的数据训练/保留开关必须审查。
+- 删除是后台可验证工作流，产生删除清单和完成证明；仅保留必要的不可识别合规记录。
+- 原始教材/试题和完整转换文本只写入 Git 忽略的私有目录；运行日志不得记录题目全文、答案键、文件绝对路径或购买凭证内容。
+- CI/推送门禁必须执行忽略规则与大文件/敏感材料检查，防止 PDF、DOCX、MP3、转换全文或未来学生证据进入 Git 历史。
+
+### 15.5 Kill Switch
+
+可独立关闭：`MODEL_GENERATION`、`OCR_PROVIDER_X`、`WRITING_SCORING`、`SPEECH_SCORING`、`PROACTIVE_NOTIFICATION`、`EXTERNAL_SHARING`、`DEMO_ROUTES`。开关更改要审计并可回滚。
+
+## 16. 可观测、审计与回放
+
+### 16.1 三类记录
+
+1. **运行日志**：Pino JSON，服务排错；默认脱敏。
+2. **分布式 Trace**：OpenTelemetry，贯穿 Web → API → Job → Provider。
+3. **业务审计事件**：数据库持久化，解释教育决策和状态变化。
+
+运行日志不能替代业务审计，业务审计也不能塞入所有调试细节。
+
+### 16.2 Trace 字段
+
+`trace_id`、`request_id`、`case_id`、`state_version`、`job_id`、`agent_run_id`、`tool_call_id`、`provider`、`model_or_tool_version`、`latency_ms`、`cost_units`、`result_status`、`fallback_used`、`simulation`。
+
+日志中不得写完整学生答案、原始图像 URL、密钥、完整 Prompt 或 Provider 原始隐私载荷。
+
+### 16.3 回放等级
+
+- **状态回放**：从领域事件重建 Case 和技能状态；必须确定。
+- **外部调用回放**：使用已保存的结构化结果/Fixture，不重新扣费调用 Provider。
+- **实验重跑**：允许重新调用模型，但标记为新 Run，不能覆盖旧结果。
+
+## 17. 测试与 AI 评测
+
+### 17.1 测试金字塔
+
+| 层 | 工具 | 内容 |
+|---|---|---|
+| 类型/静态 | TypeScript、ESLint | DTO、不可达状态、危险 any |
+| 单元 | Vitest | 状态迁移、评分、掌握规则、Context、权限 |
+| 属性/不变量 | Vitest + 生成数据 | 幂等、状态版本、删除、时间边界 |
+| 集成 | Vitest + 临时 PostgreSQL | 事务、Outbox、队列、pgvector、迁移 |
+| 契约 | JSON Schema/OpenAPI + fake providers | API、工具、Provider 输出兼容 |
+| E2E | Playwright | 上传、确认、探针、重排、报告、多设备 |
+| AI 回归 | Golden/Synthetic Cases | 错因候选、引用、探针选择、失败分支 |
+| 安全红队 | 固定攻击集 | Prompt 注入、越权、数据串线、不当文案 |
+
+### 17.2 AI 评测原则
+
+- 模型生成、模型诊断和模型评分不能由同一次调用自证正确。
+- 30 个合成 Case 必须预先写明潜在真值、允许行为和禁止行为。
+- RAG 分开测检索召回、引用支持、版本适用和冲突处理。
+- Prompt/模型/知识库更新必须跑同一黄金集并生成差异报告。
+- 非确定性测试不能只断言字符串相等，应检查 Schema、证据引用、禁区和评分量表。
+- 线上观察结果不能冒充真实学习效果；真人效果另需试点设计。
+
+### 17.3 多设备验收矩阵
+
+Playwright 至少覆盖：
+
+- Desktop Edge/Chrome：主 Demo 和评委 Trace。
+- 1366×768：常见比赛笔记本。
+- iPad 横竖屏：任务与报告。
+- Mobile Chrome 与 Mobile Safari 仿真：基础单列布局、文字可读性、关键内容不溢出；不把完整相机上传和端到端学习流作为本轮验收。
+- 键盘导航和 reduced motion。
+
+完整移动相机/文件上传在后续移动端范围确定后，再在真实 iOS Safari 设备上做发布前抽测；当前不得以仿真或静态视觉稿宣称该能力已验收。
+
+桌面截图回归至少覆盖 1440px 和 1366×768 的学生“今日”页：重点任务、右栏学习足迹、两张绿色概览卡和固定开始学习入口均不得裁切、重叠或出现无数据含义的装饰线。截图对比用于发现回归，业务正确性仍以 API、状态机和端到端测试为准。
+
+## 18. 部署路线
+
+### 18.1 本地开发
+
+```text
+bun install
+docker compose up -d postgres object-store
+bun run db:migrate
+bun run dev
+```
+
+Windows 直接运行 Next.js/API/Worker，数据库和对象存储放 Docker。这样比所有服务都在 Docker 内开发更容易调试和热更新。
+
+### 18.2 比赛/复赛部署
+
+```text
+Reverse Proxy / TLS
+├─ web      Next.js standalone Node container
+├─ api      Fastify Node container
+├─ worker   Node container
+├─ postgres PostgreSQL + pgvector
+└─ object   S3-compatible storage
+```
+
+可以部署在一台云主机或同一平台的多个容器。数据库和对象存储必须持久卷/托管服务；Web/API/Worker 无状态化。静态导出不适合本项目，因为上传、鉴权、动态任务和服务端状态需要运行时。
+
+### 18.3 供应商中立
+
+比赛阶段部署方向已确定为杭州阿里云单区域联网 Docker Compose；TDD 不把具体云资源、托管产品或供应商合同写死在领域代码中。生产长期仍保持可迁移，选择具体部署服务时必须检查：
+
+- 中国目标用户访问质量；
+- 未成年人数据处理地区与合同；
+- PostgreSQL/pgvector 支持；
+- 对象存储跨域与签名 URL；
+- 长任务/Worker/定时任务能力；
+- 出口带宽和模型 API 可达性；
+- 备份、恢复、日志和费用上限。
+
+### 18.4 不使用 Serverless 承载核心 Worker
+
+Serverless 很适合短 API 和自动扩容，但 OCR、多轮模型、报告、延迟复测和回放需要持久任务、明确超时和可恢复性。Web 可以部署在支持 Next.js 的平台，核心 API/Worker 仍按普通 Node 服务设计，避免被函数时限和平台专有队列锁死。
+
+## 19. 技术选型详细对比
+
+评分：5 为最有利；“AI 开发适配”指代码是否容易被 AI 编码工具理解、生成、测试和长期保持一致，不表示模型能力强弱。
+
+### 19.1 语言与运行时
+
+| 方案 | 开发难度 | AI 开发适配 | 维护/升级 | 优点 | 缺点 | 结论 |
+|---|---:|---:|---:|---|---|---|
+| TS + Node LTS，Bun 管包 | 2/5 | 5/5 | 5/5 | 单语言、生态广、生产兼容稳 | 性能不是所有任务最强 | 采用 |
+| 全部 Bun runtime | 2/5 | 4/5 | 3/5 | 快、工具一体化 | 部分 Node/监控/原生依赖仍有边缘兼容风险 | 暂不用于生产核心 |
+| Next.js + Python FastAPI | 4/5 | 4/5 | 3/5 | AI/数据生态丰富，Pydantic 强 | 双语言、双 Schema、部署与排错增加 | 有 Python 专项需求时再引入 |
+
+### 19.2 后端框架
+
+| 方案 | 难度 | 长期维护 | 优点 | 缺点 | 结论 |
+|---|---:|---:|---|---|---|
+| Fastify | 中 | 高 | Schema、插件、日志、性能与 Node 服务成熟 | 需要自己定义项目架构 | 采用 |
+| Next.js Route Handlers only | 低 | 中 | 上手最快、仓库简单 | Worker、版本 API、独立扩容和未来客户端边界较弱 | 仅做薄 BFF，不做核心后端 |
+| NestJS | 中高 | 高 | 约定完整、团队化和依赖注入强 | 样板和抽象多，小团队初期较重 | 团队扩大后可评估 |
+| Hono | 低 | 中高 | 小、快、跨运行时、类型体验好 | 项目核心不需要 Edge；传统后端生态比 Fastify轻 | 不采用 |
+
+### 19.3 数据与检索
+
+| 选择 | 优点 | 缺点 | 结论 |
+|---|---|---|---|
+| PostgreSQL + pgvector | 事务、权限、元数据、全文和向量统一 | 单库压力需监控 | 采用 |
+| SQLite + FAISS | 本地简单、离线方便 | 多用户、队列、权限、迁移和部署会二次建设 | 只可做一次性实验，不作主线 |
+| 专用向量库 | 大规模向量功能强 | 多一套权限、备份、同步和成本 | 数据量/延迟实测不足前不引入 |
+| PostgreSQL 图关系 | 同一事务、容易版本化和审计 | 超复杂路径性能有限 | 采用 |
+| Neo4j | 图查询与可视化强 | 运维、同步和学习成本高 | 跨学科大图谱后评估 |
+
+### 19.4 ORM
+
+| 方案 | 优点 | 缺点 | 结论 |
+|---|---|---|---|
+| Drizzle | TS schema、SQL 可见、迁移可审、适合 pgvector/CTE 混用 | 高级关系体验不如更重 ORM 自动 | 采用 |
+| Prisma | 类型体验、Studio、文档和团队认知度高 | 生成层和抽象较重；复杂原生 SQL/扩展会穿透 | 可替代，但不是首选 |
+| 纯 SQL/Kysely | 控制最强、贴近数据库 | Schema/迁移和团队约定需更多自建 | 复杂查询局部使用 SQL |
+
+### 19.5 调度
+
+| 方案 | 优点 | 缺点 | 结论 |
+|---|---|---|---|
+| pg-boss | 复用 PostgreSQL、事务入队、延迟/重试 | 极大吞吐会争用数据库 | 采用 |
+| BullMQ + Redis | 成熟、高吞吐、Dashboard 生态 | 多一个 Redis 和一致性边界 | 吞吐增长后评估 |
+| Temporal | 最强长流程恢复与可视化 | 运维和概念成本高 | 跨月复杂工作流后评估 |
+| 系统 cron | 简单 | 无业务幂等、回放和细粒度任务状态 | 禁止作为核心调度 |
+
+### 19.6 架构形态
+
+| 方案 | 开发速度 | 扩展性 | 维护 | 结论 |
+|---|---:|---:|---:|---|
+| 模块化单体 + 独立 Worker | 5 | 4 | 5 | 采用 |
+| 微服务 | 2 | 5 | 2 | 当前不采用 |
+| 全 Serverless | 4 | 3 | 3 | Web 可用，核心 Worker 不采用 |
+
+## 20. AI 辅助开发规范
+
+为了让 Codex 等 AI 编码工具长期可靠协作：
+
+1. 每个 package 有短 README：职责、入口、依赖方向、禁止事项和测试命令。
+2. 先写契约和示例 Fixture，再写实现；Schema 不只存在于文档。
+3. 状态转换一条一条编码并配表驱动测试。
+4. Provider 用 fake adapter，默认测试不联网、不扣费。
+5. 所有 Prompt 为版本化文件，包含输入 Schema、输出 Schema、允许引用和拒答条件。
+6. 不让 AI 大范围重写 migration、权限规则或历史事件；这些改动必须人工审查。
+7. PR 描述包含：影响的状态、Schema、数据迁移、Prompt/模型版本、回退和证据。
+8. 锁文件提交仓库；依赖升级由自动测试和黄金集共同门禁。
+9. 代码中的业务词汇与 PRD/TDD 一致，避免同一概念出现 `session/case/job/task` 混用。
+10. 禁止在注释或 Fixture 中放真实学生隐私。
+
+## 21. 分阶段实现计划
+
+### 21.0 当前实现快照
+
+`[PROTOTYPE]` Phase A 已完成后端 Thin Slice 的第一段，并有可重复测试证据：
+
+- 已初始化 Bun workspace；`contracts`、`domain`、`db`、`jobs` 与 `testkit` 已建立依赖边界。
+- 已实现 PostgreSQL 16 + pgvector、Drizzle Schema/SQL migration、事件追加、写请求幂等和 Case `state_version` 乐观锁。
+- 已实现 Fastify `POST /v1/cases`、`GET /v1/cases/{caseId}`、`POST /v1/cases/{caseId}/commands/run-next`、`POST /v1/cases/{caseId}/extraction/confirm` 与 `GET /v1/cases/{caseId}/hypotheses`，并统一成功与错误响应。
+- `run-next` 通过 pg-boss 交给独立 Worker；确定性 fake OCR 可将 Case 从 `awaiting_evidence` 推进至 `awaiting_confirmation`，识别确认再通过领域事件推进至 `ready_for_diagnosis`。
+- 识别确认请求包含 `expectedVersion`、非空且去重的 `confirmedItemIds` 与 `corrections`；服务端记录 `recognition_confirmed` 事件，拒绝旧版本、非法状态和修正项越界，并保证顺序及并发重放只追加一个事件。
+- Worker 在 `ready_for_diagnosis` 调用确定性 fake `form_hypotheses`：至少生成两个 ID 不同、引用确认事件的竞争性候选，同时选择覆盖这些候选的确认小题，并以 `hypotheses_generated` 事件原子推进到 `probe_required`。
+- 查询接口返回候选、置信度、解释、证据引用和确认小题，但删除内部 `expectedChoiceId`，避免向学生端泄露答案。
+- 当前证据为 21 条快速测试通过、16 条真实数据库/API/Worker 集成测试通过、TypeScript 严格类型检查通过。
+
+该快照不等于 Phase A 完成：Next.js、真实上传/对象存储、确认小题提交与错因评估、计划/学习、D+1/D+7、报告、真实 OCR/模型 Provider 和完整 Playwright Demo 仍未实现。
+
+### 21.1 Phase A：Thin Slice（先证明闭环）
+
+目标：一条稳定、真实标记、可回放的演示路径。
+
+- 初始化 monorepo、Next.js、Fastify、Worker、PostgreSQL。
+- 固定 8–12 个技能节点、2 组竞争错因和 2 个探针。
+- 预置 Case + 一份原创试卷 + 合成证据。
+- 实现状态机、事件表、幂等和虚拟时钟。
+- 至少真实接入一个 OCR 或模型工具；其他回退明确标注。
+- 完成学生任务、失败重排、D+1/D+7 和双报告。
+- Playwright 走通桌面主 Demo。
+
+### 21.2 Phase B：复赛工程化
+
+- 接入真实 OCR、模型、混合 RAG 和 Provider fallback。
+- 30 个已知根因合成 Case。
+- 内容审核状态、来源/许可登记和黄金检索集。
+- OCR 低置信、RAG 无来源、API 超时至少三类故障。
+- OpenTelemetry、费用、Trace、回放和数据删除。
+- 平板/手机适配，干净环境 Docker Compose 启动。
+
+### 21.3 Phase C：可用产品
+
+- 账号、监护人关系、同意与真实通知。
+- 更完整写作、语音和人工复核。
+- 历史趋势、多设备会话和备份恢复演练。
+- 根据实际吞吐决定是否拆队列/向量/模型网关。
+- 真人试点前完成隐私、内容、法律和安全评审。
+
+### 21.4 Phase D：规模化
+
+- 教师/班级/机构租户。
+- 多教材多版本内容发布流水线。
+- 真实数据校准的掌握和探针策略。
+- 需要时再评估 Temporal、专用向量库、图数据库和服务拆分。
+
+## 22. 首个开发迭代建议
+
+不要先从聊天 UI 或“接一个大模型”开始。建议按以下顺序：
+
+1. 建 `contracts`：Case state、事件、工具响应、错误码。
+2. 建 `domain`：transition table、Guard、幂等、不变量测试。
+3. 建 PostgreSQL/Drizzle：Case、event、job、knowledge 最小表。
+4. 建 fake Provider：无网络即可跑完整流程。
+5. 建 Fastify API 和 Worker，把一个 Case 从创建推进到报告。
+6. 再做 Next.js 页面，将服务端状态可视化。
+7. 接真实 OCR/模型，并确保关掉 Provider 仍能用预置 Case 演示。
+8. 增加 RAG、Trace、故障注入和多设备测试。
+
+这条顺序对 AI 辅助开发尤其重要：先有契约和测试，后续生成的页面与模型调用才不会反向决定业务规则。
+
+## 22.5 MVP Agent 六节点固定规格
+
+MVP 不采用自由多 Agent；LangGraph.js 图固定为以下六个节点，节点之间只传版本化 DTO：
+
+```text
+LoadCaseContext
+→ RetrieveKnowledge
+→ GenerateHypotheses
+→ SelectProbe
+→ EvaluateEvidence
+→ CreateDecisionProposal
+```
+
+| 节点 | 输入 | 输出 | 工具/模型边界 |
+|---|---|---|---|
+| `LoadCaseContext` | trigger event、Case、最新证据 | `ContextPack` | 只读数据库，不调用模型 |
+| `RetrieveKnowledge` | ContextPack、检索意图 | `KnowledgeBundle` | 固定 Retriever；不得全库搜索 |
+| `GenerateHypotheses` | 证据、知识片段 | 竞争性错因候选 | DeepSeek；必须带 `evidenceRefs` |
+| `SelectProbe` | 候选错因、时间预算 | 探针候选 | 规则优先，可调用模型排序 |
+| `EvaluateEvidence` | 探针答案、评分结果 | 证据解释、更新建议 | DeepSeek；不得直接写状态 |
+| `CreateDecisionProposal` | 全部中间结果 | `DecisionProposal` | DeepSeek 或 MiniMax；提交前过 Guard |
+
+节点统一状态：`queued`、`running`、`waiting_for_user`、`waiting_for_tool`、`succeeded`、`retryable_error`、`failed`、`cancelled`。每个节点必须定义输入/输出 Schema、超时、重试次数、可用工具和失败转移；最终只能由 Orchestrator 提交业务命令。
+
+## 22.6 工具实现状态与统一契约
+
+第一阶段为所有工具完成接口、JSON Schema、fake/mock adapter、错误码和契约测试；真实能力按下表推进：
+
+| 工具 | 当前开发状态 |
+|---|---|
+| `parse_paper` | TypeBox/JSON Schema、统一 `ToolResult`、确定性 fake adapter 与成功/低置信/超时/权限失败契约测试已实现；真实 OCR Provider 未接入 |
+| `form_hypotheses`、`select_probe` | 已合并为当前确定性 fake 诊断步骤：生成两个有证据引用的竞争性候选并选择一条确认小题；真实模型、课程检索和题库选择未接入 |
+| `redact_pii`、`retrieve_curriculum` | 仍按第一阶段计划完成接口、Schema、fake/mock、错误处理并接入 MVP 主链 |
+| `score_objective`、`update_mastery`、`render_report` | MVP 实现确定性/规则版本 |
+| `verify_item` | MVP 最小实现：唯一答案、技能绑定、答案格式、错因标签、审核状态、教材版本、版权来源 |
+| `schedule_retest` | MVP 最小实现：D+1/D+7、应用内任务、虚拟时钟、取消/重排；不接短信/微信/邮件 |
+| `escalate_human` | 只创建 `human_review_tasks` 待处理记录，不接真实人工系统 |
+| `analyze_speech` | 仅接口、Schema、Mock 和错误处理；暂缓真实 ASR/发音分析 |
+| `score_writing` | 仅接口、Schema、Mock 和错误处理；暂缓真实写作评分 |
+
+统一工具结果必须包含：`status`、`data`、`confidence`、`evidenceRefs`、`citations`、`warnings`、`toolVersion`、`latencyMs`、`error`。禁止工具把 Provider 原始响应直接暴露给前端。
+
+## 22.7 数据表实现基线
+
+数据库采用 PostgreSQL 16+、pgvector、Drizzle SQL migrations 和 UUIDv7。所有时间使用 UTC；事件表只追加，快照表可重建；删除采用“先软删除/停止任务，再后台物理清理”。
+
+核心表及约束：
+
+| 表 | 主键/外键 | 必备索引与约束 |
+|---|---|---|
+| `students` | `id`；`tenant_id` | `anonymous_key` 唯一；租户+状态 |
+| `cases` | `id`；`student_id → students.id` | `state_version` 乐观锁；学生+更新时间 |
+| `source_assets` | `id`；可选 `case_id/student_id` | `object_key` 唯一、hash、保留期 |
+| `learning_evidence_events` | `id`；Case/Student 外键 | `idempotency_key` 唯一；Case+时间；只追加 |
+| `student_skill_states` | `id`；Student、Skill 外键 | Student+Skill 唯一；版本和来源事件 |
+| `agent_runs` | `id`；Case、触发事件外键 | Case+开始时间；状态+开始时间 |
+| `agent_decision_traces` | `id`；AgentRun 外键 | Run+节点；脱敏结构化输出 |
+| `knowledge_items` | `id`；可选 Skill 外键 | 地区/年级/版次/单元；全文索引；`VECTOR(1024)` |
+| `diagnostic_probes` | `id`；Skill 外键 | Skill+审核状态；版本 |
+| `tasks` | `id`；Student/Case 外键 | Student+计划时间；状态+计划时间 |
+| `jobs` | `id`；可选 Case 外键 | `dedupe_key` 唯一；状态+可执行时间 |
+| `human_review_tasks` | `id`；Case/Student 外键 | 状态+优先级+创建时间 |
+
+核心字段定义（Drizzle 的最终实现应与此保持一致）：
+
+```text
+students(id uuidv7 PK, tenant_id uuidv7 NOT NULL, anonymous_key text UNIQUE NOT NULL,
+  grade text, region text, curriculum_version text, timezone text NOT NULL DEFAULT 'Asia/Shanghai',
+  status student_status NOT NULL, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL,
+  deleted_at timestamptz NULL)
+
+cases(id uuidv7 PK, tenant_id uuidv7 NOT NULL, student_id uuidv7 FK students(id),
+  state case_state NOT NULL, state_version integer NOT NULL DEFAULT 0, title text,
+  current_skill_id uuidv7 NULL, simulation boolean NOT NULL DEFAULT false,
+  synthetic boolean NOT NULL DEFAULT false, created_at timestamptz NOT NULL,
+  updated_at timestamptz NOT NULL, closed_at timestamptz NULL, deleted_at timestamptz NULL)
+
+source_assets(id uuidv7 PK, tenant_id uuidv7 NOT NULL, student_id uuidv7 NULL, case_id uuidv7 NULL,
+  object_key text UNIQUE NOT NULL, sha256 char(64) NOT NULL, mime_type text NOT NULL,
+  byte_size bigint NOT NULL, asset_type asset_type NOT NULL, retention_until timestamptz NULL,
+  processing_status asset_processing_status NOT NULL, created_at timestamptz NOT NULL,
+  deleted_at timestamptz NULL)
+
+learning_evidence_events(id uuidv7 PK, tenant_id uuidv7 NOT NULL, student_id uuidv7 NOT NULL,
+  case_id uuidv7 NOT NULL, event_type evidence_event_type NOT NULL, source_type text NOT NULL,
+  source_ref text, payload jsonb NOT NULL, confidence numeric(5,4) NULL,
+  occurred_at timestamptz NOT NULL, created_at timestamptz NOT NULL,
+  idempotency_key text UNIQUE NOT NULL)
+
+student_skill_states(id uuidv7 PK, tenant_id uuidv7 NOT NULL, student_id uuidv7 NOT NULL,
+  skill_id uuidv7 NOT NULL, mastery_status mastery_status NOT NULL,
+  mastery_score numeric(5,4) NOT NULL, evidence_count integer NOT NULL DEFAULT 0,
+  last_evidence_at timestamptz NULL, policy_version text NOT NULL,
+  source_event_id uuidv7 NOT NULL, version integer NOT NULL, created_at timestamptz NOT NULL,
+  updated_at timestamptz NOT NULL, UNIQUE(student_id, skill_id))
+
+agent_runs(id uuidv7 PK, case_id uuidv7 NOT NULL, trigger_event_id uuidv7 NOT NULL,
+  graph_version text NOT NULL, status agent_run_status NOT NULL, current_node text NULL,
+  state_version integer NOT NULL, context_hash char(64) NOT NULL,
+  started_at timestamptz NOT NULL, finished_at timestamptz NULL, error_code text NULL)
+
+agent_decision_traces(id uuidv7 PK, agent_run_id uuidv7 NOT NULL, node_name text NOT NULL,
+  model_provider text NULL, model_id text NULL, prompt_version text NULL,
+  input_refs jsonb NOT NULL, output_schema text NOT NULL, output_payload jsonb NOT NULL,
+  evidence_refs jsonb NOT NULL, confidence numeric(5,4) NULL, latency_ms integer NOT NULL,
+  cost_units numeric NULL, fallback_used boolean NOT NULL DEFAULT false, created_at timestamptz NOT NULL)
+
+knowledge_items(id uuidv7 PK, knowledge_type knowledge_type NOT NULL, region text NOT NULL,
+  grade text NOT NULL, curriculum_version text NOT NULL, unit text NOT NULL,
+  skill_id uuidv7 NULL, title text NOT NULL, content text NOT NULL, content_hash char(64) NOT NULL,
+  source_ref text NOT NULL, license_status text NOT NULL, review_status content_review_status NOT NULL,
+  version text NOT NULL, valid_from timestamptz NOT NULL, valid_until timestamptz NULL,
+  embedding vector(1024) NULL, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL)
+
+diagnostic_probes(id uuidv7 PK, skill_id uuidv7 NOT NULL, title text NOT NULL, prompt text NOT NULL,
+  answer_schema jsonb NOT NULL, scoring_rule jsonb NOT NULL, hypotheses jsonb NOT NULL,
+  difficulty numeric(5,4) NULL, estimated_minutes integer NOT NULL,
+  review_status content_review_status NOT NULL, version text NOT NULL,
+  created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL)
+
+tasks(id uuidv7 PK, student_id uuidv7 NOT NULL, case_id uuidv7 NULL, task_type task_type NOT NULL,
+  scheduled_for timestamptz NOT NULL, due_at timestamptz NULL, status task_status NOT NULL,
+  payload jsonb NOT NULL, source_event_id uuidv7 NOT NULL, created_at timestamptz NOT NULL,
+  completed_at timestamptz NULL)
+
+jobs(id uuidv7 PK, job_type text NOT NULL, status job_status NOT NULL, case_id uuidv7 NULL,
+  dedupe_key text UNIQUE NOT NULL, payload jsonb NOT NULL, attempt_count integer NOT NULL DEFAULT 0,
+  max_attempts integer NOT NULL DEFAULT 3, available_at timestamptz NOT NULL,
+  locked_at timestamptz NULL, last_error_code text NULL, created_at timestamptz NOT NULL,
+  finished_at timestamptz NULL)
+
+human_review_tasks(id uuidv7 PK, case_id uuidv7 NOT NULL, student_id uuidv7 NOT NULL,
+  reason_code text NOT NULL, priority integer NOT NULL DEFAULT 50, related_refs jsonb NOT NULL,
+  status human_review_status NOT NULL DEFAULT 'pending', created_at timestamptz NOT NULL,
+  claimed_at timestamptz NULL, resolved_at timestamptz NULL, resolution_note text NULL)
+```
+
+枚举：`case_state`、`student_status`、`mastery_status`、`agent_run_status`、`job_status`、`task_status`、`task_type`、`asset_type`、`asset_processing_status`、`evidence_event_type`、`knowledge_type`、`content_review_status`、`human_review_status`。删除策略必须由 `privacy.delete` Job 执行并产生审计事件。
+
+工具契约：
+
+```ts
+type ToolRequest<T> = { toolCallId: string; caseId: string; studentId: string; traceId: string; input: T; policyVersion: string };
+type ToolResult<T> = { status: "succeeded" | "needs_confirmation" | "retryable_error" | "failed"; data?: T; confidence?: number; evidenceRefs: string[]; citations: string[]; warnings: string[]; toolVersion: string; latencyMs: number; error?: ToolError };
+type ToolError = { code: string; message: string; retryable: boolean; providerCode?: string; details?: Record<string, unknown> };
+```
+
+每个工具必须同时提交 `input.schema.json`、`output.schema.json`、`error.schema.json`、fake adapter 和至少一个成功/低置信/超时/权限失败 Fixture；禁止只写 Prompt 而没有可执行 Schema。
+
+MVP 工具 Schema 最小字段：
+
+| 工具 | 输入必备字段 | 输出必备字段 |
+|---|---|---|
+| `redact_pii` | `assetId`、`regions`、`mode` | `redactedAssetId`、`regions`、`confidence` |
+| `parse_paper` | `assetId`、`provider`、`pageHints` | `pages`、`items`、`coordinates`、`confidence`、`warnings` |
+| `retrieve_curriculum` | `region`、`grade`、`curriculumVersion`、`unit`、`skillIds`、`query` | `items`、`citations`、`conflicts` |
+| `form_hypotheses` | `evidenceRefs`、`skillRefs`、`knowledgeRefs` | `hypotheses`、`evidenceRefs`、`confidence` |
+| `select_probe` | `hypothesisIds`、`skillIds`、`timeBudgetMinutes` | `probeId`、`reason`、`alternatives` |
+| `verify_item` | `probeId`/`item`、`curriculumVersion` | `valid`、`violations`、`reviewStatus` |
+| `score_objective` | `itemId`、`answer`、`rubricVersion` | `score`、`correct`、`evidence` |
+| `update_mastery` | `studentId`、`skillId`、`evidenceRefs`、`policyVersion` | `proposal`、`before`、`after`、`reason` |
+| `schedule_retest` | `studentId`、`caseId`、`offset`、`taskTemplateId` | `taskId`、`scheduledFor`、`status` |
+| `render_report` | `caseId`、`audience`、`evidenceRefs` | `reportId`、`sections`、`warnings` |
+| `escalate_human` | `caseId`、`reasonCode`、`priority`、`relatedRefs` | `reviewTaskId`、`status` |
+| `analyze_speech` | `assetId`、`language`、`rubricVersion` | `transcript`、`segments`、`confidence`（Mock only） |
+| `score_writing` | `submission`、`rubricVersion`、`skillRefs` | `dimensionScores`、`evidence`、`confidence`（Mock only） |
+
+枚举至少包括 `case_state`、`job_status`、`content_review_status`、`human_review_status`、`task_status`、`asset_processing_status`。学生删除按“停止任务 → 撤销 Job → 删除原始/派生文件 → 删除向量/报告/记忆 → 删除技能快照 → 保留不可识别审计记录”执行。
+
+## 22.8 上下文、记忆和保存期限基线
+
+`ContextPack` 只装配当前状态、最新证据、相关技能/错因/探针、任务时间预算、知识引用、权限和策略版本；不默认装入完整聊天历史、全量学生历史、原始图片或 Provider 原始响应。
+
+默认保存策略：Demo 只使用合成数据；原始图片在 OCR 确认后可删除；Provider 原始响应脱敏后默认保存 7 天；结构化证据保留至 Case/学生删除；技能状态是可重算快照；Trace 只保留脱敏审计字段；向量随知识项或学生数据删除。真实未成年人试点前，实际期限需通过合规评审覆盖默认值。
+
+## 22.9 杭州阿里云部署基线
+
+比赛环境按中国大陆联网、杭州单区域、阿里云部署设计：ECS Docker Compose 运行 Web/API/Worker，PostgreSQL 16+（优先确认阿里云托管实例支持 pgvector，否则使用 ECS 持久卷并配置备份）、OSS 保存文件、SLB 提供 HTTPS、DNS 解析域名、云监控/日志服务采集指标、密钥管理服务保存密钥。
+
+应用仅允许出站访问 DeepSeek、MiniMax、阿里云 OCR 和腾讯混元 Embedding；浏览器不得直连 Provider。保留 Mock 仅用于自动化测试和故障注入，不准备完全断网演示；真实 Provider 失败时必须展示明确的备用、重试或服务不可用状态。
+
+## 23. 开放问题与默认假设
+
+以下问题不阻塞 TDD，但实现前需登记：
+
+| 问题 | 当前默认 | 决策时点 |
+|---|---|---|
+| 比赛部署是否允许联网 | 允许，但准备预置回退 | 开发真实 Provider 前 |
+| 具体模型 ID/思考模式/接口版本 | DeepSeek `deepseek-v4-flash`；MiniMax `minimax-m3`；通过 Adapter | Provider 版本、价格/限流与数据协议变化时 |
+| OCR 端点与服务参数 | 读光主 OCR、腾讯云高精度 OCR 备用 | QPS、手写准确率、价格、地区与合同确认后 |
+| 部署地区/云厂商 | 比赛方向为杭州阿里云单区域联网 Docker Compose；服务规格和合同参数待验证 | 对外 Demo/真人试点前 |
+| 账号 | MVP 无注册 Demo session | 可用产品阶段 |
+| 原图保存期 | Demo 合成数据；真人数据待定 | 真人试点前 |
+| 每日并发/成本预算 | 未知，先记录每次调用 | Provider 选型前 |
+| 掌握更新参数 | 可解释启发式、版本化 | 黄金 Case 完成前 |
+| 探针信息增益 | 规则排序 | 有足够真实数据后 |
+| 是否需要 Python | 默认不需要 | 本地 OCR/统计模型明确要求时 |
+| 教材/试题公开展示权凭证 | 当前为用户声明可用、可公开展示；购买页/许可条款待归档 | 对外 Demo 使用购买原题或教材页面前 |
+| 私有内容资产路径 | 原文件与完整转换位于 Git 忽略目录；仓库只保存元数据与处理器 | 首次推送及每次 ingestion 变更时 |
+| P0 Demo 内容子集 | 从 Unit 1–4、答案齐全、版式可处理的材料中审校选取 | 接入知识库或前端前 |
+
+需要用户尽快补充但不应由技术文档猜测的内容：当前代码/原型状态、比赛联网与文件限制、预算、预期并发、具体云资源与 Provider 参数、是否能进行 30–50 条英语内容人工抽检。
+
+## 24. 工程验收门禁
+
+### 24.1 架构验收
+
+- 核心领域不依赖 Next.js、Fastify、Drizzle 或 Provider SDK。
+- 浏览器不能直接持有外部服务密钥。
+- 状态只能通过合法事件和 Guard 迁移。
+- 模型不能直接写数据库、发通知或改变权限。
+- 事件、上下文、工具、模型、Prompt、知识和策略均有版本记录。
+
+### 24.2 数据验收
+
+- 重复请求不会重复更新学习状态。
+- 并发旧版本更新被拒绝并可重算。
+- 报告结论能回到证据引用。
+- 私人数据和全局知识检索隔离。
+- 删除流程覆盖原始和派生数据并有完成记录。
+
+### 24.3 AI/RAG 验收
+
+- 非法 Schema 只修复一次，之后保守降级或停止。
+- 无适用来源时系统明确弃权，不凭模型记忆补教材事实。
+- 生成题在通过答案唯一性和内容门禁前不能交给学生。
+- 客观题使用确定性评分。
+- 模型/Prompt/知识变更跑固定黄金集并可比较。
+
+### 24.4 Demo 验收
+
+- 主路径在干净环境连续运行 10 次。
+- 能现场展示至少一个真实工具调用和一个真实失败分支。
+- Mock、合成、预置和时间快进在 UI 与 Trace 中均明确。
+- Provider 不可用时仍能进入预置 Case 完成演示。
+- 1366×768 桌面、平板和至少一个手机视口完成相应验收：桌面/平板走通主任务，手机完成基础比例、内容适配和不溢出检查。
+
+## 25. 技术决策记录
+
+| ID | 决策 | 状态 | 复核触发条件 |
+|---|---|---|---|
+| TECH-001 | TypeScript 作为主开发语言 | accepted | 需要成熟 Python 专用能力 |
+| TECH-002 | Bun 管包，Node.js 24 LTS 作为生产运行时 | accepted | 所有关键依赖通过 Bun runtime 回归且有明确收益 |
+| TECH-003 | Next.js App Router + React 构建响应式 Web | accepted | 产品要求原生能力或强离线 |
+| TECH-004 | Fastify 独立 API，REST + OpenAPI 3.1 | accepted | API 形态发生根本变化 |
+| TECH-005 | 模块化单体 + 独立 Worker | accepted | 团队/负载出现清晰服务边界 |
+| TECH-006 | PostgreSQL 从第一天使用 | accepted | 无 |
+| TECH-007 | Drizzle + 可审查 SQL migration | accepted | 团队工具链重大变化 |
+| TECH-008 | pgvector + PostgreSQL 全文混合检索 | accepted | 规模/延迟证据要求专用检索服务 |
+| TECH-009 | 技能图谱使用关系表和递归 CTE | accepted | 大规模复杂图算法出现 |
+| TECH-010 | pg-boss 用于后台任务和延迟复测 | accepted | 队列争用或跨语言工作流出现 |
+| TECH-011 | 自建确定性状态机为 Case 业务权威；LangGraph.js 负责 Agent Run 编排 | accepted | 动态图/长流程复杂度有实证 |
+| TECH-012 | Model/OCR/Storage/Notification 全部 Provider Adapter | accepted | 无 |
+| TECH-013 | AI SDK 只可作模型调用封装，不拥有业务状态 | proposed | 初始化代码时小型 spike 验证 |
+| TECH-014 | Pino + OpenTelemetry + 业务审计三层可观测 | accepted | 无 |
+| TECH-015 | Vitest + Playwright + Golden/Synthetic Case | accepted | 无 |
+| TECH-016 | Docker Compose 为 MVP 部署基线 | accepted | 生产规模要求编排平台 |
+| TECH-017 | LangGraph.js 负责 Agent Run 工作流；自建 Case 状态机和 PostgreSQL 事件账本负责业务真相 | accepted | Agent Run 需要跨月长流程、复杂补偿或大规模并发时评估 Temporal |
+| TECH-018 | DeepSeek 为 Agent 分析主模型，MiniMax 为教学表达和降级模型 | accepted | Provider Spike、价格/限流、模型 ID 和数据处理协议复核 |
+| TECH-019 | 阿里云读光教育试卷识别为 OCR 主 Provider，腾讯云高精度 OCR 为备用 | accepted | 代表性样例、QPS、手写准确率、价格、地区与合同复核 |
+| TECH-020 | 知识检索采用 PostgreSQL 全文 + pgvector；LangChain.js 仅作 Retriever 工具层，KnowledgeService 自建 | accepted | 数据规模/延迟证明需要专用检索服务 |
+| TECH-021 | 学生数据查询只允许固定 Repository/只读工具，禁止 LLM 任意 SQL | accepted | 后续只读分析需经视图、白名单、AST、行数/超时和审计评审 |
+| TECH-022 | MVP Agent 固定为六节点 LangGraph.js 图 | accepted | 业务闭环增加新节点时更新图版本和 Golden Cases |
+| TECH-023 | 所有工具先完成接口、Schema、Mock 和错误处理；verify_item/schedule_retest 做 MVP 最小实现 | accepted | 工具边界或真实 Provider 能力发生变化 |
+| TECH-024 | escalate_human 先创建待处理记录；analyze_speech/score_writing 暂缓真实能力 | accepted | 真实人工流程、语音或写作试点启动 |
+| TECH-025 | UUIDv7 + PostgreSQL 16+；核心表字段/索引/枚举/删除策略按 TDD v0.3.7 | accepted | 数据规模、托管扩展或合规要求变化 |
+| TECH-026 | 采用 TDD 详细 API 路由作为唯一正式接口 | accepted | API 版本升级或新客户端边界产生 |
+| TECH-027 | 杭州阿里云单区域联网 Docker Compose；真实 Provider 演示，Mock 仅测试/故障注入 | accepted | 比赛网络、并发、合规或可用性要求变化 |
+| TECH-028 | DeepSeek `deepseek-v4-flash` 主分析，MiniMax `minimax-m3` 教学/降级，腾讯混元 Embedding 1024 维 | accepted | 账号权限、供应商模型版本或评测结果变化 |
+
+## 26. 官方技术依据（访问日期：2026-08-14）
+
+以下来源用于验证技术能力，不用于替代项目自己的测试：
+
+- Next.js 安装、Node 与浏览器要求：<https://nextjs.org/docs/app/getting-started/installation>
+- Next.js Node/Docker 部署能力：<https://nextjs.org/docs/app/getting-started/deploying>
+- Node.js 版本与 LTS 状态：<https://nodejs.org/en/about/previous-releases>
+- Bun 作为 Node 兼容包管理与运行环境：<https://bun.sh/docs/runtime/nodejs-compat>
+- Bun 安装 Node 兼容依赖：<https://bun.sh/docs/guides/install/from-npm-install-to-bun-install>
+- Fastify 核心参考、Schema 与 TypeScript：<https://fastify.dev/docs/latest/Reference/>
+- Drizzle Schema 与 migrations：<https://orm.drizzle.team/docs/migrations>
+- pgvector 索引与检索：<https://github.com/pgvector/pgvector>
+- pg-boss PostgreSQL 队列：<https://timgit.github.io/pg-boss/>
+- LangGraph 工作流/Agent 与持久化能力：<https://docs.langchain.com/oss/javascript/langgraph/workflows-agents>
+- LangGraph 持久化与 checkpoint：<https://docs.langchain.com/oss/javascript/langgraph/persistence>
+- LangChain.js 检索：<https://docs.langchain.com/oss/javascript/langchain/retrieval>
+- DeepSeek Tool Calls：<https://api-docs.deepseek.com/guides/tool_calls>
+- DeepSeek JSON Output：<https://api-docs.deepseek.com/zh-cn/guides/json_mode/>
+- DeepSeek 模型与价格：<https://api-docs.deepseek.com/zh-cn/quick_start/pricing>
+- MiniMax API 概览：<https://platform.minimax.io/docs/api-reference/api-overview>
+- MiniMax 文本与工具调用：<https://platform.minimax.io/docs/api-reference/text-post>
+- MiniMax 隐私政策：<https://platform.minimaxi.com/zh/protocol/privacy-policy>
+- 阿里云读光教育试卷识别：<https://help.aliyun.com/zh/ocr/developer-reference/api-ocr-api-2021-07-07-recognizeedupaperocr>
+- 阿里云读光产品概览：<https://help.aliyun.com/zh/ocr/product-overview/common-character-recognition-1>
+- 腾讯云通用文字识别高精度版：<https://cloud.tencent.com/document/api/866/34937>
+- 腾讯混元 Embedding：<https://cloud.tencent.com/document/product/1729/102832>
+- Temporal 工作流：<https://docs.temporal.io/>
+- AI SDK 工具和结构化 Schema：<https://ai-sdk.dev/docs/foundations/tools>
+- OpenTelemetry JavaScript：<https://opentelemetry.io/docs/languages/js/>
+- Playwright 浏览器和设备仿真：<https://playwright.dev/docs/browsers>
+- Vitest TypeScript 测试：<https://vitest.dev/guide/learn/writing-tests.html>
+
+## 26.1 GitHub 版本管理与推送日志
+
+规范仓库：<https://github.com/ceason436-hue/GapProof>  
+Git 远端：`https://github.com/ceason436-hue/GapProof.git`  
+规范主分支：`main`
+
+版本管理规则：
+
+1. 每个提交使用清楚、可追溯的摘要，优先采用 `feat:`、`fix:`、`test:`、`docs:`、`refactor:`、`chore:` 等前缀；提交正文说明主要变更、状态迁移、契约/数据影响和验证结果。
+2. 每次推送前检查待提交文件，禁止提交 `.env`、密钥、真实学生数据、未授权教材/试卷全文和本地生成目录；当前私有材料目录由 `.gitignore` 排除。
+3. 每次推送前按风险运行相应测试和类型检查；未通过时不得将失败状态写成已完成。
+4. 每个推送批次必须在下表追加日志，供后续窗口恢复上下文；至少记录 Push ID、日期、分支、提交摘要、主要内容和验证结果。
+5. Push Log 描述该次推送包含的功能/文档提交；Git commit SHA、作者和精确时间以远端 Git 历史为准，避免为记录提交自身 SHA 形成递归修改。
+
+| Push ID | 日期 | 分支 | 状态 | 提交摘要 | 主要内容 | 验证 |
+|---|---|---|---|---|---|---|
+| PUSH-001 | 2026-08-14 | `main` | `pending_github_auth` | `feat: establish Phase A backend thin slice` | 建立首个 GitHub 基线：四份项目文档、Bun workspace、领域状态机、PostgreSQL/Drizzle、Fastify API、pg-boss Worker、fake OCR、识别确认、竞争性错因与等待确认小题闭环；同时纳入 Stitch 公开参考资产、教材/试题来源元数据、私有转换工具与 Git 隔离门禁 | 21 条快速测试、16 条真实数据库/API/Worker 集成测试及 TypeScript 严格类型检查通过；私有材料和生成目录未进入暂存区 |
+
+## 27. 变更日志
+
+### v0.3.7 — 2026-08-14
+
+- 增加购买教材/试题原文件与完整转换文本的私有目录、Git 隔离和推送泄漏门禁。
+- 明确 `online_purchase`、`user_asserted_permitted` 与外部许可证据是三个独立字段，不将用户声明自动写成出版社授权已核验。
+- 增加混合试题的来源清点、学生/答案/解析分流、答案权限域和进入检索前审核门禁；前后端分离、API 与状态机架构保持不变。
+
+### v0.3.6 — 2026-08-14
+
+- 登记 `https://github.com/ceason436-hue/GapProof.git` 为规范远端，主分支统一为 `main`。
+- 新增提交摘要、推送前门禁、敏感/版权材料排除和 TDD Push Log 规则。
+- 登记 `PUSH-001` 首个项目基线推送批次。
+
+### v0.3.5 — 2026-08-14
+
+- 新增 fake `form_hypotheses` TypeBox/ToolResult 契约，保证至少两个不同候选且携带确认事件证据引用。
+- `run-next` Worker 在 `ready_for_diagnosis` 生成候选和最小确认小题，以 `hypotheses_generated` 推进到 `probe_required`。
+- 新增 `GET /v1/cases/{caseId}/hypotheses`，返回候选和不含答案键的确认小题；测试增至 21 条快速测试与 16 条真实集成测试。
+
+### v0.3.4 — 2026-08-14
+
+- 实现 `POST /v1/cases/{caseId}/extraction/confirm` 的 TypeBox 请求契约、Fastify 路由和 `recognition_confirmed` 事件持久化。
+- Case 仅可从 `awaiting_confirmation` 推进到 `ready_for_diagnosis`；旧版本返回 `VERSION_CONFLICT`，非法状态返回 `INVALID_CASE_TRANSITION`。
+- 通过 Case 行级锁保证相同确认请求的顺序及并发幂等；真实数据库/API/Worker 集成测试增至 15 条。
+
+### v0.3.3 — 2026-08-14
+
+- 同步 PROJECT_MASTER v0.1.9 与 PRD v0.1.4 的 Phase A 当前实现状态。
+- 记录 Fastify Case API、统一响应、幂等/乐观锁、pg-boss Worker 和 fake OCR 状态推进的可运行证据。
+- 将 `parse_paper` 的已实现 fake/契约测试与其余待实现工具拆分，并明确后端局部闭环不代表 Phase A 或完整 MVP 已完成。
+
+### v0.3.2 — 2026-08-14
+
+- 同步 PROJECT_MASTER v0.1.5、PRD v0.1.2 和 DESIGN v0.2.0 的学生端“今日”页视觉基线。
+- 新增同一 `current_task_id` 的双入口约束、首页状态投影边界及桌面截图回归要求。
+- 将手机验收统一为基础兼容，不把完整相机上传或端到端学习流列为本轮验收。
+
+### v0.3.1 — 2026-08-14
+
+- 补充家长每日时间调整的正式 API、权限、事件和计划重算约束。
+- 统一桌面/平板完整支持与手机基础响应式适配边界。
+- 将模型、OCR 和部署统一表述为方向已决、具体落地参数待验证。
+
+### v0.3.0 — 2026-08-14
+
+- 固定六节点 MVP Agent 图和每个节点的输入、输出与权限边界。
+- 为全部工具补充接口/Schema/Mock/错误处理状态；确认 `verify_item`、`schedule_retest` 的 MVP 最小实现，`escalate_human` 先写待处理记录，语音和写作真实能力暂缓。
+- 确定 UUIDv7、PostgreSQL 16+、核心表约束、索引、枚举、删除策略和保存期限基线。
+- 确定 TDD 详细 API 为唯一正式接口，补充统一响应、错误码和异步 Job 规则。
+- 确定杭州阿里云联网 Docker Compose、DeepSeek `deepseek-v4-flash`、MiniMax `minimax-m3` 和腾讯混元 Embedding 的方向与当前候选配置；具体接口、价格、QPS、合规、数据处理协议和服务合同参数仍待验证。
+
+### v0.2.0 — 2026-08-13
+
+- 确定 LangGraph.js 为 Agent Run 工作流框架，自建 Case 状态机和 PostgreSQL 事件账本继续作为业务事实源。
+- 确定 DeepSeek 为 Agent 分析主模型、MiniMax 为教学表达和降级模型，并统一经过 `ModelGateway`/Provider Adapter。
+- 确定阿里云读光教育试卷识别为 OCR 主 Provider、腾讯云高精度 OCR 为备用 Provider，并补充 OCR 评测与回退边界。
+- 补充 LangChain.js 检索辅助层、KnowledgeService 职责和固定数据库查询工具边界，明确禁止 LLM 任意 SQL。
+- 保持模型/OCR/部署方向不变；将具体接口、配额、成本、QPS、地区、数据协议、服务合同和实测指标保留为后续 Provider Spike 与合规评审项。
+
+### v0.1.0 — 2026-08-13
+
+- 首次从 `PROJECT_MASTER.md` 与 `PRD.md` 拆分技术设计。
+- 将早期 `FastAPI + SQLite + FAISS/pgvector` 候选收敛为 TypeScript 单栈、PostgreSQL 从第一天使用的路线。
+- 确定系统边界、Agent 自主权、模块化单体、Provider Adapter、知识治理、事件回放、多设备、部署和工程门禁。
+- 保留具体 LLM/OCR/部署落地参数、身份服务和真人数据保留期限为开放项；方向已决，参数待验证。

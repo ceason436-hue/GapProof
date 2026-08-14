@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+
+<html lang="zh"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>知隙 GapProof - 今日</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;450;600;650;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+                "inverse-on-surface": "#f0f1f2",
+                "on-surface-variant": "#434654",
+                "error": "#ba1a1a",
+                "tertiary-fixed": "#abf927",
+                "tertiary-container": "#558100",
+                "inverse-surface": "#2e3132",
+                "surface-lime-soft": "#F1FFD9",
+                "tertiary-fixed-dim": "#93db00",
+                "surface-container-lowest": "#ffffff",
+                "on-error": "#ffffff",
+                "on-primary-fixed-variant": "#003fa3",
+                "on-primary-container": "#fefcff",
+                "inverse-primary": "#b3c5ff",
+                "ink-primary": "#111214",
+                "surface-tint": "#1956cb",
+                "primary-fixed-dim": "#b3c5ff",
+                "on-tertiary-container": "#faffe9",
+                "surface": "#f8f9fa",
+                "border-default": "#DDE0E5",
+                "on-primary": "#ffffff",
+                "on-background": "#191c1d",
+                "surface-secondary": "#F0F2F4",
+                "tertiary": "#426600",
+                "outline": "#737685",
+                "ink-secondary": "#5F636B",
+                "surface-container-highest": "#e1e3e4",
+                "secondary-fixed": "#e3e2e5",
+                "on-tertiary-fixed-variant": "#324f00",
+                "surface-container-high": "#e7e8e9",
+                "on-tertiary-fixed": "#111f00",
+                "status-warning": "#9A5B00",
+                "background": "#f8f9fa",
+                "surface-blue-soft": "#EEF3FF",
+                "status-success": "#247A4D",
+                "on-secondary": "#ffffff",
+                "border-strong": "#B9BEC7",
+                "on-secondary-container": "#646467",
+                "secondary-container": "#e3e2e5",
+                "surface-primary": "#FFFFFF",
+                "on-surface": "#191c1d",
+                "on-secondary-fixed-variant": "#464749",
+                "secondary": "#5e5e61",
+                "surface-bright": "#f8f9fa",
+                "canvas": "#F5F6F7",
+                "outline-variant": "#c3c6d6",
+                "surface-container": "#edeeef",
+                "surface-variant": "#e1e3e4",
+                "status-error": "#B3261E",
+                "primary-container": "#3b6ee3",
+                "on-error-container": "#93000a",
+                "primary-fixed": "#dae1ff",
+                "ink-tertiary": "#8B9099",
+                "on-primary-fixed": "#001849",
+                "surface-dim": "#d9dadb",
+                "primary": "#1454c9",
+                "on-tertiary": "#ffffff",
+                "error-container": "#ffdad6",
+                "secondary-fixed-dim": "#c7c6c9",
+                "surface-container-low": "#f3f4f5",
+                "on-secondary-fixed": "#1b1c1e",
+                "brand-lime": "#A8F522",
+                "dark-surface": "#1E1E1E",
+                "electric-blue": "#0055FF",
+                "accent-lime": "#C3FF2B",
+                "confirm-bg": "#DFFF6A",
+                "confirm-border": "#A8F522",
+                "confirm-accent": "#A8F522",
+                "confirm-text": "#355500",
+                "footprint-blue": "#285FEA",
+                "footprint-blue-light": "#6F9BFF",
+                "footprint-lime": "#A8F522",
+                "footprint-empty": "#EEF0F2",
+                "active-blue": "#3F78FF"
+        },
+        "borderRadius": {
+                "DEFAULT": "0.25rem",
+                "lg": "0.5rem",
+                "xl": "0.75rem",
+                "full": "9999px",
+                "2xl": "1rem",
+                "3xl": "1.5rem"
+        },
+        "spacing": {
+                "gutter": "24px",
+                "sm": "12px",
+                "margin": "32px",
+                "base": "4px",
+                "md": "16px",
+                "xl": "40px",
+                "xs": "8px",
+                "lg": "24px"
+        },
+        "fontFamily": {
+                "section-title": [
+                        "Manrope", "HarmonyOS Sans SC", "sans-serif"
+                ],
+                "metric-lg": [
+                        "Manrope", "HarmonyOS Sans SC", "sans-serif"
+                ],
+                "page-title": [
+                        "Manrope", "HarmonyOS Sans SC", "sans-serif"
+                ],
+                "sub-body": [
+                        "Manrope", "HarmonyOS Sans SC", "sans-serif"
+                ],
+                "page-hero": [
+                        "Manrope", "HarmonyOS Sans SC", "sans-serif"
+                ],
+                "card-title": [
+                        "Manrope", "HarmonyOS Sans SC", "sans-serif"
+                ],
+                "metric-xl": [
+                        "Manrope", "HarmonyOS Sans SC", "sans-serif"
+                ],
+                "body": [
+                        "Manrope", "HarmonyOS Sans SC", "sans-serif"
+                ],
+                "label": [
+                        "Manrope", "HarmonyOS Sans SC", "sans-serif"
+                ],
+                "page-hero-mobile": [
+                        "Manrope", "HarmonyOS Sans SC", "sans-serif"
+                ]
+        },
+        "fontSize": {
+                "section-title": [
+                        "20px",
+                        {
+                                "lineHeight": "28px",
+                                "fontWeight": "650"
+                        }
+                ],
+                "metric-lg": [
+                        "32px",
+                        {
+                                "lineHeight": "40px",
+                                "fontWeight": "600"
+                        }
+                ],
+                "page-title": [
+                        "28px",
+                        {
+                                "lineHeight": "36px",
+                                "fontWeight": "700"
+                        }
+                ],
+                "sub-body": [
+                        "14px",
+                        {
+                                "lineHeight": "22px",
+                                "fontWeight": "450"
+                        }
+                ],
+                "page-hero": [
+                        "36px",
+                        {
+                                "lineHeight": "44px",
+                                "letterSpacing": "-0.02em",
+                                "fontWeight": "700"
+                        }
+                ],
+                "card-title": [
+                        "16px",
+                        {
+                                "lineHeight": "24px",
+                                "fontWeight": "650"
+                        }
+                ],
+                "metric-xl": [
+                        "44px",
+                        {
+                                "lineHeight": "52px",
+                                "fontWeight": "600"
+                        }
+                ],
+                "body": [
+                        "16px",
+                        {
+                                "lineHeight": "26px",
+                                "fontWeight": "450"
+                        }
+                ],
+                "label": [
+                        "13px",
+                        {
+                                "lineHeight": "18px",
+                                "fontWeight": "600"
+                        }
+                ],
+                "page-hero-mobile": [
+                        "28px",
+                        {
+                                "lineHeight": "36px",
+                                "fontWeight": "700"
+                        }
+                ]
+        }
+},
+    },
+  }
+</script>
+<style>
+        body { background-color: #FAFAFA; color: theme('colors.ink-primary'); font-family: 'Manrope', 'HarmonyOS Sans SC', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .icon-fill { font-variation-settings: 'FILL' 1; }
+        
+        /* Custom scrollbar for horizontal lists */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .floating-shadow { box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.15); }
+    </style>
+</head>
+<body class="flex flex-col h-screen overflow-hidden">
+<!-- TopAppBar -->
+<header class="flex h-[72px] border-b border-border-default bg-surface-primary z-20 w-full shrink-0">
+<div class="hidden md:flex items-center w-64 px-lg shrink-0 h-full justify-center bg-surface-primary">
+<img alt="知隙 GapProof Logo" class="w-[155px] h-auto object-contain bg-transparent" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD_IStfQCWojr6CiUaWSXatGYdN064kaxJ5853S85CoJrLKk0mBwDwWO3hIcIxRa9SX0fDAeTHMWegmu27Cn7XyMPRVhPEo-a4qw1hSj1Rh8AIIilzIbKRieOzaX51f1-Z6NiZ_h2-4DW9yljay7OCBWhx9a5J1eiu_mu0dbCezoOT49QDVx3x3VbR0S6RFQPaMTduePEzckxz5KCi25M9GN1rDQQlHmfgk-EHO0_C8IfRHltlOSpTZpcg-mwCIJEm1FQ"/>
+</div>
+<div class="flex-1 flex justify-between items-center h-full px-margin">
+<div class="flex items-center gap-lg">
+<!-- Mobile Menu Button -->
+<button class="md:hidden p-2 -ml-2 text-ink-secondary hover:bg-surface-secondary rounded-full">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<div class="flex gap-lg">
+<button class="text-primary font-bold border-b-2 border-primary pb-1 font-section-title text-section-title" style="color: #0036FF; border-color: #0036FF;">当前案例</button>
+<button class="text-ink-secondary hover:text-ink-primary font-section-title text-section-title">学生切换</button>
+</div>
+</div>
+<div class="flex items-center gap-md">
+<button class="hidden md:flex items-center gap-xs px-md py-xs rounded-[14px] border border-border-default hover:bg-surface-secondary transition-all font-label text-label text-ink-secondary">
+                                学生/家长
+                            </button>
+<button class="flex items-center gap-xs px-md py-xs rounded-[14px] bg-surface-secondary hover:bg-surface-secondary transition-all font-label text-label text-ink-primary">
+                                角色切换
+                            </button>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-border-default">
+<img alt="用户头像" class="w-full h-full object-cover" data-alt="A clean, professional portrait of a student avatar for an educational platform, bright even lighting, solid light gray background, neutral pleasant expression." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA-q7FUeahHBdJpV_agDKVMjWlOZ83PYkfRb9LVHSBqgVRv9yNi3n_siMkuGyYtPzXVNRSPa2dGLibUdFzHtGngcoVi4wdsVOvcjQz5HuHbPM4yfvxXJeByIRdRifO8om-CN8hGWLgNCH2SQ0BTPCrFJkAvPsvsKePBwkvz_reZ07rkJ50vxO8gQyrfA81F6Xtu6AXbd4XJ2xZ9jNrc8dLm5JONUnQ6Cxmk5NTWj9uecPs7iFqgfw0_"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Content Wrapper -->
+<div class="flex flex-1 overflow-hidden">
+<!-- SideNavBar -->
+<nav class="hidden md:flex flex-col w-64 border-r border-border-default bg-surface-primary p-lg shrink-0">
+<div class="flex-1 flex flex-col gap-xs mt-2">
+<a class="flex items-center gap-sm px-md py-sm text-white font-bold rounded-[16px] transition-transform hover:-translate-y-[1px] active:translate-y-[1px]" href="#" style="background: linear-gradient(to bottom, #0044FF, #0036FF); border-bottom: 2px solid #0028C7; box-shadow: 0 4px 9px rgba(0, 54, 255, 0.22);">
+<span class="material-symbols-outlined icon-fill text-white">today</span>
+<span class="font-label text-label text-white">今日</span>
+</a>
+<a class="flex items-center gap-sm px-md py-sm text-ink-secondary hover:bg-surface-secondary bg-white rounded-[14px] transition-colors active:scale-[0.98] border-l-4 border-transparent" href="#">
+<span class="material-symbols-outlined">psychology</span>
+<span class="font-label text-label">找原因</span>
+</a>
+<a class="flex items-center gap-sm px-md py-sm text-ink-secondary hover:bg-surface-secondary bg-white rounded-[14px] transition-colors active:scale-[0.98] border-l-4 border-transparent" href="#">
+<span class="material-symbols-outlined">calendar_today</span>
+<span class="font-label text-label">7日计划</span>
+</a>
+<a class="flex items-center gap-sm px-md py-sm text-ink-secondary hover:bg-surface-secondary bg-white rounded-[14px] transition-colors active:scale-[0.98] border-l-4 border-transparent" href="#">
+<span class="material-symbols-outlined">trending_up</span>
+<span class="font-label text-label">我的进步</span>
+</a>
+<a class="flex items-center gap-sm px-md py-sm text-ink-secondary hover:bg-surface-secondary bg-white rounded-[14px] transition-colors active:scale-[0.98] border-l-4 border-transparent" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span class="font-label text-label">学习报告</span>
+</a>
+</div>
+<button class="w-full py-sm text-white rounded-[16px] font-label text-label mt-auto transition-transform hover:-translate-y-[1px] active:translate-y-[1px]" style="background: linear-gradient(to bottom, #0044FF, #0036FF); border-bottom: 3px solid #0028C7; box-shadow: 0 5px 10px rgba(0, 54, 255, 0.25);">
+            开始学习
+        </button>
+</nav>
+<!-- Main Content Area -->
+<div class="flex-1 flex flex-col h-full bg-[#FAFAFA] overflow-hidden">
+<!-- Scrollable Canvas -->
+<main class="flex-1 overflow-y-auto p-4 md:p-margin relative">
+<div class="max-w-[1200px] mx-auto flex flex-col gap-xl md:mt-4">
+<!-- Welcome & Date Header -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-md">
+<div>
+<h2 class="font-page-hero text-page-hero md:font-page-hero-mobile md:text-page-hero-mobile text-ink-primary">早上好，同学！今天我们来解决“不规则动词”</h2>
+<p class="font-body text-body text-ink-secondary mt-2">今天是你坚持学习的第 <span class="font-bold text-primary">12</span> 天，继续保持！</p>
+</div>
+<!-- Minimal Date Text -->
+<div class="hidden md:flex flex-col items-end">
+<p class="font-card-title text-card-title text-ink-primary">周二, 15日</p>
+<p class="font-sub-body text-sub-body text-ink-secondary">本周目标完成度 40%</p>
+</div>
+</div>
+<!-- Layout -->
+<div class="flex flex-col lg:flex-row gap-xl items-start">
+<!-- Main Task Area -->
+<div class="w-full lg:w-2/3 flex flex-col gap-lg">
+<!-- Floating Dark Card -->
+<div class="bg-[#1C1C1E] rounded-3xl p-xl relative overflow-hidden floating-shadow text-white group border border-white/5">
+<!-- Full Open Book Illustration Background -->
+<div class="absolute right-0 bottom-0 pointer-events-none transform translate-x-8 translate-y-8 opacity-20">
+<svg class="text-gray-500" fill="none" height="240" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" viewbox="0 0 24 24" width="240">
+<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+<path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
+</svg>
+</div>
+<!-- 预计 10 分钟 Top Right -->
+<div class="absolute top-xl right-xl flex items-center gap-xs px-sm py-1 rounded-full bg-accent-lime/10 border border-accent-lime/20 text-accent-lime" style="color: #B5F800; background-color: rgba(181, 248, 0, 0.1); border-color: rgba(181, 248, 0, 0.2);">
+<span class="material-symbols-outlined text-sm">schedule</span>
+<span class="font-label text-label">预计 10 分钟</span>
+</div>
+<div class="relative z-10 flex flex-col items-start h-full min-h-[320px]">
+<div class="w-full flex justify-between items-start mb-lg">
+<div class="flex items-center gap-xs px-sm py-1 rounded-full bg-white/10 border border-white/20">
+<span class="w-2 h-2 rounded-full bg-accent-lime" style="color: #B5F800; background-color: #B5F800;"></span>
+<span class="font-label text-label text-white">今日重点任务</span>
+</div>
+</div>
+<h3 class="font-metric-lg text-metric-lg font-bold text-white mb-4 leading-tight">攻克“现在完成时”动词形式</h3>
+<p class="font-body text-body text-gray-400 mb-8 max-w-lg">根据你昨天的练习结果，AI 教练发现你在 write, eat, see 等词的过去分词形式上存在混淆。</p>
+<!-- Dynamic Pathway (Compact Capsules) -->
+<div class="flex flex-wrap items-center gap-4 mb-auto pt-4">
+<div class="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-full border border-white/20">
+<div class="w-5 h-5 rounded-full bg-white text-[#1C1C1E] flex items-center justify-center font-bold text-xs">1</div>
+<span class="font-label text-label text-white">看一个例子</span>
+</div>
+<span class="material-symbols-outlined text-white/40 text-sm">arrow_forward</span>
+<div class="flex items-center gap-2 bg-[#2C2C2E] px-4 py-2 rounded-full border border-white/10">
+<div class="w-5 h-5 rounded-full bg-white/20 text-white/70 flex items-center justify-center font-bold text-xs">2</div>
+<span class="font-label text-label text-white/70">做一道确认小题</span>
+</div>
+<span class="material-symbols-outlined text-white/40 text-sm">arrow_forward</span>
+<div class="flex items-center gap-2 bg-[#2C2C2E] px-4 py-2 rounded-full border border-white/10">
+<div class="w-5 h-5 rounded-full bg-white/20 text-white/70 flex items-center justify-center font-bold text-xs">3</div>
+<span class="font-label text-label text-white/70">换一道新题再试</span>
+</div>
+</div>
+<div class="mt-12 flex items-center justify-between w-full">
+<button class="px-xl py-md bg-active-blue text-white rounded-[14px] font-label text-label hover:bg-blue-600 transition-colors flex items-center justify-center gap-sm shadow-lg shadow-blue-500/20" style="background-color: #B5F800; color: #111214; box-shadow: none;">
+                                        开始今天的任务
+                                        <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Below Task Card Area (Integrated Overview) -->
+<div class="bg-surface-primary rounded-[14px] p-lg border border-border-default mt-4 shadow-sm">
+<h3 class="font-card-title text-card-title text-ink-primary mb-4">今日概览</h3>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-md">
+<!-- Pending Confirmation Tile -->
+<div class="relative overflow-hidden p-4 flex flex-col justify-between" style="background: linear-gradient(to bottom, #c4fa32, #B5F800); border-top: 1px solid rgba(255, 255, 255, 0.4); border-bottom: 2px solid #355500; box-shadow: 0 3px 8px rgba(60, 90, 0, 0.12); border-radius: 16px;">
+<div class="absolute right-2 bottom-2 pointer-events-none opacity-15 z-0">
+<svg class="text-[#1A3300]" fill="none" height="80" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="80">
+<path d="M9 11l3 3L22 4"></path>
+<path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"></path>
+</svg>
+</div>
+<div class="relative z-10">
+<div class="flex items-center gap-2 mb-2">
+<div class="w-6 h-6 rounded-full bg-white/60 border border-white/80 flex items-center justify-center">
+<span class="material-symbols-outlined text-[#111318] text-sm">error_outline</span>
+</div>
+<h4 class="font-card-title text-card-title text-[#111318]">等你确认</h4>
+</div>
+<p class="font-sub-body text-sub-body text-[#111318]/80 mb-4">昨天上传的“英语阅读”练习有一处识别不确定，请确认识别结果。</p>
+</div>
+<button class="relative z-10 self-start px-md py-xs rounded-[16px] font-label text-label transition-transform hover:-translate-y-[1px] active:translate-y-[1px] mt-auto" style="background-color: #111318; color: #FFFFFF; border-radius: 12px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.18);">去确认</button>
+</div>
+<!-- Recent Progress Tile -->
+<div class="relative overflow-hidden p-4 flex flex-col justify-between" style="background: linear-gradient(to bottom, #c4fa32, #B5F800); border-top: 1px solid rgba(255, 255, 255, 0.4); border-bottom: 2px solid #355500; box-shadow: 0 3px 8px rgba(60, 90, 0, 0.12); border-radius: 16px;">
+<div class="absolute right-2 bottom-2 pointer-events-none opacity-15 z-0">
+<svg class="text-[#1A3300]" fill="none" height="80" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="80">
+<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline>
+<polyline points="16 7 22 7 22 13"></polyline>
+</svg>
+</div>
+<div class="relative z-10 flex flex-col h-full">
+<div>
+<div class="flex items-center gap-2 mb-2">
+<div class="w-6 h-6 rounded-full bg-white/60 border border-white/80 flex items-center justify-center">
+<span class="material-symbols-outlined text-[#111318] text-sm">trending_up</span>
+</div>
+<h4 class="font-card-title text-card-title text-[#111318]">最近进展</h4>
+</div>
+<p class="font-sub-body text-sub-body text-[#111318]/90">教练发现，昨天你对“现在完成时”的标志词(since/for)已经完全掌握了！这可是个大突破，今天继续加油吧！</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Minimal Sidebar Area -->
+<div class="w-full lg:w-1/3 flex flex-col gap-xl mt-8 lg:mt-0">
+<!-- Minimal Matrix -->
+<div>
+<h3 class="font-card-title text-card-title text-ink-primary mb-4 pb-2 border-b border-border-default">本周学习足迹</h3>
+<div class="flex gap-2 mb-2"><div class="w-8 h-8 bg-[#0036FF] rounded-[14px] shrink-0"></div>
+<div class="w-8 h-8 bg-[#0036FF] rounded-[14px] shrink-0"></div>
+<div class="w-8 h-8 bg-white border-2 border-[#0036FF] rounded-[14px] shrink-0 flex items-center justify-center relative">
+<span class="absolute -bottom-5 text-[10px] text-[#0036FF] whitespace-nowrap">今日</span>
+</div>
+<div class="w-8 h-8 bg-[#EEF0F2] rounded-[14px] shrink-0"></div>
+<div class="w-8 h-8 bg-[#EEF0F2] rounded-[14px] shrink-0"></div>
+<div class="w-8 h-8 bg-[#EEF0F2] rounded-[14px] shrink-0"></div>
+<div class="w-8 h-8 bg-[#EEF0F2] rounded-[14px] shrink-0"></div></div>
+<p class="text-sm font-sub-body text-ink-secondary mt-6">本周已坚持 2 天</p>
+</div>
+<!-- Card-based Secondary Tasks -->
+<div>
+<h3 class="font-card-title text-card-title text-ink-primary mb-4 pb-2 border-b border-border-default">稍后继续</h3>
+<div class="flex flex-col gap-4">
+<div class="bg-white border border-border-default rounded-[14px] p-4 shadow-sm group cursor-pointer hover:border-active-blue transition-colors">
+<div class="flex items-start justify-between mb-2">
+<h4 class="font-card-title text-card-title text-ink-primary group-hover:text-active-blue transition-colors">阅读理解：代词指代关系</h4>
+<span class="text-ink-secondary font-mono text-sm">01</span>
+</div>
+<div class="flex items-center gap-3">
+<div class="flex-1 h-2 bg-surface-secondary rounded-full overflow-hidden">
+<div class="h-full bg-active-blue w-0 rounded-full" style="background-color: #0036FF;"></div>
+</div>
+<span class="font-sub-body text-sub-body text-ink-secondary">0%</span>
+</div>
+</div>
+<div class="bg-white border border-border-default rounded-[14px] p-4 shadow-sm group cursor-pointer hover:border-active-blue transition-colors">
+<div class="flex items-start justify-between mb-2">
+<h4 class="font-card-title text-card-title text-ink-primary group-hover:text-active-blue transition-colors">词汇巩固：语境词义辨析</h4>
+<span class="text-ink-secondary font-mono text-sm">02</span>
+</div>
+<div class="flex items-center gap-3">
+<div class="flex-1 h-2 bg-surface-secondary rounded-full overflow-hidden">
+<div class="h-full bg-active-blue w-1/2 rounded-full" style="background-color: #0036FF;"></div>
+</div>
+<span class="font-sub-body text-sub-body text-ink-secondary">50%</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Next Check -->
+<div class="mt-4 p-lg bg-surface-primary shadow-sm rounded-[14px] border border-border-default flex flex-col gap-md">
+<div class="flex items-center justify-between pb-sm border-b border-border-default">
+<span class="font-label text-label text-ink-primary flex items-center gap-2">
+<span class="material-symbols-outlined text-sm text-active-blue" style="color: #0036FF;">event</span> 下次检查
+                                </span>
+<span class="font-card-title text-card-title text-ink-primary">明天 (周三)</span>
+</div>
+<div>
+<h4 class="font-card-title text-card-title text-ink-primary mb-1">现在完成时中的过去分词</h4>
+<p class="font-sub-body text-sub-body text-ink-secondary mb-1">形式：换一道新题</p>
+<p class="font-sub-body text-sub-body text-ink-secondary">预计时长：约 4 分钟</p>
+</div>
+<button class="w-full py-2 bg-white border border-border-default text-ink-primary rounded-[14px] font-label text-label hover:bg-surface-secondary transition-colors">
+                                明天再试
+                            </button>
+<p class="text-xs text-ink-tertiary text-center">完成后会更新你的学习记录</p>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</div>
+</body></html>

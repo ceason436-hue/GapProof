@@ -1,0 +1,29 @@
+{
+  "name": "gapproof",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.3.14",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "test:db": "TEST_DATABASE_URL=postgres://gapproof:gapproof_local@localhost:55432/gapproof vitest run --maxWorkers=1 --no-file-parallelism packages/db/src/schema.integration.test.ts apps/api/src/app.integration.test.ts",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate --config packages/db/drizzle.config.ts",
+    "db:migrate": "bun packages/db/src/migrate.ts",
+    "schemas:generate": "bun packages/contracts/scripts/export-tool-schemas.ts",
+    "dev:api": "bun apps/api/src/main.ts",
+    "dev:worker": "bun apps/worker/src/main.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "@vitest/coverage-v8": "^4.1.10",
+    "drizzle-kit": "^0.31.10",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}

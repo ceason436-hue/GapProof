@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "assetId",
+    "provider",
+    "pageHints"
+  ],
+  "properties": {
+    "assetId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "provider": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "pageHints": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

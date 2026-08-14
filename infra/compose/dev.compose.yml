@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: gapproof
+      POSTGRES_USER: gapproof
+      POSTGRES_PASSWORD: gapproof_local
+    ports:
+      - "55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gapproof -d gapproof"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - gapproof-postgres-data:/var/lib/postgresql/data
+
+volumes:
+  gapproof-postgres-data:
+

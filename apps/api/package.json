@@ -1,0 +1,20 @@
+{
+  "name": "@gapproof/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@gapproof/contracts": "workspace:*",
+    "@gapproof/db": "workspace:*",
+    "@gapproof/domain": "workspace:*",
+    "@gapproof/jobs": "workspace:*",
+    "fastify": "^5.12.0",
+    "uuid": "^14.0.1"
+  },
+  "devDependencies": {
+    "@gapproof/worker": "workspace:*"
+  }
+}

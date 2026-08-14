@@ -1,0 +1,20 @@
+node_modules/
+.next/
+dist/
+coverage/
+*.tsbuildinfo
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example
+
+# Local QA and generated intermediates
+tmp/
+
+# Purchased/private source materials and full-text derivatives.
+# Keep only project-owned metadata/catalog files outside these paths in Git.
+reference/Textbook-materials/*.pdf
+reference/Textbook-materials/private-ai-readable/
+reference/Exam-materials/incoming/
+reference/Exam-materials/private-ai-readable/

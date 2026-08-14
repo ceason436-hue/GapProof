@@ -1,0 +1,73 @@
+{
+  "id": "case-synthetic-irregular-participle-v1",
+  "version": 1,
+  "title": "区分一般过去式与不规则过去分词",
+  "provenance": {
+    "synthetic": true,
+    "original": true,
+    "curriculumMapping": "unverified",
+    "containsStudentData": false,
+    "license": "project-original"
+  },
+  "targetSkill": {
+    "id": "form-present-perfect-irregular-participle",
+    "canDo": "在现在完成时语境中选择并使用常见不规则动词的过去分词。"
+  },
+  "sourceEvidence": {
+    "prompt": "Mina has ___ (write) three short notes about saving water this week.",
+    "studentAnswer": "wrote",
+    "expectedAnswer": "written",
+    "recognition": {
+      "text": "Mina has wrote three short notes about saving water this week.",
+      "lowConfidenceRegions": ["wrote"]
+    }
+  },
+  "competingHypotheses": [
+    {
+      "id": "past-vs-participle",
+      "description": "学生知道动作发生在过去，但把一般过去式 wrote 当成过去分词 written。"
+    },
+    {
+      "id": "auxiliary-meaning",
+      "description": "学生尚未稳定理解 has/have 与过去分词共同表达的结构和语义。"
+    }
+  ],
+  "probes": [
+    {
+      "id": "probe-participle-form",
+      "prompt": "Leo has ___ (take) two photos today.",
+      "options": ["take", "took", "taken"],
+      "answer": "taken"
+    },
+    {
+      "id": "probe-simple-past-contrast",
+      "prompt": "Leo ___ (take) two photos yesterday.",
+      "options": ["take", "took", "taken"],
+      "answer": "took"
+    }
+  ],
+  "intervention": {
+    "explanation": "先根据时间和助动词判断结构，再分别提取 took 与 taken，而不是只记住动作发生在过去。",
+    "steps": [
+      "圈出 has/have 和时间线索。",
+      "判断需要一般过去式还是过去分词。",
+      "用一组新动词完成对比练习。"
+    ]
+  },
+  "retests": {
+    "d1": {
+      "prompt": "The class has ___ (choose) a new monitor.",
+      "answer": "chosen"
+    },
+    "d7": {
+      "prompt": "Correct the verb form: Amy has went to the library twice this month.",
+      "answer": "Amy has gone to the library twice this month."
+    }
+  },
+  "expectedBranches": {
+    "lowConfidenceRecognition": "awaiting_confirmation",
+    "failedDelayedRetest": "replan_required",
+    "successfulD7Transfer": "report_ready"
+  }
+}
+

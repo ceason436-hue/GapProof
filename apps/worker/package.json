@@ -1,0 +1,17 @@
+{
+  "name": "@gapproof/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@gapproof/contracts": "workspace:*",
+    "@gapproof/db": "workspace:*",
+    "@gapproof/domain": "workspace:*",
+    "@gapproof/jobs": "workspace:*",
+    "@gapproof/tools": "workspace:*",
+    "uuid": "^14.0.1"
+  }
+}

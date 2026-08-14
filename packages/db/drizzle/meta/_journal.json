@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1786713759334,
+      "tag": "0000_wise_kinsey_walden",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786713979858,
+      "tag": "0001_enable_vector",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786715615243,
+      "tag": "0002_plain_black_widow",
+      "breakpoints": true
+    }
+  ]
+}
