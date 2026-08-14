@@ -5,7 +5,7 @@ import {
 } from "@gapproof/contracts";
 import { useEffect, useState } from "react";
 import { ApiClientError } from "@/lib/api-client";
-import { canBeginD1Attempt, createD1AttemptRequest, getCaseForD1Attempt, submitD1Attempt } from "@/lib/d1-attempt";
+import { d1AttemptGuards, createD1AttemptRequest, getCaseForD1Attempt, submitD1Attempt } from "@/lib/d1-attempt";
 import { formatTaskDateTime } from "@/lib/today-adapter";
 
 type SubmitState =
@@ -105,10 +105,11 @@ export function D1AttemptPanel({ task, timeZone }: { task: D1RetestTaskView; tim
   }
 
   const resultUnconfirmed = state.kind === "error" && state.code === "NETWORK_UNKNOWN";
-  const disabled = state.kind === "loading_case" || state.kind === "submitting" || !canBeginD1Attempt(expectedVersion, selectedChoiceId, resultUnconfirmed);
+  const guards = d1AttemptGuards(expectedVersion, selectedChoiceId, resultUnconfirmed);
+  const disabled = state.kind === "loading_case" || state.kind === "submitting" || !guards.submitAllowed;
   return <div className="attempt-panel" data-d1-attempt-state={state.kind}>
     <p className="read-only-note">选择后由服务端评分；页面不会显示答案键或评分映射。</p>
-    <fieldset disabled={state.kind === "loading_case" || state.kind === "submitting"}>
+    <fieldset disabled={state.kind === "loading_case" || state.kind === "submitting" || !guards.editable}>
       <legend>选择一个答案</legend>
       <div className="attempt-choices">{task.item.choices.map(choice => <label key={choice.id}>
         <input
@@ -116,7 +117,7 @@ export function D1AttemptPanel({ task, timeZone }: { task: D1RetestTaskView; tim
           name={`d1-${task.id}`}
           value={choice.id}
           checked={selectedChoiceId === choice.id}
-          onChange={() => { setSelectedChoiceId(choice.id); if (state.kind !== "submitting") setState({ kind: "idle" }); }}
+          onChange={() => { if (!guards.editable) return; setSelectedChoiceId(choice.id); if (state.kind !== "submitting") setState({ kind: "idle" }); }}
         />
         <span>{choice.label}</span>
       </label>)}</div>

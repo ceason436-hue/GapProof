@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { ApiClientError } from "./api-client";
-import { canBeginD1Attempt, createD1AttemptRequest, getCaseForD1Attempt, submitD1Attempt } from "./d1-attempt";
+import { d1AttemptGuards, createD1AttemptRequest, getCaseForD1Attempt, submitD1Attempt } from "./d1-attempt";
 
 const caseId = "0198b111-1111-7000-8000-000000000002";
 const taskId = "0198b111-1111-7000-8000-000000000011";
@@ -28,8 +28,13 @@ describe("D1 attempt client boundary", () => {
     vi.stubGlobal("fetch", fetchMock);
     await expect(submitD1Attempt(taskId, body, "0198b111-1111-7000-8000-000000000096")).rejects.toThrow("network");
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(canBeginD1Attempt(4, body.selectedChoiceId, true)).toBe(false);
+    expect(d1AttemptGuards(4, body.selectedChoiceId, true)).toEqual({ editable: false, submitAllowed: false });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps both choice editing and submission locked in the unknown state", () => {
+    expect(d1AttemptGuards(4, body.selectedChoiceId, true)).toEqual({ editable: false, submitAllowed: false });
+    expect(d1AttemptGuards(4, body.selectedChoiceId, false)).toEqual({ editable: true, submitAllowed: true });
   });
 
   it("fetches the authoritative Case before a write", async () => {

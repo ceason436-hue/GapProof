@@ -18,12 +18,24 @@ export function createD1AttemptRequest(
     : null;
 }
 
+export function d1AttemptGuards(
+  expectedVersion: number | null,
+  selectedChoiceId: string | null,
+  resultUnconfirmed: boolean,
+): { editable: boolean; submitAllowed: boolean } {
+  const editable = !resultUnconfirmed;
+  return {
+    editable,
+    submitAllowed: editable && expectedVersion !== null && selectedChoiceId !== null,
+  };
+}
+
 export function canBeginD1Attempt(
   expectedVersion: number | null,
   selectedChoiceId: string | null,
   resultUnconfirmed: boolean,
 ): boolean {
-  return expectedVersion !== null && selectedChoiceId !== null && !resultUnconfirmed;
+  return d1AttemptGuards(expectedVersion, selectedChoiceId, resultUnconfirmed).submitAllowed;
 }
 
 export const getCaseForD1Attempt = (caseId: string) =>
