@@ -6,6 +6,12 @@ import {
   type SubmitD1RetestAttemptRequest,
 } from "@gapproof/contracts";
 import { apiGet, apiPost } from "./api-client";
+import { createBrowserUuidV7 } from "./browser-uuidv7";
+
+export type D1AttemptIntent = {
+  body: SubmitD1RetestAttemptRequest;
+  idempotencyKey: string;
+};
 
 export function createD1AttemptRequest(
   expectedVersion: number,
@@ -16,6 +22,16 @@ export function createD1AttemptRequest(
   return Value.Check(SubmitD1RetestAttemptRequestSchema, request)
     ? request
     : null;
+}
+
+export function createD1AttemptIntent(
+  expectedVersion: number,
+  itemId: string,
+  selectedChoiceId: string | null,
+  createIdempotencyKey: () => string = createBrowserUuidV7,
+): D1AttemptIntent | null {
+  const body = createD1AttemptRequest(expectedVersion, itemId, selectedChoiceId);
+  return body ? { body, idempotencyKey: createIdempotencyKey() } : null;
 }
 
 export function d1AttemptGuards(

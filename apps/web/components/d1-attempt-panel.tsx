@@ -5,7 +5,7 @@ import {
 } from "@gapproof/contracts";
 import { useEffect, useState } from "react";
 import { ApiClientError } from "@/lib/api-client";
-import { d1AttemptGuards, createD1AttemptRequest, getCaseForD1Attempt, submitD1Attempt } from "@/lib/d1-attempt";
+import { createD1AttemptIntent, d1AttemptGuards, getCaseForD1Attempt, submitD1Attempt } from "@/lib/d1-attempt";
 import { formatTaskDateTime } from "@/lib/today-adapter";
 
 type SubmitState =
@@ -57,17 +57,16 @@ export function D1AttemptPanel({ task, timeZone }: { task: D1RetestTaskView; tim
   const submit = async () => {
     if (state.kind === "error" && state.code === "NETWORK_UNKNOWN") return;
     if (expectedVersion === null || selectedChoiceId === null) return;
-    const body = createD1AttemptRequest(expectedVersion, task.item.id, selectedChoiceId);
-    if (!body) {
+    const intent = createD1AttemptIntent(expectedVersion, task.item.id, selectedChoiceId);
+    if (!intent) {
       setState({ kind: "error", code: "INVALID_INPUT" });
       return;
     }
     setState({ kind: "submitting" });
-    // A fresh UUID is created only for this confirmed user action. apiPost
-    // reuses this exact key and body once for unknown/retryable outcomes.
-    const idempotencyKey = crypto.randomUUID();
+    // The UUIDv7 and body are frozen for this confirmed user action. apiPost
+    // reuses this exact intent once for unknown/retryable outcomes.
     try {
-      const response = await submitD1Attempt(task.id, body, idempotencyKey);
+      const response = await submitD1Attempt(task.id, intent.body, intent.idempotencyKey);
       const result = response.data;
       setState({
         kind: "success",

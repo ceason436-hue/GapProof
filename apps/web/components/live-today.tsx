@@ -159,7 +159,7 @@ export async function LiveToday() {
               <div className="unavailable-row"><strong>周目标、待确认与最近进展</strong><span>当前接口没有真实投影，保持不可用态。</span></div>
             </div></article>
           </div>
-          <aside className="live-panel"><h2>D+1 / D+7 检查状态</h2><p>只读展示服务端状态，不提供提交入口。</p><div className="retest-list">
+          <aside className="live-panel"><h2>D+1 / D+7 检查状态</h2><p>ready D1 可在当前任务区作答；D+7 仍只读。默认入口仍为 Mock。</p><div className="retest-list">
             {model.retests.length
               ? model.retests.map(retest => <RetestCard key={retest.id} retest={retest} timeZone={model.timeZone}/>)
               : <div className="unavailable-row"><strong>暂无延迟检查</strong><span>服务端创建后才会显示。</span></div>}

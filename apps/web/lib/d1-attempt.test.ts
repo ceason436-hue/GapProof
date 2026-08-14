@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { ApiClientError } from "./api-client";
-import { d1AttemptGuards, createD1AttemptRequest, getCaseForD1Attempt, submitD1Attempt } from "./d1-attempt";
+import { createD1AttemptIntent, d1AttemptGuards, createD1AttemptRequest, getCaseForD1Attempt, submitD1Attempt } from "./d1-attempt";
 
 const caseId = "0198b111-1111-7000-8000-000000000002";
 const taskId = "0198b111-1111-7000-8000-000000000011";
@@ -19,7 +19,10 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("D1 attempt client boundary", () => {
   it("does not create a request until a choice is selected", () => {
+    const createIdempotencyKey = vi.fn(() => "0198b111-1111-7000-8000-000000000099");
     expect(createD1AttemptRequest(4, body.itemId, null)).toBeNull();
+    expect(createD1AttemptIntent(4, body.itemId, null, createIdempotencyKey)).toBeNull();
+    expect(createIdempotencyKey).not.toHaveBeenCalled();
     expect(createD1AttemptRequest(4, body.itemId, body.selectedChoiceId)).toEqual(body);
   });
 
@@ -46,8 +49,12 @@ describe("D1 attempt client boundary", () => {
 
   it("retries an unknown result once with the same key and body", async () => {
     const fetchMock = vi.fn().mockRejectedValueOnce(new TypeError("network")).mockResolvedValueOnce(response(d1Result));
+    const createIdempotencyKey = vi.fn(() => "0198b111-1111-7000-8000-000000000099");
+    const intent = createD1AttemptIntent(4, body.itemId, body.selectedChoiceId, createIdempotencyKey);
     vi.stubGlobal("fetch", fetchMock);
-    await expect(submitD1Attempt(taskId, body, "0198b111-1111-7000-8000-000000000099")).resolves.toMatchObject({ data: { passed: true } });
+    expect(intent).not.toBeNull();
+    await expect(submitD1Attempt(taskId, intent!.body, intent!.idempotencyKey)).resolves.toMatchObject({ data: { passed: true } });
+    expect(createIdempotencyKey).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[0]?.[1]?.headers["Idempotency-Key"]).toBe(fetchMock.mock.calls[1]?.[1]?.headers["Idempotency-Key"]);
     expect(fetchMock.mock.calls[0]?.[1]?.body).toBe(fetchMock.mock.calls[1]?.[1]?.body);
