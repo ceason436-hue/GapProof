@@ -43,6 +43,70 @@ export const CreateCaseRequestSchema = Type.Object({
 
 export type CreateCaseRequest = Static<typeof CreateCaseRequestSchema>;
 
+export const StudentUploadMimeTypeSchema = Type.Union([
+  Type.Literal("image/jpeg"),
+  Type.Literal("image/png"),
+  Type.Literal("image/webp"),
+]);
+
+export const SourceAssetSha256Schema = Type.String({
+  pattern: "^[0-9a-f]{64}$",
+});
+
+export const InitiateSourceAssetUploadRequestSchema = Type.Object({
+  studentId: Type.String({ format: "uuid" }),
+  caseId: Type.Union([Type.String({ format: "uuid" }), Type.Null()]),
+  fileName: Type.String({
+    minLength: 1,
+    maxLength: 200,
+    pattern: "^[^/\\\\\\u0000]+$",
+  }),
+  mimeType: StudentUploadMimeTypeSchema,
+  byteSize: Type.Integer({ minimum: 1, maximum: 10_485_760 }),
+  sha256: SourceAssetSha256Schema,
+}, { additionalProperties: false });
+
+export type InitiateSourceAssetUploadRequest = Static<
+  typeof InitiateSourceAssetUploadRequestSchema
+>;
+
+export const SourceAssetUploadTargetSchema = Type.Object({
+  method: Type.Literal("PUT"),
+  path: Type.String({ pattern: "^/api/v1/source-assets/[0-9a-f-]+/content$" }),
+  token: Type.String({ minLength: 32 }),
+  expiresAt: Type.String({ format: "date-time" }),
+  mimeType: StudentUploadMimeTypeSchema,
+  byteSize: Type.Integer({ minimum: 1, maximum: 10_485_760 }),
+}, { additionalProperties: false });
+
+export const InitiatedSourceAssetUploadViewSchema = Type.Object({
+  assetId: Type.String({ format: "uuid" }),
+  processingStatus: Type.Literal("pending_upload"),
+  upload: SourceAssetUploadTargetSchema,
+}, { additionalProperties: false });
+
+export type InitiatedSourceAssetUploadView = Static<
+  typeof InitiatedSourceAssetUploadViewSchema
+>;
+
+export const SourceAssetIdParamsSchema = Type.Object({
+  assetId: Type.String({ format: "uuid" }),
+}, { additionalProperties: false });
+
+export type SourceAssetIdParams = Static<typeof SourceAssetIdParamsSchema>;
+
+export const UploadedSourceAssetViewSchema = Type.Object({
+  assetId: Type.String({ format: "uuid" }),
+  processingStatus: Type.Literal("uploaded"),
+  mimeType: StudentUploadMimeTypeSchema,
+  byteSize: Type.Integer({ minimum: 1, maximum: 10_485_760 }),
+  sha256: SourceAssetSha256Schema,
+}, { additionalProperties: false });
+
+export type UploadedSourceAssetView = Static<
+  typeof UploadedSourceAssetViewSchema
+>;
+
 export const CaseViewSchema = Type.Object({
   id: Type.String({ format: "uuid" }),
   studentId: Type.String({ format: "uuid" }),
