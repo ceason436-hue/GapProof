@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.25"
+version: "0.1.26"
 status: "ACTIVE"
-current_stage: "初赛方案冲刺；学生端今日页 F1c 已接 ready D1 客户端作答，默认入口仍为 Mock；D7、首页真实投影与报告未完成"
+current_stage: "项目本身初赛验收冲刺；学生端今日页 F1c 已具备 ready D1 浏览器安全交互证据，默认入口仍为 Mock；D7、首页真实投影与报告未完成"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -130,6 +130,8 @@ next_action:
 - 写入型前后端任务允许 1–2 次压缩（第 2 次开始收口，第 3 次为 hard cap）；只读审计任务最多 4 次（第 5 次停止）；协调任务最多 3 次（第 3 次收口交接，第 4 次为 hard cap）。事实漂移不受次数预算保护，须立即迁移。
 - 迁移保持选择性：只替换达到阈值或漂移的任务，健康任务继续使用；仅协调任务自身触发阈值时才迁移控制面。新任务从最新 Git 锚点创建，不携带旧全文上下文。
 - 协调迁移时只更新同一个 heartbeat target，并停止旧协调的持续目标/自动续跑；不得复制 heartbeat。执行任务不创建独立长期目标。
+- 新建前端或后端执行任务时默认显式使用 `gpt-5.6-luna`、`high` 推理强度；新建协调/文档治理任务时默认显式使用 `gpt-5.6-sol`、`medium` 推理强度。仅在用户另行指定、目标主机不支持或安全恢复需要时偏离，并在交接中记录原因；该规则适用于后续版本与选择性迁移。
+- 本协调目标中的“初赛验收标准”只评估项目本身的代码、契约、交互、测试、数据/隐私边界与可复现性；作品简介、PPT/PDF、视频、报名、提交系统和其他参赛材料不属于本任务的完成条件。竞赛材料可继续作为项目事实记录，但不进入本协调任务的派工与验收门槛。
 
 ---
 
@@ -141,7 +143,7 @@ next_action:
 
 `[FACT]` GOAI 无界应用赛道参赛手册列出的初赛截止日期为 2026-08-16；具体当天截止时刻、入口、文件大小及后续通知仍须在官网、提交系统或官方群再次核对。
 
-`[DECISION]` 当前处于：**初赛方案提交前冲刺；学生端“今日”页 F1c 已在显式 `?source=api` 模式接入 ready D1 客户端作答，使用服务端权威 Case `stateVersion`、共享 attempts contracts、UUIDv7 幂等键、同 key/body 单次未知结果重试、冲突刷新后重新确认与网络未知锁定；默认入口仍为 Mock。D7 作答、首页真实投影、报告与完整端到端浏览器 POST 证据仍未完成**。
+`[DECISION]` 当前处于：**项目本身初赛验收冲刺；学生端“今日”页 F1c 已在显式 `?source=api` 模式接入 ready D1 客户端作答，并用受控 HTTP 浏览器 Fixture 证明真实点击、同源 POST、服务端权威 Case `stateVersion`、共享 attempts contracts、UUIDv7 幂等键、同 key/body 单次未知结果重试、冲突刷新后重新确认与网络未知锁定。默认入口仍为 Mock；D7 作答、首页真实投影、报告及上传到修复证明的完整业务闭环仍未完成**。
 
 ### 1.2 已完成
 
@@ -157,8 +159,8 @@ next_action:
 - `[DECISION]` 已确定比赛阶段优先使用原创、公开许可或合成数据，不等待真实学生试卷渠道。
 - `[DECISION]` 已确定后台多 Agent、前台单一 AI 学习教练的产品形态。
 - `[DECISION]` 已确定苏格拉底脚手架、学习证据图谱和延迟迁移验证为核心设计。
-- `[RESULT]` 已在 Stitch 中选定学生端“今日”页桌面高保真视觉基线；F0、F1b 与 F1c 已通过相应构建和自动化门禁。F1c 只为显式 API 模式的 ready D1 增加安全客户端作答；默认入口仍是 Mock，也没有完整浏览器 POST Fixture，因此不代表业务主闭环已接通。
-- `[DECISION]` 当前学生首页的核心视觉色为蓝 `#0036FF` 与青柠绿 `#B5F800`；学生端、家长端和后续页面的详细规范以 `DESIGN.md v0.2.15` 为准。
+- `[RESULT]` 已在 Stitch 中选定学生端“今日”页桌面高保真视觉基线；F0、F1b 与 F1c 已通过相应构建和自动化门禁。F1c 的受控 HTTP 浏览器 Fixture 已覆盖 ready D1 成功、`VERSION_CONFLICT` 与 `NETWORK_UNKNOWN` 三条真实页面交互路径；默认入口仍是 Mock，因此不代表业务主闭环已接通。
+- `[DECISION]` 当前学生首页的核心视觉色为蓝 `#0036FF` 与青柠绿 `#B5F800`；学生端、家长端和后续页面的详细规范以 `DESIGN.md v0.2.16` 为准。
 - `[FACT]` 用户已将目标教材 ISBN 确认为 `978-7-5720-3630-9`，与当前 161 页教材 PDF 封底条码一致；版权页照片无法提供，因此版次、印次保持未知，不再作为 MVP 开工阻塞项。
 - `[FACT]` 已收到线上购买的教研与试题资料 191 个文件：184 个 DOCX、4 个 PDF 和 3 个 MP3，覆盖学生/考试版、参考答案、教师/解析版、知识清单、答题卡和听力等类型；这些内容资产不是真实学生作答数据。
 - `[DECISION]` 用户确认教材与试题材料可供本项目使用和公开展示，并确认 `logo.png` 可作为 MVP Logo V1；权利台账记录为 `user_asserted_permitted`，购买页/许可条款凭证待归档；教材版权页不可取得。
@@ -183,21 +185,19 @@ next_action:
 - `[PLANNED]` 尚未制作比赛用原创模拟试卷、合成学生轨迹和独立金标集。
 - `[PLANNED]` 尚未确认至少一位英语教育背景人员能否短时抽检核心金标内容。
 - `[PROTOTYPE]` 已建立最小后端 Thin Slice，并完成确定性干预生成、今日任务查询、干预提交、D+1 调度/到期/客观评分及失败后的异步重排骨架；尚未形成从上传到报告的完整端到端 Demo。真实 AI 干预、真实题库、D7 作答评分、可执行的重排上限、真实个性化重排内容、通知和报告仍未实现。
-- `[PROTOTYPE]` 学生端“今日”页 F0 Mock、F1b 只读 API 与 F1c ready D1 客户端作答已完成对应技术门禁；真实模式仍仅通过显式 `?source=api` 启用。current-ready-D1 浏览器 POST/冲突/网络未知 Fixture、默认入口切换、首页统计投影和业务主闭环仍未完成，其余学生 P0 页面、家长端页面和评委最小页仍未完成。
+- `[PROTOTYPE]` 学生端“今日”页 F0 Mock、F1b 只读 API 与 F1c ready D1 客户端作答已完成对应技术门禁；受控 HTTP 浏览器 Fixture 已证明成功、冲突和网络未知三条交互边界。真实模式仍仅通过显式 `?source=api` 启用；默认入口切换、首页统计投影和业务主闭环仍未完成，其余学生 P0 页面、家长端页面和评委最小页仍未完成。
 - `[PLANNED]` 尚未完成正式 500 字简介、初赛 PPT、视频、README、数据卡、依赖清单和合规一页纸。
 - `[PLANNED]` 尚未产生可报告的工程评测结果或真实学生学习效果。
 
-### 1.4 下一步 P0 行动
+### 1.4 项目本身下一步 P0 行动
 
-1. 核对官网/提交系统最新截止时刻和格式。
-2. 用 ISBN、源 PDF SHA-256 和内容快照版本冻结 MVP 教材源；版次/印次明确保留为未知，并通过其他可靠材料核对前四单元目标。
-3. 获取课标相关页并构建第一版课程—技能覆盖矩阵。
-4. 冻结初赛一句话、500 字简介和 8–10 页 PPT。
-5. 完成购买试题资产的类型/单元/答案/权利清点，并另行编写一份完全原创的模拟试卷及已知错因学生 Case。
-6. 制作从上传到修复证明的可点击 Thin Slice。
-7. 至少展示一次真实工具调用、一次低置信度确认和一次复测失败后的重排。
-8. 明确标记所有 Mock、合成数据和演示时间快进。
-9. 将已选定的“今日”页拆解为可实现组件，并按同一设计准则完成其余学生主闭环与家长端关键页面。
+1. 用 ISBN、源 PDF SHA-256 和内容快照版本冻结 MVP 教材源；版次/印次明确保留为未知，并通过其他可靠材料核对前四单元目标。
+2. 获取课标相关页并构建第一版课程—技能覆盖矩阵。
+3. 完成购买试题资产的类型/单元/答案/权利清点，并另行编写一份完全原创的模拟试卷及已知错因学生 Case。
+4. 制作从上传到修复证明的可点击 Thin Slice。
+5. 至少展示一次真实工具调用、一次低置信度确认和一次复测失败后的重排。
+6. 明确标记所有 Mock、合成数据和演示时间快进。
+7. 将已选定的“今日”页拆解为可实现组件，并按同一设计准则完成其余学生主闭环与家长端关键页面。
 
 ---
 
@@ -1606,7 +1606,7 @@ Demo 至少现场演一个真实失败分支，视频中再展示两个。
 
 ### 18.3 已确定的轻量技术栈
 
-详细架构、选型对比和系统边界以 `TDD.md v0.3.18` 为准。本节只保留主文档级决策：
+详细架构、选型对比和系统边界以 `TDD.md v0.3.19` 为准。本节只保留主文档级决策：
 
 - 语言：TypeScript 单栈；Bun 管理 workspace 和依赖，Node.js 24 LTS 作为生产运行时。
 - 前端：Next.js App Router + React，桌面与平板完整支持，手机保留基础响应式访问和内容适配的 Web。
@@ -1624,7 +1624,7 @@ Demo 至少现场演一个真实失败分支，视频中再展示两个。
 - OCR：阿里云读光教育试卷识别为主，腾讯云高精度 OCR 为通用/备用；统一 `OcrProvider`。
 - 知识增强：PostgreSQL 全文 + pgvector；LangChain.js 仅作 Retriever 辅助层，KnowledgeService 和固定数据库工具由项目自建。
 - MVP Agent：固定六节点 `LoadCaseContext → RetrieveKnowledge → GenerateHypotheses → SelectProbe → EvaluateEvidence → CreateDecisionProposal`。
-- 数据基线：UUIDv7、PostgreSQL 16+、核心表/索引/枚举/删除策略以 `TDD.md v0.3.18` 为准。
+- 数据基线：UUIDv7、PostgreSQL 16+、核心表/索引/枚举/删除策略以 `TDD.md v0.3.19` 为准。
 - 部署：杭州阿里云单区域联网 Docker Compose；真实 Provider 用于演示，Mock 仅用于测试和故障注入。
 
 当前规模不需要 Kubernetes、Kafka、复杂分布式多 Agent 平台或大规模微调。
@@ -1820,7 +1820,7 @@ mastery:
 
 ### 技术类
 
-6. `TDD.md`：技术路线、系统边界、架构选型和工程门禁（v0.3.18，当前版本）。
+6. `TDD.md`：技术路线、系统边界、架构选型和工程门禁（v0.3.19，当前版本）。
 7. `Agent-State-Machine-Spec.md`
 8. `Tool-Contract-Spec.md`
 9. `OpenAPI.yaml`
@@ -2022,16 +2022,18 @@ review_date:
 | DEC-028 | MVP Agent 固定为六节点 LangGraph.js 图 | accepted | 新增节点必须更新图版本、Schema 和 Golden Cases |
 | DEC-029 | 所有工具先完成接口、Schema、Mock 和错误处理；verify_item/schedule_retest 做 MVP 最小实现 | accepted | 工具边界或 Provider 能力变化 |
 | DEC-030 | escalate_human 先创建待处理记录；analyze_speech/score_writing 暂缓真实能力 | accepted | 真实人工、语音或写作试点启动 |
-| DEC-031 | UUIDv7 + PostgreSQL 16+，完整表结构和删除策略以 TDD v0.3.18 为准 | accepted | 数据规模、扩展支持或合规要求变化 |
+| DEC-031 | UUIDv7 + PostgreSQL 16+，完整表结构和删除策略以 TDD v0.3.19 为准 | accepted | 数据规模、扩展支持或合规要求变化 |
 | DEC-032 | TDD 详细 API 路由为唯一正式接口 | accepted | API 版本升级或新客户端边界产生 |
 | DEC-033 | 杭州阿里云单区域联网 Docker Compose，真实 Provider 演示，Mock 仅测试/故障注入 | accepted | 比赛网络、并发、合规或可用性要求变化 |
 | DEC-034 | DeepSeek `deepseek-v4-flash`、MiniMax `minimax-m3`、腾讯混元 Embedding 作为当前模型配置 | accepted | 账号权限、供应商模型版本或评测结果变化 |
-| DEC-035 | 学生端“今日”页桌面视觉基线已选定；使用 `#0036FF` 导航/进度与 `#B5F800` 行动/积极变化，完整规范以 DESIGN v0.2.15 为准 | accepted | 真实前端实现、可用性测试或品牌资产定稿产生反证 |
+| DEC-035 | 学生端“今日”页桌面视觉基线已选定；使用 `#0036FF` 导航/进度与 `#B5F800` 行动/积极变化，完整规范以 DESIGN v0.2.16 为准 | accepted | 真实前端实现、可用性测试或品牌资产定稿产生反证 |
 | DEC-036 | 新用户今日页先完成第一次检查，不显示虚构的足迹、进展或下次检查；首次任务生成后切换常规今日页 | accepted | onboarding 实测或产品范围变化 |
 | DEC-037 | 目标教材 ISBN 为 `978-7-5720-3630-9`；配套练习 `978-7-5720-3519-7` 不纳入 MVP | accepted | 版权页或出版社正式材料产生冲突 |
 | DEC-038 | 购买教材/试题及完整转换文本保持本地私有并排除 Git；仓库只保存元数据、处理器和项目原创/合成内容 | accepted | 取得可归档的明确再分发许可且完成权利复核 |
 | DEC-039 | 透明 `logo.png` 作为 MVP Logo V1；Stitch 页面“今日-最终确认版V1.1”作为 `/student/today` 常规桌面态视觉母版 | accepted | 品牌定稿、可用性测试或前端回归产生反证 |
 | DEC-040 | 前端使用同源 `/api` 代理、共享 `@gapproof/contracts`、Case 版本轮询与方法感知的幂等重试；不得自行发明接口或状态 | accepted | 正式 API 网关、OpenAPI 生成客户端或 SSE 接入 |
+| DEC-041 | 新前后端任务默认 `gpt-5.6-luna/high`；新协调/文档治理任务默认 `gpt-5.6-sol/medium`，并在后续版本和迁移中显式继承 | accepted | 用户另行指定、目标主机不支持或安全恢复要求偏离 |
+| DEC-042 | 本协调目标的初赛验收只覆盖项目本身；简介、PPT/PDF、视频、报名与提交材料不进入完成条件 | accepted | 用户明确扩大本协调目标范围 |
 
 ---
 
@@ -2048,7 +2050,7 @@ review_date:
 | 初赛 PPT | `[PLANNED]` | 8–10 页覆盖评分项 | 原型/图表 |
 | 原创模拟试卷 | `[PLANNED]` | 来源自有、已知根因、许可清楚 | 技能示例 |
 | 合成 Case | `[PROTOTYPE]` | 已完成 1 个原创合成 Case 及低置信、复测失败重排、D+7 成功分支；仍需扩充同题同错不同根因与回归集 | 数据 Schema/教材映射 |
-| 学生“今日”页视觉基线 | `[PROTOTYPE]` | 已选定 Stitch 桌面稿；F0/F1b 与 F1c ready D1 客户端作答已合并 `main` 并通过技术门禁；默认入口仍为 Mock，浏览器 POST Fixture 与完整写入闭环未完成 | DESIGN v0.2.15 |
+| 学生“今日”页视觉基线 | `[PROTOTYPE]` | 已选定 Stitch 桌面稿；F0/F1b 与 F1c ready D1 客户端作答及受控 HTTP 浏览器 Fixture 已合并 `main` 并通过技术门禁；默认入口仍为 Mock，完整业务写入闭环未完成 | DESIGN v0.2.16 |
 | 其余学生/家长关键页设计 | `[PLANNED]` | 覆盖主闭环并遵循今日页设计准则 | 视觉基线 |
 | 可点击 Thin Slice | `[PLANNED]` | 上传到修复证明全链路 | 设计/开发 |
 | 数据与合规页 | `[PLANNED]` | 类型、来源、授权、脱敏、删除、边界 | 数据选择 |
@@ -2107,6 +2109,13 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.26 — 2026-08-15
+
+- 合并 current-ready-D1 受控 HTTP 浏览器 Fixture：真实页面点击、同源 POST、UUIDv7、权威请求体、成功脱敏回显、冲突重新确认及网络未知锁定均有可重复证据。
+- 保持默认入口为 Mock、D7 只读、首页真实投影和上传到修复证明的完整业务闭环未完成，不把 Fixture 描述为真实学生数据或真实个性化效果。
+- 固化新前后端任务 `gpt-5.6-luna/high`、新协调/文档治理任务 `gpt-5.6-sol/medium` 的长期默认；本协调目标的初赛验收只覆盖项目本身，不含简介、PPT/PDF、视频、报名和提交材料。
+- 门禁保持为 78 fast、41 integration、48 apps/web，并新增 D1 浏览器 Fixture；同步 PRD v0.1.18、TDD v0.3.19、DESIGN v0.2.16 与 PUSH-011。
 
 ### v0.1.25 — 2026-08-15
 
