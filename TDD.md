@@ -2,14 +2,14 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.7"
+version: "0.3.8"
 status: "DRAFT_FOR_IMPLEMENTATION"
 last_updated: "2026-08-14"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.14"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.15"
   - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.8"
 ---
 
@@ -1440,7 +1440,7 @@ MVP 工具 Schema 最小字段：
 | TECH-022 | MVP Agent 固定为六节点 LangGraph.js 图 | accepted | 业务闭环增加新节点时更新图版本和 Golden Cases |
 | TECH-023 | 所有工具先完成接口、Schema、Mock 和错误处理；verify_item/schedule_retest 做 MVP 最小实现 | accepted | 工具边界或真实 Provider 能力发生变化 |
 | TECH-024 | escalate_human 先创建待处理记录；analyze_speech/score_writing 暂缓真实能力 | accepted | 真实人工流程、语音或写作试点启动 |
-| TECH-025 | UUIDv7 + PostgreSQL 16+；核心表字段/索引/枚举/删除策略按 TDD v0.3.7 | accepted | 数据规模、托管扩展或合规要求变化 |
+| TECH-025 | UUIDv7 + PostgreSQL 16+；核心表字段/索引/枚举/删除策略按 TDD v0.3.8 | accepted | 数据规模、托管扩展或合规要求变化 |
 | TECH-026 | 采用 TDD 详细 API 路由作为唯一正式接口 | accepted | API 版本升级或新客户端边界产生 |
 | TECH-027 | 杭州阿里云单区域联网 Docker Compose；真实 Provider 演示，Mock 仅测试/故障注入 | accepted | 比赛网络、并发、合规或可用性要求变化 |
 | TECH-028 | DeepSeek `deepseek-v4-flash` 主分析，MiniMax `minimax-m3` 教学/降级，腾讯混元 Embedding 1024 维 | accepted | 账号权限、供应商模型版本或评测结果变化 |
@@ -1493,9 +1493,16 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 
 | Push ID | 日期 | 分支 | 状态 | 提交摘要 | 主要内容 | 验证 |
 |---|---|---|---|---|---|---|
-| PUSH-001 | 2026-08-14 | `main` | `pending_github_auth` | `feat: establish Phase A backend thin slice` | 建立首个 GitHub 基线：四份项目文档、Bun workspace、领域状态机、PostgreSQL/Drizzle、Fastify API、pg-boss Worker、fake OCR、识别确认、竞争性错因与等待确认小题闭环；同时纳入 Stitch 公开参考资产、教材/试题来源元数据、私有转换工具与 Git 隔离门禁 | 21 条快速测试、16 条真实数据库/API/Worker 集成测试及 TypeScript 严格类型检查通过；私有材料和生成目录未进入暂存区 |
+| PUSH-001 | 2026-08-14 | `main` | `pushed` | `feat: establish Phase A backend thin slice` | 建立首个 GitHub 基线：四份项目文档、Bun workspace、领域状态机、PostgreSQL/Drizzle、Fastify API、pg-boss Worker、fake OCR、识别确认、竞争性错因与等待确认小题闭环；同时纳入 Stitch 公开参考资产、教材/试题来源元数据、私有转换工具与 Git 隔离门禁 | 21 条快速测试、16 条真实数据库/API/Worker 集成测试及 TypeScript 严格类型检查通过；私有材料和生成目录未进入暂存区；远端 `main` 已核对为首个基线提交 |
+| PUSH-002 | 2026-08-14 | `main` | `pushed` | `docs: finalize GitHub version-management log` | 将首个基线推送成功状态回写 TDD，提升 PROJECT_MASTER/TDD 文档版本并对齐当前引用，形成可供后续窗口恢复的 GitHub 版本管理闭环 | 文档链接和版本引用检查通过；仅提交 PROJECT_MASTER/TDD，不夹带并行任务中的未提交文件；推送后核对本地与 `origin/main` 一致 |
 
 ## 27. 变更日志
+
+### v0.3.8 — 2026-08-14
+
+- 确认 GitHub 默认分支与 `origin/main` 已接收 `PUSH-001` 首个工程基线，并将状态由等待认证更新为已推送。
+- 登记 `PUSH-002` 文档闭环批次；推送日志继续以批次摘要记录，精确 SHA 由远端 Git 历史承载。
+- 将上游项目总纲引用提升至 PROJECT_MASTER v0.1.15，不改变既有接口、状态机、数据库或 Worker 实现。
 
 ### v0.3.7 — 2026-08-14
 
