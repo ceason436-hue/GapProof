@@ -27,6 +27,7 @@ export const caseState = appSchema.enum("case_state", [
   "ready_for_diagnosis",
   "probe_required",
   "intervention_ready",
+  "intervention_active",
   "d1_scheduled",
   "d7_scheduled",
   "replan_required",
@@ -38,9 +39,21 @@ export const evidenceEventType = evidenceSchema.enum("evidence_event_type", [
   "recognition_confirmed",
   "hypotheses_generated",
   "probe_evaluated",
+  "intervention_generated",
   "intervention_completed",
   "retest_evaluated",
   "plan_replanned",
+]);
+
+export const taskType = appSchema.enum("task_type", [
+  "guided_intervention",
+  "d1_retest",
+]);
+
+export const taskStatus = appSchema.enum("task_status", [
+  "ready",
+  "scheduled",
+  "completed",
 ]);
 
 export const students = appSchema.table(
@@ -154,6 +167,50 @@ export const learningEvidenceEvents = evidenceSchema.table(
   ],
 );
 
+export const tasks = appSchema.table(
+  "tasks",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id),
+    caseId: uuid("case_id")
+      .notNull()
+      .references(() => cases.id),
+    taskType: taskType("task_type").notNull(),
+    status: taskStatus("status").notNull(),
+    title: text("title").notNull(),
+    estimatedMinutes: integer("estimated_minutes").notNull(),
+    scheduledFor: timestamp("scheduled_for", { withTimezone: true }).notNull(),
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    sourceEventId: uuid("source_event_id")
+      .notNull()
+      .references(() => learningEvidenceEvents.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("tasks_case_type_source_uidx").on(
+      table.caseId,
+      table.taskType,
+      table.sourceEventId,
+    ),
+    index("tasks_student_scheduled_idx").on(
+      table.studentId,
+      table.scheduledFor,
+    ),
+    index("tasks_status_scheduled_idx").on(table.status, table.scheduledFor),
+    check(
+      "tasks_estimated_minutes_positive",
+      sql`${table.estimatedMinutes} > 0`,
+    ),
+  ],
+);
+
 export type StudentRow = typeof students.$inferSelect;
 export type NewStudentRow = typeof students.$inferInsert;
 export type CaseRow = typeof cases.$inferSelect;
@@ -164,3 +221,5 @@ export type LearningEvidenceEventRow =
   typeof learningEvidenceEvents.$inferSelect;
 export type NewLearningEvidenceEventRow =
   typeof learningEvidenceEvents.$inferInsert;
+export type TaskRow = typeof tasks.$inferSelect;
+export type NewTaskRow = typeof tasks.$inferInsert;

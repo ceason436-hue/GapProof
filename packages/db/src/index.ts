@@ -3,4 +3,5 @@ export * from "./case-repository.ts";
 export * from "./persist-case-transition.ts";
 export * from "./run-migrations.ts";
 export * from "./schema.ts";
+export * from "./task-repository.ts";
 export { and, eq, sql } from "drizzle-orm";

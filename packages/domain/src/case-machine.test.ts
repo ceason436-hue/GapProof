@@ -53,6 +53,17 @@ function reachInterventionReady() {
   );
 }
 
+function reachInterventionActive() {
+  return transitionCase(
+    reachInterventionReady(),
+    event({
+      eventId: "evt-intervention-generated",
+      type: "intervention_generated",
+      taskId: "task-guided-intervention-1",
+    }),
+  );
+}
+
 describe("case state machine", () => {
   it("rejects an empty case id", () => {
     expect(() => createCase("")).toThrowError(CaseTransitionError);
@@ -112,11 +123,43 @@ describe("case state machine", () => {
     ).toThrowError(CaseTransitionError);
   });
 
+  it("requires a generated intervention task before completion", () => {
+    const ready = reachInterventionReady();
+    const active = transitionCase(
+      ready,
+      event({
+        eventId: "evt-intervention-generated",
+        type: "intervention_generated",
+        taskId: "task-guided-intervention-1",
+      }),
+    );
+
+    expect(active.status).toBe("intervention_active");
+    expect(() =>
+      transitionCase(
+        ready,
+        event({
+          eventId: "evt-intervention-too-early",
+          type: "intervention_completed",
+          taskId: "task-guided-intervention-1",
+          d1TaskId: "task-d1-1",
+          d1ScheduledFor: "2026-08-15T10:00:00.000Z",
+        }),
+      ),
+    ).toThrowError(CaseTransitionError);
+  });
+
   it("does not mark mastery after the intervention or the first successful retest", () => {
-    let aggregate = reachInterventionReady();
+    let aggregate = reachInterventionActive();
     aggregate = transitionCase(
       aggregate,
-      event({ eventId: "evt-intervention", type: "intervention_completed" }),
+      event({
+        eventId: "evt-intervention",
+        type: "intervention_completed",
+        taskId: "task-guided-intervention-1",
+        d1TaskId: "task-d1-1",
+        d1ScheduledFor: "2026-08-15T10:00:00.000Z",
+      }),
     );
     aggregate = transitionCase(
       aggregate,
@@ -133,10 +176,16 @@ describe("case state machine", () => {
   });
 
   it("requires replanning after a failed delayed retest", () => {
-    let aggregate = reachInterventionReady();
+    let aggregate = reachInterventionActive();
     aggregate = transitionCase(
       aggregate,
-      event({ eventId: "evt-intervention", type: "intervention_completed" }),
+      event({
+        eventId: "evt-intervention",
+        type: "intervention_completed",
+        taskId: "task-guided-intervention-1",
+        d1TaskId: "task-d1-1",
+        d1ScheduledFor: "2026-08-15T10:00:00.000Z",
+      }),
     );
     aggregate = transitionCase(
       aggregate,
@@ -161,10 +210,16 @@ describe("case state machine", () => {
   });
 
   it("marks repair only after a successful d7 transfer retest", () => {
-    let aggregate = reachInterventionReady();
+    let aggregate = reachInterventionActive();
     aggregate = transitionCase(
       aggregate,
-      event({ eventId: "evt-intervention", type: "intervention_completed" }),
+      event({
+        eventId: "evt-intervention",
+        type: "intervention_completed",
+        taskId: "task-guided-intervention-1",
+        d1TaskId: "task-d1-1",
+        d1ScheduledFor: "2026-08-15T10:00:00.000Z",
+      }),
     );
     aggregate = transitionCase(
       aggregate,

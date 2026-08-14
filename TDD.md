@@ -2,15 +2,15 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.11"
+version: "0.3.13"
 status: "DRAFT_FOR_IMPLEMENTATION"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.18"
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.10"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.20"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.12"
 ---
 
 # 知隙 GapProof 技术设计文档（TDD）
@@ -404,6 +404,46 @@ Tailwind CSS 可随 Next.js 默认方案使用；组件层推荐 Radix Primitive
 - 本周学习足迹、待确认、最近进展、稍后继续和下次检查均为服务端任务/计划状态的只读投影；无数据、加载、失败和演示数据时必须使用 7.3 的状态 UX，不得伪造已完成或已掌握。
 - 当前首页不依赖显式全局搜索或“新报告”提醒；后续增加紧凑搜索时，必须有键盘焦点、可访问名称和独立的空/失败状态。
 
+### 7.6 前端—API 集成执行规范 V1
+
+本节是前端 Worktree 的当前执行基线，优先于前端自行约定：
+
+- 本地端口固定为 Web `3000`、Fastify API `4000`、PostgreSQL `55432`；Worker 不开放 HTTP 端口。同一电脑并行启动第二个 Web 实例时才允许通过 `WEB_PORT` 改端口。
+- 浏览器只请求同源 `/api/v1/**`。Next.js 将 `/api/:path*` 重写到服务端环境变量 `GAPPROOF_API_ORIGIN`（本地默认 `http://127.0.0.1:4000`）的 `/:path*`；不得把内网 API Origin 写入 `NEXT_PUBLIC_*`。
+- MVP 不支持浏览器直接跨域访问 Fastify，因此不依赖 CORS。未来确需分域时，API 只接受显式 `WEB_ORIGINS` 白名单，并明确允许 `Content-Type` 与 `Idempotency-Key`；禁止生产环境 `Access-Control-Allow-Origin: *`。
+- `packages/contracts` 是当前 HTTP DTO、TypeBox Schema 与错误包络的唯一可执行契约源；前端必须从 `@gapproof/contracts` 公共导出消费，不复制接口类型，不从数据库 Row 或自然语言文档反推字段。
+- OpenAPI 3.1 自动生成仍为 `[PLANNED]`：后端后续从同一 Fastify/TypeBox 路由 Schema 导出并在 CI 检查漂移。前端 F0/F1 不等待生成客户端，先使用一个薄 `api-client` 包装器和共享 contracts；不得另建第二套 Schema。
+
+`run-next` 返回 `202 + jobId` 后，当前没有公开 Job 查询路由。前端必须：
+
+1. 保留 `jobId` 仅用于 Trace/问题报告，不根据它猜测业务状态；
+2. 以提交时的 `expectedVersion` 为基准轮询 `GET /v1/cases/{caseId}`；
+3. 间隔采用 `1s → 2s → 3s`，之后保持 `3s`，总计最多 `30s`；页面隐藏、路由离开或请求取消时停止；
+4. 当 `stateVersion > expectedVersion` 且状态发生变化时停止并按服务端状态渲染；
+5. 超时后显示“仍在处理，可稍后刷新”，不得自动重新提交 `run-next` 或伪造失败。
+
+重试必须同时遵守 HTTP 语义、`error.retryable` 和幂等规则：
+
+| 场景 | 自动行为 |
+|---|---|
+| GET 网络失败或临时 5xx | 最多自动重试 2 次并退避 |
+| POST 网络结果未知或 `retryable=true` | 仅允许用完全相同的 Body 与同一个 `Idempotency-Key` 重试 1 次 |
+| `VERSION_CONFLICT` | 自动 GET 最新 Case 1 次；不自动重复写操作 |
+| `SCHEMA_INVALID`、`INVALID_INPUT` | 不重试；保留用户输入并显示可理解提示 |
+| `INVALID_CASE_TRANSITION`、`INVALID_TASK_STATE`、`RESOURCE_NOT_FOUND`、`FORBIDDEN` | 不重试；刷新/退出到安全页面 |
+| `IDEMPOTENCY_KEY_REUSED`、`STORED_EVENT_INVALID`、非可重试 `INTERNAL_ERROR` | 视为客户端或服务端缺陷；停止操作并显示 `requestId` 供排查 |
+
+`POST /v1/cases/{caseId}/attempts` 已冻结为：请求 `{ expectedVersion, probeId, selectedChoiceId }`；成功数据为 `{ attemptId, caseId, state, stateVersion, probeId, selectedChoiceId, passed, selectedHypothesisId, scoringMethod: "exact_choice_v1" }`。所有写请求由一次用户意图生成一个 UUIDv7 幂等键，在最终成功、明确失败或用户主动重新开始前保持不变。
+
+学习任务接口已冻结为：
+
+- `GET /v1/students/{studentId}/today` 成功数据为 `TodayTasksView { studentId, tasks: LearningTaskView[] }`。
+- `LearningTaskView` 公开字段为 `id`、`caseId`、`studentId`、`taskType`、`status`、`title`、`rationale`、`estimatedMinutes`、`scheduledFor`、`dueAt`、`completedAt`、`steps`；`taskType` 为 `guided_intervention | d1_retest`，`status` 为 `ready | scheduled | completed`。
+- `POST /v1/tasks/{taskId}/submit` 要求 `Idempotency-Key`，请求为 `{ expectedVersion, completedStepIds: string[] }`；成功数据为 `{ caseId, state: "d1_scheduled", stateVersion, completedTask, scheduledRetest }`。
+- 干预任务提交必须恰好覆盖服务端任务的全部步骤；不完整或额外步骤返回 `INVALID_INPUT`。非 `ready` 干预任务返回 `INVALID_TASK_STATE`；旧 Case 版本返回 `VERSION_CONFLICT`；非法 Case 状态返回 `INVALID_CASE_TRANSITION`；资源缺失沿用 `RESOURCE_NOT_FOUND`。
+- 幂等重放返回 `200`，同一个 key 配不同 Body 返回 `IDEMPOTENCY_KEY_REUSED`；并发相同提交只允许一个 `intervention_completed` 事件和一个 D+1 任务。
+- 公开 DTO 禁止包含 `selectedHypothesisId`、答案键、工具 `warnings` 或内部版本；前端只能消费共享 contracts，不得从数据库 payload 反推私有字段。
+
 ## 8. API 与后端选择
 
 ### 8.1 为什么选择 Fastify
@@ -481,7 +521,7 @@ type ApiErrorResponse = {
 };
 ```
 
-API 错误码至少包括：`INVALID_INPUT`、`SCHEMA_INVALID`、`UNAUTHORIZED`、`FORBIDDEN`、`RESOURCE_NOT_FOUND`、`VERSION_CONFLICT`、`LOW_CONFIDENCE`、`NO_SOURCE`、`SOURCE_CONFLICT`、`PROVIDER_TIMEOUT`、`PROVIDER_RATE_LIMITED`、`PROVIDER_UNAVAILABLE`、`HUMAN_REVIEW_REQUIRED`、`TOOL_DISABLED`、`INTERNAL_ERROR`。
+API 错误码至少包括：`INVALID_INPUT`、`SCHEMA_INVALID`、`UNAUTHORIZED`、`FORBIDDEN`、`RESOURCE_NOT_FOUND`、`VERSION_CONFLICT`、`INVALID_CASE_TRANSITION`、`INVALID_TASK_STATE`、`IDEMPOTENCY_KEY_REUSED`、`STORED_EVENT_INVALID`、`LOW_CONFIDENCE`、`NO_SOURCE`、`SOURCE_CONFLICT`、`PROVIDER_TIMEOUT`、`PROVIDER_RATE_LIMITED`、`PROVIDER_UNAVAILABLE`、`HUMAN_REVIEW_REQUIRED`、`TOOL_DISABLED`、`INTERNAL_ERROR`。
 
 ## 9. Agent 技术路线
 
@@ -531,8 +571,8 @@ CASE_CREATED
   ↘ MORE_EVIDENCE → PROBING
 → ROOT_CAUSE_READY
 → INTERVENTION_READY
-→ LEARNING
-→ RETEST_WAIT
+→ INTERVENTION_ACTIVE
+→ D1_SCHEDULED
 → VERIFYING
   ↘ REMEDIATING → HYPOTHESIZING
 → VERIFIED
@@ -1123,9 +1163,12 @@ Serverless 很适合短 API 和自动扩容，但 OCR、多轮模型、报告、
 - 查询接口返回候选、置信度、解释、证据引用和确认小题，但删除内部 `expectedChoiceId` 与 `scoringRule`，避免向学生端泄露答案和错因映射。
 - `POST /attempts` 接受 `expectedVersion`、`probeId` 与 `selectedChoiceId`，读取内部 `exact_choice_v1` 规则确定性评分，并以 `probe_evaluated` 原子推进到 `intervention_ready`；答错时映射受支持候选，答对时 `selectedHypothesisId` 为 `null`。
 - attempts 写入具备请求 Schema、幂等重放/键复用拒绝、并发去重、乐观锁、非法状态/探针/选项校验；评分事件保存请求、结果与上游 hypotheses 事件引用。
-- 当前证据为 24 条快速测试通过、20 条真实数据库/API/Worker 集成测试通过、TypeScript 严格类型检查通过。
+- Worker 在 `intervention_ready` 调用确定性 `FakeBuildInterventionAdapter`，引用 `probe_evaluated` 事件与评分结果，生成 3 步/8 分钟的最小干预；`intervention_generated { taskId }`、Case `intervention_active` 状态和 `guided_intervention` 任务在同一事务持久化。
+- 已实现 `GET /v1/students/{studentId}/today` 与 `POST /v1/tasks/{taskId}/submit`；完成干预后在同一事务写入 `intervention_completed { taskId, d1TaskId, d1ScheduledFor }`、完成原任务、创建 `scheduled` 的 D+1 任务并推进到 `d1_scheduled`。`scheduledFor = completedAt + 24h`，`dueAt = scheduledFor + 12h`，mastery 仅为 `pending_retest`。
+- 新增 `app.task_type`、`app.task_status`、`intervention_active`、`intervention_generated` 与 `app.tasks`；迁移为 `packages/db/drizzle/0003_graceful_maggott.sql`，任务原子生成/完成和查询由 `packages/db/src/task-repository.ts` 承担。
+- 当前证据为 27 条快速测试通过、23 条真实 PostgreSQL/API/Worker 集成测试通过、TypeScript 严格类型检查通过。
 
-该快照不等于 Phase A 完成：Next.js、真实上传/对象存储、干预内容与计划/学习、D+1/D+7、报告、真实 OCR/模型 Provider 和完整 Playwright Demo 仍未实现。
+该快照不等于 Phase A 完成：前端仍在独立 Worktree 验证，真实上传/对象存储、真实 AI 干预、真实题库、到期执行/虚拟时钟、D+1 作答评分、D+7、失败重排、报告、真实 OCR/模型 Provider 和完整 Playwright Demo 仍未实现。
 
 ### 21.1 Phase A：Thin Slice（先证明闭环）
 
@@ -1336,6 +1379,7 @@ MVP 工具 Schema 最小字段：
 | `retrieve_curriculum` | `region`、`grade`、`curriculumVersion`、`unit`、`skillIds`、`query` | `items`、`citations`、`conflicts` |
 | `form_hypotheses` | `evidenceRefs`、`skillRefs`、`knowledgeRefs` | `hypotheses`、`evidenceRefs`、`confidence` |
 | `select_probe` | `hypothesisIds`、`skillIds`、`timeBudgetMinutes` | `probeId`、`reason`、`alternatives` |
+| `build_intervention` | `caseId`、`studentId`、`probeEvaluatedEventId`、评分结果/错因引用 | `title`、`rationale`、`estimatedMinutes`、`steps`、`evidenceRefs` |
 | `verify_item` | `probeId`/`item`、`curriculumVersion` | `valid`、`violations`、`reviewStatus` |
 | `score_objective` | `itemId`、`answer`、`rubricVersion` | `score`、`correct`、`evidence` |
 | `update_mastery` | `studentId`、`skillId`、`evidenceRefs`、`policyVersion` | `proposal`、`before`、`after`、`reason` |
@@ -1443,7 +1487,7 @@ MVP 工具 Schema 最小字段：
 | TECH-022 | MVP Agent 固定为六节点 LangGraph.js 图 | accepted | 业务闭环增加新节点时更新图版本和 Golden Cases |
 | TECH-023 | 所有工具先完成接口、Schema、Mock 和错误处理；verify_item/schedule_retest 做 MVP 最小实现 | accepted | 工具边界或真实 Provider 能力发生变化 |
 | TECH-024 | escalate_human 先创建待处理记录；analyze_speech/score_writing 暂缓真实能力 | accepted | 真实人工流程、语音或写作试点启动 |
-| TECH-025 | UUIDv7 + PostgreSQL 16+；核心表字段/索引/枚举/删除策略按 TDD v0.3.11 | accepted | 数据规模、托管扩展或合规要求变化 |
+| TECH-025 | UUIDv7 + PostgreSQL 16+；核心表字段/索引/枚举/删除策略按 TDD v0.3.13 | accepted | 数据规模、托管扩展或合规要求变化 |
 | TECH-026 | 采用 TDD 详细 API 路由作为唯一正式接口 | accepted | API 版本升级或新客户端边界产生 |
 | TECH-027 | 杭州阿里云单区域联网 Docker Compose；真实 Provider 演示，Mock 仅测试/故障注入 | accepted | 比赛网络、并发、合规或可用性要求变化 |
 | TECH-028 | DeepSeek `deepseek-v4-flash` 主分析，MiniMax `minimax-m3` 教学/降级，腾讯混元 Embedding 1024 维 | accepted | 账号权限、供应商模型版本或评测结果变化 |
@@ -1502,8 +1546,23 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-003 | 2026-08-15 | `main` | `pushed` | `docs: enforce pre-push TDD logging order` | 将“先更新 TDD Push Log，再使用一致的清晰摘要提交和推送，最后核对远端”写入 TDD 正式规则及 PROJECT_MASTER 新窗口接管规则 | 四文档职责与版本引用检查通过；仅提交 PROJECT_MASTER/TDD，不夹带并行任务中的未提交文件；推送后核对本地与 `origin/main` 一致 |
 | PUSH-004 | 2026-08-15 | `main` | `pushed` | `docs: align MVP material-governance boundaries` | 同步版权页不可取得、教材以 ISBN/PDF 哈希/内容快照锁定、答题卡与音频私有留存但排除 MVP，以及仅对白名单材料逐份视觉核验的决定 | 四份主文档与两份材料登记一致性检查通过；原始教材、试题、音频和私有转换结果未进入 Git；推送后核对本地与 `origin/main` 一致 |
 | PUSH-005 | 2026-08-15 | `main` | `pushed` | `feat: evaluate diagnostic probe attempts` | 新增 attempts TypeBox 契约、内部评分规则、确定性评分器和 Fastify 路由；以 `probe_evaluated` 将 Case 从 `probe_required` 推进到 `intervention_ready`，并同步四份主文档 | 24 条快速测试、20 条真实 PostgreSQL/API/Worker 集成测试及 TypeScript 严格类型检查通过；覆盖正确/错误答案、答案与评分映射不泄露、幂等重放/键复用、并发重复、旧版本、非法状态与非法选项；推送后核对本地与 `origin/main` 一致 |
+| PUSH-006 | 2026-08-15 | `main` | `pushed` | `feat: generate interventions and schedule D+1 retests` | 新增确定性最小干预工具契约与 Worker 生成路径、`intervention_active` 状态、今日任务查询、任务完成接口、`app.tasks` 与迁移；完成干预后原子创建 D+1 复测并同步四份主文档 | 27 条快速测试、23 条真实 PostgreSQL/API/Worker 集成测试及 TypeScript 严格类型检查通过；暂存范围与私有材料隔离已审计，本工作轮次须在推送后核对本地 `main` 与 `origin/main` 一致 |
 
 ## 27. 变更日志
+
+### v0.3.13 — 2026-08-15
+
+- 新增 `intervention_generated`、`intervention_active` 与 `d1_scheduled` 实现事实；冻结 `TodayTasksView`、`LearningTaskView` 和任务提交请求/响应边界。
+- 登记 `app.tasks`、任务枚举、`0003_graceful_maggott.sql` 与原子生成/完成仓储；明确完成干预不等于掌握修复，mastery 保持 `pending_retest`。
+- 测试基线更新为 27 条快速测试、23 条真实 PostgreSQL/API/Worker 集成测试和严格类型检查通过；登记随本工作轮次提交、推送并核对远端的 `PUSH-006`。
+- 同步 PROJECT_MASTER v0.1.20、PRD v0.1.12 与 DESIGN v0.2.10。
+
+### v0.3.12 — 2026-08-15
+
+- 冻结前端本地端口、同源 `/api` 代理、服务端 API Origin 与 CORS 白名单边界。
+- 规定 `run-next` 后通过 Case `stateVersion` 轮询恢复状态，并补充错误码、自动重试、幂等键和超时规则。
+- 确认 attempts 完整契约已位于 `packages/contracts`；前端直接消费共享契约，OpenAPI 3.1 自动导出继续作为后端待实现门禁而不阻塞页面开发。
+- 同步 PROJECT_MASTER v0.1.19、PRD v0.1.11 与 DESIGN v0.2.9；不改变领域状态机和评分规则。
 
 ### v0.3.11 — 2026-08-15
 

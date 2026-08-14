@@ -108,8 +108,19 @@ export function transitionCase(
       return advance(aggregate, event, "intervention_ready");
     }
 
-    case "intervention_completed": {
+    case "intervention_generated": {
       requireStatus(aggregate, event, "intervention_ready");
+      if (event.taskId.length === 0) {
+        throw new CaseTransitionError(
+          "invariant_violation",
+          "A generated intervention requires a task id.",
+        );
+      }
+      return advance(aggregate, event, "intervention_active");
+    }
+
+    case "intervention_completed": {
+      requireStatus(aggregate, event, "intervention_active");
       return advance(aggregate, event, "d1_scheduled", "pending_retest");
     }
 
@@ -143,4 +154,3 @@ export function transitionCase(
     }
   }
 }
-

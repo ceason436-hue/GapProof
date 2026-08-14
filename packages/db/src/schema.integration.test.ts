@@ -2,7 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createDatabase } from "./client.ts";
-import { cases, learningEvidenceEvents, students } from "./schema.ts";
+import { cases, learningEvidenceEvents, students, tasks } from "./schema.ts";
 import {
   persistCaseTransition,
   VersionConflictError,
@@ -25,6 +25,7 @@ describeWithDatabase("PostgreSQL evidence ledger", () => {
   const database = createDatabase(databaseUrl ?? "");
 
   beforeAll(async () => {
+    await database.db.delete(tasks);
     await database.db.delete(learningEvidenceEvents);
     await database.db.delete(cases);
     await database.db.delete(students);

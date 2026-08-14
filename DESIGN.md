@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.8"
+version: "0.2.10"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "学生端今日页桌面视觉基线已选定；后端已评分确认小题并进入待生成干预但尚未接入页面，其余页面与前端实现待推进"
+current_design_stage: "学生端今日页桌面视觉基线已选定且前端 F0 在独立 Worktree 验证；后端已生成最小干预任务并支持完成后调度 D+1，真实接口接入与后续页面待推进"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -1444,6 +1444,26 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 - 恢复网络后明确询问是否提交，避免重复写入。
 - 不显示虚假的“已保存”。
 
+### 12.8 API 错误与确认小题提交状态
+
+页面不得直接显示后端英文 `message`、Schema 细节或堆栈。错误卡保留用户已输入内容，并按稳定错误码处理：
+
+| 错误 | 页面行为 | 自动重试 |
+|---|---|---|
+| `VERSION_CONFLICT` | 提示“内容已更新，正在同步”，刷新最新 Case；表单有未提交修改时先保留草稿 | 仅自动 GET 一次 |
+| `SCHEMA_INVALID` / `INVALID_INPUT` | 聚焦对应输入或显示“这项内容需要检查”，保留选择 | 否 |
+| `INVALID_CASE_TRANSITION` | 提示“这一步已经变化”，刷新后导航到当前服务端状态 | 否 |
+| `INVALID_TASK_STATE` | 提示“任务状态已经变化”，刷新今日任务并导航到服务端返回的当前状态 | 否 |
+| `RESOURCE_NOT_FOUND` | 显示内容不存在或已失效，返回“今日” | 否 |
+| 临时网络/Provider 错误且 `retryable=true` | 显示正在重试；失败后提供明确的手动重试 | 按 TDD 限额 |
+| `IDEMPOTENCY_KEY_REUSED` / `STORED_EVENT_INVALID` / 非可重试内部错误 | 停止提交，显示“暂时无法继续”和可复制的 `requestId` | 否 |
+
+确认小题使用六态：`idle → choice_selected → submitting → accepted`，以及旁路 `conflict`、`failed`。提交中禁用重复点击但不清除选择；成功后显示“已收到，正在准备下一步”，不直接把 `passed` 命名为考试“答对/答错”。若需展示服务端支持的候选错因，只能用 `selectedHypothesisId` 匹配同一次 `HypothesesView` 中的候选标题，不显示原始 ID；`null` 必须解释为“这道确认题还不足以确定”，不得虚构错因。
+
+当前后端可从 `intervention_ready` 生成 `guided_intervention`，并通过今日任务接口返回公开任务视图。页面只渲染 `LearningTaskView` 中的标题、理由、预计时间和步骤；不得推断或展示内部候选错因、答案键、工具 warnings 或内部版本。
+
+学习任务提交使用 `idle → submitting → completed`，旁路为 `conflict`、`invalid`、`failed`。提交前必须确保 `completedStepIds` 恰好覆盖全部步骤；提交中禁用重复点击但保留本地勾选。成功后展示“本次练习已完成，明天会有一次短检查”，并使用服务端 `scheduledRetest.scheduledFor` 显示时间；不得表述为“已经修复”或“已经掌握”。D+1 任务为 `scheduled` 时 CTA 不可提前作答，只显示计划时间。D+1 到期执行与评分尚未实现时必须标明“尚未开放/等待服务端能力”，不能由前端模拟通过。
+
 ---
 
 ## 13. 交互动效
@@ -1615,7 +1635,7 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 
 ### 18.0 当前设计基线
 
-- `[PROTOTYPE]` 学生端“今日”页桌面视觉基线已选定，规范见 5.6.1；后端已有 Case、识别确认、竞争性错因、确认小题读取及提交评分接口，并可推进到待生成干预，但相关页面尚无前端实现、可点击原型或接口接入证据。
+- `[PROTOTYPE]` 学生端“今日”页桌面视觉基线已选定，规范见 5.6.1；前端 F0 正在独立 Worktree 完成多状态页面、构建与截图验收。后端已有 Case、识别确认、竞争性错因、确认小题、最小干预生成、今日任务查询、任务完成与 D+1 调度接口，但尚无真实端到端接口接入证据。
 - `[PLANNED]` 其余学生 P0 页面、家长端 P0 页面和评委最小演示页仍需在同一视觉系统下完成设计。
 - 任何后续页面必须沿用：连续白色顶部框架、`#0036FF` 的导航/进度角色、`#B5F800` 的行动/积极变化角色、自然学生用语、单一主操作和轻量立体感。
 
@@ -1745,6 +1765,18 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 ---
 
 ## 22. 版本记录
+
+### v0.2.10 — 2026-08-15
+
+- 同步 `guided_intervention` 今日任务与提交后的 D+1 调度交互；完成反馈必须保持 `pending_retest` 语义，不得提前宣称修复或掌握。
+- 增加 `INVALID_TASK_STATE` 页面处理、任务步骤完整提交、D+1 未到期禁用及未实现评分能力的真实占位规则。
+- 标记前端 F0 正在独立 Worktree 验证；后端能力已实现不等于真实页面接入完成。
+
+### v0.2.9 — 2026-08-15
+
+- 增加稳定错误码到页面行为的映射，以及写请求重试、冲突刷新、草稿保留和 `requestId` 排障规则。
+- 冻结确认小题六种 UI 状态；成功反馈保持诊断语气，不暴露答案键、评分映射或原始候选 ID。
+- `intervention_ready` 后续接口未实现时显示真实占位状态，不虚构干预内容或计划。
 
 ### v0.2.8 — 2026-08-15
 

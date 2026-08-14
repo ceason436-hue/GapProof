@@ -22,6 +22,13 @@
       "when": 1786715615243,
       "tag": "0002_plain_black_widow",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786727062215,
+      "tag": "0003_graceful_maggott",
+      "breakpoints": true
     }
   ]
 }

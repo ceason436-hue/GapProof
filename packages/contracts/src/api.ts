@@ -5,6 +5,7 @@ import {
   DiagnosticProbeDraftSchema,
   HypothesisCandidateSchema,
 } from "./form-hypotheses.ts";
+import { InterventionStepSchema } from "./build-intervention.ts";
 
 export function apiResponseSchema<T extends TSchema>(dataSchema: T) {
   return Type.Object({
@@ -123,6 +124,76 @@ export const AttemptViewSchema = Type.Object({
 });
 
 export type AttemptView = Static<typeof AttemptViewSchema>;
+
+export const StudentIdParamsSchema = Type.Object({
+  studentId: Type.String({ format: "uuid" }),
+});
+
+export type StudentIdParams = Static<typeof StudentIdParamsSchema>;
+
+export const TaskIdParamsSchema = Type.Object({
+  taskId: Type.String({ format: "uuid" }),
+});
+
+export type TaskIdParams = Static<typeof TaskIdParamsSchema>;
+
+export const TaskTypeSchema = Type.Union([
+  Type.Literal("guided_intervention"),
+  Type.Literal("d1_retest"),
+]);
+
+export const TaskStatusSchema = Type.Union([
+  Type.Literal("ready"),
+  Type.Literal("scheduled"),
+  Type.Literal("completed"),
+]);
+
+export const LearningTaskViewSchema = Type.Object({
+  id: Type.String({ format: "uuid" }),
+  caseId: Type.String({ format: "uuid" }),
+  studentId: Type.String({ format: "uuid" }),
+  taskType: TaskTypeSchema,
+  status: TaskStatusSchema,
+  title: Type.String({ minLength: 1 }),
+  rationale: Type.String({ minLength: 1 }),
+  estimatedMinutes: Type.Integer({ minimum: 1 }),
+  scheduledFor: Type.String({ format: "date-time" }),
+  dueAt: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
+  completedAt: Type.Union([
+    Type.String({ format: "date-time" }),
+    Type.Null(),
+  ]),
+  steps: Type.Array(InterventionStepSchema, { minItems: 1 }),
+});
+
+export type LearningTaskView = Static<typeof LearningTaskViewSchema>;
+
+export const TodayTasksViewSchema = Type.Object({
+  studentId: Type.String({ format: "uuid" }),
+  tasks: Type.Array(LearningTaskViewSchema),
+});
+
+export type TodayTasksView = Static<typeof TodayTasksViewSchema>;
+
+export const CompleteTaskRequestSchema = Type.Object({
+  expectedVersion: Type.Integer({ minimum: 0 }),
+  completedStepIds: Type.Array(Type.String({ minLength: 1 }), {
+    minItems: 1,
+    uniqueItems: true,
+  }),
+});
+
+export type CompleteTaskRequest = Static<typeof CompleteTaskRequestSchema>;
+
+export const TaskCompletionViewSchema = Type.Object({
+  caseId: Type.String({ format: "uuid" }),
+  state: Type.Literal("d1_scheduled"),
+  stateVersion: Type.Integer({ minimum: 0 }),
+  completedTask: LearningTaskViewSchema,
+  scheduledRetest: LearningTaskViewSchema,
+});
+
+export type TaskCompletionView = Static<typeof TaskCompletionViewSchema>;
 
 export const RunNextRequestSchema = Type.Object({
   expectedVersion: Type.Integer({ minimum: 0 }),

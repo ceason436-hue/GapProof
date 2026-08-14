@@ -6,6 +6,7 @@ export const CaseStatusSchema = Type.Union([
   Type.Literal("ready_for_diagnosis"),
   Type.Literal("probe_required"),
   Type.Literal("intervention_ready"),
+  Type.Literal("intervention_active"),
   Type.Literal("d1_scheduled"),
   Type.Literal("d7_scheduled"),
   Type.Literal("replan_required"),
@@ -59,7 +60,19 @@ export const CaseEventSchema = Type.Union([
   ]),
   Type.Intersect([
     EventBaseSchema,
-    Type.Object({ type: Type.Literal("intervention_completed") }),
+    Type.Object({
+      type: Type.Literal("intervention_generated"),
+      taskId: Type.String({ minLength: 1 }),
+    }),
+  ]),
+  Type.Intersect([
+    EventBaseSchema,
+    Type.Object({
+      type: Type.Literal("intervention_completed"),
+      taskId: Type.String({ minLength: 1 }),
+      d1TaskId: Type.String({ minLength: 1 }),
+      d1ScheduledFor: Type.String({ format: "date-time" }),
+    }),
   ]),
   Type.Intersect([
     EventBaseSchema,

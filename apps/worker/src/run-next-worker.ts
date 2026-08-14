@@ -3,8 +3,10 @@ import {
   and,
   eq,
   findCaseById,
+  findLatestCaseEvidenceEventByType,
   learningEvidenceEvents,
   persistCaseTransition,
+  persistGeneratedIntervention,
   type Database,
 } from "@gapproof/db";
 import { transitionCase } from "@gapproof/domain";
@@ -12,6 +14,8 @@ import type { JobQueue } from "@gapproof/jobs";
 import {
   FakeFormHypothesesAdapter,
   type FormHypothesesAdapter,
+  FakeBuildInterventionAdapter,
+  type BuildInterventionAdapter,
   FakeParsePaperAdapter,
   type ParsePaperAdapter,
 } from "@gapproof/tools";
@@ -22,6 +26,7 @@ export interface RunNextWorkerOptions {
   readonly queue: JobQueue;
   readonly parsePaper?: ParsePaperAdapter;
   readonly formHypotheses?: FormHypothesesAdapter;
+  readonly buildIntervention?: BuildInterventionAdapter;
 }
 
 export function createRunNextWorker(options: RunNextWorkerOptions) {
@@ -29,6 +34,8 @@ export function createRunNextWorker(options: RunNextWorkerOptions) {
     options.parsePaper ?? new FakeParsePaperAdapter("low_confidence");
   const formHypotheses =
     options.formHypotheses ?? new FakeFormHypothesesAdapter();
+  const buildIntervention =
+    options.buildIntervention ?? new FakeBuildInterventionAdapter();
   let workerId: string | undefined;
 
   return {
@@ -57,6 +64,133 @@ export function createRunNextWorker(options: RunNextWorkerOptions) {
             state: caseRow.state,
             stateVersion: caseRow.stateVersion,
             idempotentReplay: true,
+          };
+        }
+
+        if (caseRow.state === "intervention_ready") {
+          const probeEvaluationEvent = await findLatestCaseEvidenceEventByType(
+            options.database,
+            caseRow.id,
+            "probe_evaluated",
+          );
+          if (probeEvaluationEvent === undefined) {
+            throw new Error("PROBE_EVALUATION_EVIDENCE_NOT_FOUND");
+          }
+          const evaluationResult = probeEvaluationEvent.payload.result;
+          if (
+            typeof evaluationResult !== "object" ||
+            evaluationResult === null ||
+            !("passed" in evaluationResult) ||
+            typeof evaluationResult.passed !== "boolean" ||
+            !("selectedHypothesisId" in evaluationResult) ||
+            !(
+              typeof evaluationResult.selectedHypothesisId === "string" ||
+              evaluationResult.selectedHypothesisId === null
+            )
+          ) {
+            throw new Error("INVALID_PROBE_EVALUATION_EVENT");
+          }
+
+          const toolResult = await buildIntervention.execute({
+            toolCallId: `build-intervention:${job.id}`,
+            caseId: caseRow.id,
+            studentId: caseRow.studentId,
+            traceId: job.data.traceId,
+            input: {
+              probeEvaluationEventId: probeEvaluationEvent.id,
+              selectedHypothesisId:
+                evaluationResult.selectedHypothesisId,
+              probePassed: evaluationResult.passed,
+            },
+            policyVersion: "demo-intervention-policy-v1",
+          });
+          if (
+            toolResult.status !== "succeeded" ||
+            toolResult.data === undefined
+          ) {
+            throw new Error(
+              toolResult.error?.code ?? "BUILD_INTERVENTION_FAILED",
+            );
+          }
+          const stepIds = toolResult.data.steps.map(({ id }) => id);
+          if (
+            toolResult.data.steps.length < 3 ||
+            new Set(stepIds).size !== stepIds.length ||
+            !toolResult.evidenceRefs.includes(probeEvaluationEvent.id)
+          ) {
+            throw new Error("INVALID_INTERVENTION_TOOL_RESULT");
+          }
+
+          const taskId = uuidv7();
+          const occurredAt = new Date();
+          const event = {
+            eventId: uuidv7(),
+            occurredAt: occurredAt.toISOString(),
+            type: "intervention_generated" as const,
+            taskId,
+          };
+          const next = transitionCase(
+            {
+              id: caseRow.id,
+              status: caseRow.state,
+              mastery: "insufficient_evidence",
+              version: caseRow.stateVersion,
+              replanCount: 0,
+              appliedEventIds: [],
+            },
+            event,
+          );
+          const persisted = await persistGeneratedIntervention(
+            options.database,
+            {
+              caseId: caseRow.id,
+              expectedVersion: job.data.expectedVersion,
+              nextState: next.status,
+              event: {
+                id: event.eventId,
+                tenantId: caseRow.tenantId,
+                studentId: caseRow.studentId,
+                caseId: caseRow.id,
+                eventType: event.type,
+                sourceType: "fake_intervention",
+                sourceRef: toolResult.toolVersion,
+                payload: {
+                  taskId,
+                  probeEvaluationEventId: probeEvaluationEvent.id,
+                  toolVersion: toolResult.toolVersion,
+                  warnings: [...toolResult.warnings],
+                },
+                confidence: toolResult.confidence?.toFixed(4),
+                occurredAt,
+                idempotencyKey: eventIdempotencyKey,
+              },
+              task: {
+                id: taskId,
+                tenantId: caseRow.tenantId,
+                studentId: caseRow.studentId,
+                caseId: caseRow.id,
+                taskType: "guided_intervention",
+                status: "ready",
+                title: toolResult.data.title,
+                estimatedMinutes: toolResult.data.estimatedMinutes,
+                scheduledFor: occurredAt,
+                payload: {
+                  rationale: toolResult.data.rationale,
+                  steps: toolResult.data.steps,
+                  warnings: [...toolResult.warnings],
+                  toolVersion: toolResult.toolVersion,
+                },
+                sourceEventId: event.eventId,
+              },
+            },
+          );
+
+          return {
+            caseId: caseRow.id,
+            state: persisted.state,
+            stateVersion: persisted.stateVersion,
+            taskId,
+            idempotentReplay: false,
           };
         }
 

@@ -6,6 +6,8 @@ import type {
   AttemptView,
   CaseView,
   HypothesesView,
+  TaskCompletionView,
+  TodayTasksView,
 } from "@gapproof/contracts";
 import {
   apiIdempotencyRecords,
@@ -15,6 +17,7 @@ import {
   learningEvidenceEvents,
   runMigrations,
   students,
+  tasks,
 } from "@gapproof/db";
 import { createJobQueue } from "@gapproof/jobs";
 import { createRunNextWorker } from "@gapproof/worker";
@@ -57,6 +60,7 @@ async function createProbeRequiredCase(
     payload: { entry: "synthetic_demo" },
   });
   const caseId = created.json<ApiResponse<CaseView>>().data.id;
+  const studentId = created.json<ApiResponse<CaseView>>().data.studentId;
 
   await api.inject({
     method: "POST",
@@ -90,8 +94,28 @@ async function createProbeRequiredCase(
   });
   return {
     caseId,
+    studentId,
     hypotheses: response.json<ApiResponse<HypothesesView>>().data,
   };
+}
+
+async function createInterventionReadyCase(
+  api: Awaited<ReturnType<typeof buildApi>>,
+  keyPrefix: string,
+) {
+  const prepared = await createProbeRequiredCase(api, keyPrefix);
+  const attempted = await api.inject({
+    method: "POST",
+    url: `/v1/cases/${prepared.caseId}/attempts`,
+    headers: { "idempotency-key": `${keyPrefix}-attempt` },
+    payload: {
+      expectedVersion: 3,
+      probeId: prepared.hypotheses.probe.id,
+      selectedChoiceId: "choice-wrote",
+    },
+  });
+  expect(attempted.statusCode).toBe(200);
+  return prepared;
 }
 
 describeWithDatabase("Fastify API and run-next worker", () => {
@@ -102,6 +126,7 @@ describeWithDatabase("Fastify API and run-next worker", () => {
 
   beforeAll(async () => {
     await runMigrations(database.db);
+    await database.db.delete(tasks);
     await database.db.delete(learningEvidenceEvents);
     await database.db.delete(apiIdempotencyRecords);
     await database.db.delete(cases);
@@ -644,6 +669,200 @@ describeWithDatabase("Fastify API and run-next worker", () => {
       .where(eq(learningEvidenceEvents.caseId, caseId));
     expect(
       events.filter((event) => event.eventType === "probe_evaluated"),
+    ).toHaveLength(1);
+  }, 15_000);
+
+  it("lets the worker generate one minimal intervention task", async () => {
+    const { caseId, studentId } = await createInterventionReadyCase(
+      api,
+      "intervention-generate-v1",
+    );
+    const request = {
+      method: "POST" as const,
+      url: `/v1/cases/${caseId}/commands/run-next`,
+      headers: { "idempotency-key": "run-next-intervention-v1" },
+      payload: { expectedVersion: 4 },
+    };
+    const queued = await api.inject(request);
+    const replay = await api.inject(request);
+
+    expect(queued.statusCode).toBe(202);
+    expect(replay.statusCode).toBe(202);
+    expect(replay.json<ApiResponse<unknown>>().jobId).toBe(
+      queued.json<ApiResponse<unknown>>().jobId,
+    );
+
+    const activeCase = await waitForState(api, caseId, "intervention_active");
+    expect(activeCase.stateVersion).toBe(5);
+
+    const today = await api.inject({
+      method: "GET",
+      url: `/v1/students/${studentId}/today`,
+    });
+    const body = today.json<ApiResponse<TodayTasksView>>();
+    expect(today.statusCode).toBe(200);
+    expect(body.data.tasks).toHaveLength(1);
+    expect(body.data.tasks[0]).toMatchObject({
+      caseId,
+      studentId,
+      taskType: "guided_intervention",
+      status: "ready",
+      estimatedMinutes: 8,
+    });
+    expect(body.data.tasks[0]?.steps).toHaveLength(3);
+    expect(body.data.tasks[0]).not.toHaveProperty("answerKey");
+    expect(body.data.tasks[0]).not.toHaveProperty("selectedHypothesisId");
+
+    const storedTasks = await database.db
+      .select()
+      .from(tasks)
+      .where(eq(tasks.caseId, caseId));
+    expect(storedTasks).toHaveLength(1);
+
+    const events = await database.db
+      .select()
+      .from(learningEvidenceEvents)
+      .where(eq(learningEvidenceEvents.caseId, caseId));
+    expect(
+      events.filter((event) => event.eventType === "intervention_generated"),
+    ).toHaveLength(1);
+  }, 15_000);
+
+  it("completes the intervention idempotently and schedules D+1", async () => {
+    const { caseId, studentId } = await createInterventionReadyCase(
+      api,
+      "intervention-complete-v1",
+    );
+    await api.inject({
+      method: "POST",
+      url: `/v1/cases/${caseId}/commands/run-next`,
+      headers: { "idempotency-key": "run-next-intervention-complete-v1" },
+      payload: { expectedVersion: 4 },
+    });
+    await waitForState(api, caseId, "intervention_active");
+
+    const today = await api.inject({
+      method: "GET",
+      url: `/v1/students/${studentId}/today`,
+    });
+    const task = today.json<ApiResponse<TodayTasksView>>().data.tasks[0];
+    expect(task).toBeDefined();
+    const request = {
+      method: "POST" as const,
+      url: `/v1/tasks/${task?.id}/submit`,
+      headers: { "idempotency-key": "complete-intervention-v1" },
+      payload: {
+        expectedVersion: 5,
+        completedStepIds: task?.steps.map(({ id }) => id),
+      },
+    };
+    const completed = await api.inject(request);
+    const replay = await api.inject(request);
+    const body = completed.json<ApiResponse<TaskCompletionView>>();
+
+    expect(completed.statusCode).toBe(200);
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json<ApiResponse<TaskCompletionView>>().data).toEqual(
+      body.data,
+    );
+    expect(body.data).toMatchObject({
+      caseId,
+      state: "d1_scheduled",
+      stateVersion: 6,
+    });
+    expect(body.data.completedTask.status).toBe("completed");
+    expect(body.data.scheduledRetest).toMatchObject({
+      taskType: "d1_retest",
+      status: "scheduled",
+    });
+    const delayMs =
+      Date.parse(body.data.scheduledRetest.scheduledFor) -
+      Date.parse(body.data.completedTask.completedAt ?? "");
+    expect(delayMs).toBe(24 * 60 * 60 * 1_000);
+
+    const changedReplay = await api.inject({
+      ...request,
+      payload: { ...request.payload, completedStepIds: ["step-injected"] },
+    });
+    expect(changedReplay.statusCode).toBe(409);
+    expect(changedReplay.json<ApiErrorResponse>().error.code).toBe(
+      "IDEMPOTENCY_KEY_REUSED",
+    );
+
+    const storedTasks = await database.db
+      .select()
+      .from(tasks)
+      .where(eq(tasks.caseId, caseId));
+    expect(storedTasks).toHaveLength(2);
+    expect(storedTasks.filter(({ status }) => status === "completed")).toHaveLength(1);
+    expect(storedTasks.filter(({ status }) => status === "scheduled")).toHaveLength(1);
+  }, 15_000);
+
+  it("rejects incomplete, stale, and concurrent duplicate completions safely", async () => {
+    const { caseId, studentId } = await createInterventionReadyCase(
+      api,
+      "intervention-validation-v1",
+    );
+    await api.inject({
+      method: "POST",
+      url: `/v1/cases/${caseId}/commands/run-next`,
+      headers: { "idempotency-key": "run-next-intervention-validation-v1" },
+      payload: { expectedVersion: 4 },
+    });
+    await waitForState(api, caseId, "intervention_active");
+    const today = await api.inject({
+      method: "GET",
+      url: `/v1/students/${studentId}/today`,
+    });
+    const task = today.json<ApiResponse<TodayTasksView>>().data.tasks[0];
+    expect(task).toBeDefined();
+
+    const stale = await api.inject({
+      method: "POST",
+      url: `/v1/tasks/${task?.id}/submit`,
+      headers: { "idempotency-key": "complete-intervention-stale-v1" },
+      payload: {
+        expectedVersion: 4,
+        completedStepIds: task?.steps.map(({ id }) => id),
+      },
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json<ApiErrorResponse>().error.code).toBe("VERSION_CONFLICT");
+
+    const incomplete = await api.inject({
+      method: "POST",
+      url: `/v1/tasks/${task?.id}/submit`,
+      headers: { "idempotency-key": "complete-intervention-incomplete-v1" },
+      payload: { expectedVersion: 5, completedStepIds: [task?.steps[0]?.id] },
+    });
+    expect(incomplete.statusCode).toBe(400);
+    expect(incomplete.json<ApiErrorResponse>().error.code).toBe("INVALID_INPUT");
+
+    const request = {
+      method: "POST" as const,
+      url: `/v1/tasks/${task?.id}/submit`,
+      headers: { "idempotency-key": "complete-intervention-concurrent-v1" },
+      payload: {
+        expectedVersion: 5,
+        completedStepIds: task?.steps.map(({ id }) => id),
+      },
+    };
+    const [left, right] = await Promise.all([
+      api.inject(request),
+      api.inject(request),
+    ]);
+    expect(left.statusCode).toBe(200);
+    expect(right.statusCode).toBe(200);
+    expect(left.json<ApiResponse<TaskCompletionView>>().data).toEqual(
+      right.json<ApiResponse<TaskCompletionView>>().data,
+    );
+
+    const events = await database.db
+      .select()
+      .from(learningEvidenceEvents)
+      .where(eq(learningEvidenceEvents.caseId, caseId));
+    expect(
+      events.filter((event) => event.eventType === "intervention_completed"),
     ).toHaveLength(1);
   }, 15_000);
 });

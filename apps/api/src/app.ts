@@ -15,6 +15,8 @@ import {
   type CaseIdParams,
   CaseViewSchema,
   type CaseView,
+  CompleteTaskRequestSchema,
+  type CompleteTaskRequest,
   ConfirmExtractionRequestSchema,
   type ConfirmExtractionRequest,
   CreateCaseRequestSchema,
@@ -22,21 +24,35 @@ import {
   type FormHypothesesOutput,
   HypothesesViewSchema,
   type HypothesesView,
+  type InterventionStep,
+  type LearningTaskView,
   RunNextQueuedSchema,
   RunNextRequestSchema,
   type RunNextRequest,
   SubmitAttemptRequestSchema,
   type SubmitAttemptRequest,
+  StudentIdParamsSchema,
+  type StudentIdParams,
+  TaskCompletionViewSchema,
+  type TaskCompletionView,
+  TaskIdParamsSchema,
+  type TaskIdParams,
+  TodayTasksViewSchema,
 } from "@gapproof/contracts";
 import {
+  completeInterventionTask,
   createSyntheticCaseIdempotent,
   findEvidenceEventByIdempotencyKey,
   findCaseById,
   findLatestCaseEvidenceEventByType,
+  findStudentById,
+  findTaskById,
+  findTasksByStudentId,
   persistCaseTransition,
   type CaseRow,
   type Database,
   type LearningEvidenceEventRow,
+  type TaskRow,
   ResourceNotFoundError,
   VersionConflictError,
 } from "@gapproof/db";
@@ -114,6 +130,28 @@ function attemptRequestPayload(
   };
 }
 
+function completionRequestPayload(
+  body: CompleteTaskRequest,
+): Record<string, unknown> {
+  return {
+    expectedVersion: body.expectedVersion,
+    completedStepIds: [...body.completedStepIds].sort(),
+  };
+}
+
+function isMatchingCompletionEvent(
+  event: LearningEvidenceEventRow,
+  taskId: string,
+  requestPayload: Record<string, unknown>,
+): boolean {
+  return (
+    event.eventType === "intervention_completed" &&
+    event.sourceRef === taskId &&
+    isRecord(event.payload.request) &&
+    isSamePayload(event.payload.request, requestPayload)
+  );
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -151,6 +189,85 @@ function attemptViewFromEvent(
     passed: result.passed,
     selectedHypothesisId: result.selectedHypothesisId,
     scoringMethod: result.scoringMethod,
+  };
+}
+
+function toLearningTaskView(row: TaskRow): LearningTaskView {
+  const rationale = row.payload.rationale;
+  const steps = row.payload.steps;
+  if (
+    typeof rationale !== "string" ||
+    !Array.isArray(steps) ||
+    steps.length === 0 ||
+    steps.some(
+      (step) =>
+        !isRecord(step) ||
+        typeof step.id !== "string" ||
+        !["explain", "worked_example", "guided_practice"].includes(
+          String(step.kind),
+        ) ||
+        typeof step.title !== "string" ||
+        typeof step.content !== "string",
+    )
+  ) {
+    throw new ApiHttpError(
+      500,
+      "STORED_TASK_INVALID",
+      `Stored task ${row.id} is invalid.`,
+    );
+  }
+
+  return {
+    id: row.id,
+    caseId: row.caseId,
+    studentId: row.studentId,
+    taskType: row.taskType,
+    status: row.status,
+    title: row.title,
+    rationale,
+    estimatedMinutes: row.estimatedMinutes,
+    scheduledFor: row.scheduledFor.toISOString(),
+    dueAt: row.dueAt?.toISOString() ?? null,
+    completedAt: row.completedAt?.toISOString() ?? null,
+    steps: steps as InterventionStep[],
+  };
+}
+
+async function taskCompletionViewFromEvent(
+  database: Database,
+  event: LearningEvidenceEventRow,
+): Promise<TaskCompletionView> {
+  const result = event.payload.result;
+  if (
+    !isRecord(result) ||
+    typeof result.completedTaskId !== "string" ||
+    typeof result.d1TaskId !== "string" ||
+    !Number.isInteger(result.stateVersion)
+  ) {
+    throw new ApiHttpError(
+      500,
+      "STORED_EVENT_INVALID",
+      "The stored intervention completion event is invalid.",
+    );
+  }
+  const [completedTask, scheduledRetest] = await Promise.all([
+    findTaskById(database, result.completedTaskId),
+    findTaskById(database, result.d1TaskId),
+  ]);
+  if (completedTask === undefined || scheduledRetest === undefined) {
+    throw new ApiHttpError(
+      500,
+      "STORED_TASK_INVALID",
+      "The intervention completion tasks are missing.",
+    );
+  }
+
+  return {
+    caseId: event.caseId,
+    state: "d1_scheduled",
+    stateVersion: result.stateVersion as number,
+    completedTask: toLearningTaskView(completedTask),
+    scheduledRetest: toLearningTaskView(scheduledRetest),
   };
 }
 
@@ -676,6 +793,249 @@ export async function buildApi(options: BuildApiOptions) {
       return success(
         request,
         attemptViewFromEvent(attemptedCase, persistedEvent),
+      );
+    },
+  );
+
+  api.get<{ Params: StudentIdParams }>(
+    "/v1/students/:studentId/today",
+    {
+      schema: {
+        params: StudentIdParamsSchema,
+        response: {
+          200: apiResponseSchema(TodayTasksViewSchema),
+          "4xx": ApiErrorResponseSchema,
+          500: ApiErrorResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      const student = await findStudentById(
+        options.database,
+        request.params.studentId,
+      );
+      if (student === undefined) {
+        throw new ResourceNotFoundError(
+          "Student",
+          request.params.studentId,
+        );
+      }
+      const taskRows = await findTasksByStudentId(
+        options.database,
+        student.id,
+      );
+      return success(request, {
+        studentId: student.id,
+        tasks: taskRows.map(toLearningTaskView),
+      });
+    },
+  );
+
+  api.post<{ Params: TaskIdParams; Body: CompleteTaskRequest }>(
+    "/v1/tasks/:taskId/submit",
+    {
+      schema: {
+        params: TaskIdParamsSchema,
+        body: CompleteTaskRequestSchema,
+        response: {
+          200: apiResponseSchema(TaskCompletionViewSchema),
+          "4xx": ApiErrorResponseSchema,
+          500: ApiErrorResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      const idempotencyKey = `complete-task:${getIdempotencyKey(request)}`;
+      const requestPayload = completionRequestPayload(request.body);
+      const existingEvent = await findEvidenceEventByIdempotencyKey(
+        options.database,
+        idempotencyKey,
+      );
+      if (existingEvent !== undefined) {
+        if (!isMatchingCompletionEvent(
+          existingEvent,
+          request.params.taskId,
+          requestPayload,
+        )) {
+          throw new ApiHttpError(
+            409,
+            "IDEMPOTENCY_KEY_REUSED",
+            "The idempotency key belongs to another write request.",
+          );
+        }
+        return success(
+          request,
+          await taskCompletionViewFromEvent(options.database, existingEvent),
+        );
+      }
+
+      const taskRow = await findTaskById(
+        options.database,
+        request.params.taskId,
+      );
+      if (taskRow === undefined) {
+        throw new ResourceNotFoundError("Task", request.params.taskId);
+      }
+      const caseRow = await findCaseById(options.database, taskRow.caseId);
+      if (caseRow === undefined) {
+        throw new ResourceNotFoundError("Case", taskRow.caseId);
+      }
+      if (caseRow.stateVersion !== request.body.expectedVersion) {
+        const racedEvent = await findEvidenceEventByIdempotencyKey(
+          options.database,
+          idempotencyKey,
+        );
+        if (racedEvent !== undefined) {
+          if (!isMatchingCompletionEvent(
+            racedEvent,
+            request.params.taskId,
+            requestPayload,
+          )) {
+            throw new ApiHttpError(
+              409,
+              "IDEMPOTENCY_KEY_REUSED",
+              "The idempotency key belongs to another write request.",
+            );
+          }
+          return success(
+            request,
+            await taskCompletionViewFromEvent(options.database, racedEvent),
+          );
+        }
+        throw new VersionConflictError(
+          caseRow.id,
+          request.body.expectedVersion,
+        );
+      }
+      if (caseRow.state !== "intervention_active") {
+        throw new CaseTransitionError(
+          "invalid_transition",
+          `Event intervention_completed requires intervention_active, received ${caseRow.state}.`,
+        );
+      }
+      if (taskRow.taskType !== "guided_intervention" || taskRow.status !== "ready") {
+        throw new ApiHttpError(
+          409,
+          "INVALID_TASK_STATE",
+          "The task is not a ready guided intervention.",
+        );
+      }
+
+      const taskView = toLearningTaskView(taskRow);
+      const requiredStepIds = [...taskView.steps.map(({ id }) => id)].sort();
+      const completedStepIds = [...request.body.completedStepIds].sort();
+      if (!isDeepStrictEqual(requiredStepIds, completedStepIds)) {
+        throw new ApiHttpError(
+          400,
+          "INVALID_INPUT",
+          "Every intervention step must be completed before scheduling D+1.",
+        );
+      }
+
+      const completedAt = new Date();
+      const d1ScheduledFor = new Date(
+        completedAt.getTime() + 24 * 60 * 60 * 1_000,
+      );
+      const d1DueAt = new Date(
+        d1ScheduledFor.getTime() + 12 * 60 * 60 * 1_000,
+      );
+      const d1TaskId = uuidv7();
+      const event = {
+        eventId: uuidv7(),
+        occurredAt: completedAt.toISOString(),
+        type: "intervention_completed" as const,
+        taskId: taskRow.id,
+        d1TaskId,
+        d1ScheduledFor: d1ScheduledFor.toISOString(),
+      };
+      const next = transitionCase(
+        {
+          id: caseRow.id,
+          status: caseRow.state,
+          mastery: "insufficient_evidence",
+          version: caseRow.stateVersion,
+          replanCount: 0,
+          appliedEventIds: [],
+        },
+        event,
+      );
+      const eventPayload = {
+        request: requestPayload,
+        result: {
+          completedTaskId: taskRow.id,
+          d1TaskId,
+          d1ScheduledFor: d1ScheduledFor.toISOString(),
+          state: next.status,
+          stateVersion: next.version,
+        },
+      };
+      const persisted = await completeInterventionTask(options.database, {
+        caseId: caseRow.id,
+        taskId: taskRow.id,
+        expectedVersion: request.body.expectedVersion,
+        nextState: next.status,
+        completedAt,
+        event: {
+          id: event.eventId,
+          tenantId: caseRow.tenantId,
+          studentId: caseRow.studentId,
+          caseId: caseRow.id,
+          eventType: event.type,
+          sourceType: "student_task_completion",
+          sourceRef: taskRow.id,
+          payload: eventPayload,
+          occurredAt: completedAt,
+          idempotencyKey,
+        },
+        d1Task: {
+          id: d1TaskId,
+          tenantId: caseRow.tenantId,
+          studentId: caseRow.studentId,
+          caseId: caseRow.id,
+          taskType: "d1_retest",
+          status: "scheduled",
+          title: "明天用一道新题检查",
+          estimatedMinutes: 5,
+          scheduledFor: d1ScheduledFor,
+          dueAt: d1DueAt,
+          payload: {
+            rationale: "最小干预已完成；次日使用新题检查是否能独立回忆。",
+            steps: [
+              {
+                id: "step-d1-unseen-check",
+                kind: "guided_practice",
+                title: "完成次日新题检查",
+                content: "到期后使用一道未见过的完成时词形题进行独立检查。",
+              },
+            ],
+          },
+          sourceEventId: event.eventId,
+        },
+      });
+
+      const persistedEvent = await findEvidenceEventByIdempotencyKey(
+        options.database,
+        idempotencyKey,
+      );
+      if (
+        persistedEvent === undefined ||
+        !isMatchingCompletionEvent(
+          persistedEvent,
+          request.params.taskId,
+          requestPayload,
+        )
+      ) {
+        throw new ApiHttpError(
+          persisted.applied ? 500 : 409,
+          persisted.applied ? "STORED_EVENT_INVALID" : "IDEMPOTENCY_KEY_REUSED",
+          persisted.applied
+            ? "The intervention completion event was not persisted."
+            : "The idempotency key belongs to another write request.",
+        );
+      }
+      return success(
+        request,
+        await taskCompletionViewFromEvent(options.database, persistedEvent),
       );
     },
   );
