@@ -18,6 +18,14 @@ export function createD1AttemptRequest(
     : null;
 }
 
+export function canBeginD1Attempt(
+  expectedVersion: number | null,
+  selectedChoiceId: string | null,
+  resultUnconfirmed: boolean,
+): boolean {
+  return expectedVersion !== null && selectedChoiceId !== null && !resultUnconfirmed;
+}
+
 export const getCaseForD1Attempt = (caseId: string) =>
   apiGet(`/api/v1/cases/${caseId}`, CaseViewSchema);
 

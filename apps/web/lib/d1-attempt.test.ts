@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { ApiClientError } from "./api-client";
-import { createD1AttemptRequest, getCaseForD1Attempt, submitD1Attempt } from "./d1-attempt";
+import { canBeginD1Attempt, createD1AttemptRequest, getCaseForD1Attempt, submitD1Attempt } from "./d1-attempt";
 
 const caseId = "0198b111-1111-7000-8000-000000000002";
 const taskId = "0198b111-1111-7000-8000-000000000011";
@@ -21,6 +21,15 @@ describe("D1 attempt client boundary", () => {
   it("does not create a request until a choice is selected", () => {
     expect(createD1AttemptRequest(4, body.itemId, null)).toBeNull();
     expect(createD1AttemptRequest(4, body.itemId, body.selectedChoiceId)).toEqual(body);
+  });
+
+  it("blocks a third write intent after the same-key retry result remains unknown", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError("network"));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(submitD1Attempt(taskId, body, "0198b111-1111-7000-8000-000000000096")).rejects.toThrow("network");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(canBeginD1Attempt(4, body.selectedChoiceId, true)).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("fetches the authoritative Case before a write", async () => {

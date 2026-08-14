@@ -5,7 +5,7 @@ import {
 } from "@gapproof/contracts";
 import { useEffect, useState } from "react";
 import { ApiClientError } from "@/lib/api-client";
-import { createD1AttemptRequest, getCaseForD1Attempt, submitD1Attempt } from "@/lib/d1-attempt";
+import { canBeginD1Attempt, createD1AttemptRequest, getCaseForD1Attempt, submitD1Attempt } from "@/lib/d1-attempt";
 import { formatTaskDateTime } from "@/lib/today-adapter";
 
 type SubmitState =
@@ -32,7 +32,7 @@ function errorCopy(state: Extract<SubmitState, { kind: "error" }>) {
         ? "这次提交标识已被其他内容使用，请重新确认后再提交。"
         : state.code === "RESOURCE_NOT_FOUND"
           ? "没有找到这项检查，请返回今日页查看最新安排。"
-          : "网络结果未确认，未显示提交成功；请确认后再试。";
+          : "结果未确认，请刷新任务状态或返回今日页确认；页面不会再次提交或生成新的提交标识。";
   return <p className="attempt-feedback error" role="alert">{detail}{state.requestId ? ` 请求编号：${state.requestId}` : ""}</p>;
 }
 
@@ -55,6 +55,7 @@ export function D1AttemptPanel({ task, timeZone }: { task: D1RetestTaskView; tim
   useEffect(() => { void refreshCase(); }, [task.caseId]);
 
   const submit = async () => {
+    if (state.kind === "error" && state.code === "NETWORK_UNKNOWN") return;
     if (expectedVersion === null || selectedChoiceId === null) return;
     const body = createD1AttemptRequest(expectedVersion, task.item.id, selectedChoiceId);
     if (!body) {
@@ -103,7 +104,8 @@ export function D1AttemptPanel({ task, timeZone }: { task: D1RetestTaskView; tim
     </article>;
   }
 
-  const disabled = state.kind === "loading_case" || state.kind === "submitting" || selectedChoiceId === null;
+  const resultUnconfirmed = state.kind === "error" && state.code === "NETWORK_UNKNOWN";
+  const disabled = state.kind === "loading_case" || state.kind === "submitting" || !canBeginD1Attempt(expectedVersion, selectedChoiceId, resultUnconfirmed);
   return <div className="attempt-panel" data-d1-attempt-state={state.kind}>
     <p className="read-only-note">选择后由服务端评分；页面不会显示答案键或评分映射。</p>
     <fieldset disabled={state.kind === "loading_case" || state.kind === "submitting"}>
@@ -122,7 +124,7 @@ export function D1AttemptPanel({ task, timeZone }: { task: D1RetestTaskView; tim
     {state.kind === "conflict" ? <p className="attempt-feedback error" role="alert">内容已更新，已同步最新版本。请确认选择后重新提交。请求编号：{state.requestId}</p> : null}
     {state.kind === "error" ? errorCopy(state) : null}
     <button type="button" onClick={() => { void submit(); }} disabled={disabled}>
-      {state.kind === "loading_case" ? "正在同步检查" : state.kind === "submitting" ? "正在提交" : state.kind === "conflict" ? "确认后重新提交" : "提交本次选择"}
+      {state.kind === "loading_case" ? "正在同步检查" : state.kind === "submitting" ? "正在提交" : resultUnconfirmed ? "请先确认任务状态" : state.kind === "conflict" ? "确认后重新提交" : "提交本次选择"}
     </button>
   </div>;
 }
