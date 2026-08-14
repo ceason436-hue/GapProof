@@ -1,0 +1,128 @@
+"use client";
+
+import {
+  type D1RetestTaskView,
+} from "@gapproof/contracts";
+import { useEffect, useState } from "react";
+import { ApiClientError } from "@/lib/api-client";
+import { createD1AttemptRequest, getCaseForD1Attempt, submitD1Attempt } from "@/lib/d1-attempt";
+import { formatTaskDateTime } from "@/lib/today-adapter";
+
+type SubmitState =
+  | { kind: "loading_case" }
+  | { kind: "idle" }
+  | { kind: "submitting" }
+  | { kind: "conflict"; requestId: string }
+  | { kind: "error"; code: string; requestId?: string }
+  | { kind: "success"; passed: boolean; state: "d7_scheduled" | "replan_required"; stateVersion: number; selectedChoiceId: string; scheduledFor: string | null };
+
+function errorState(error: unknown): Extract<SubmitState, { kind: "error" }> {
+  if (error instanceof ApiClientError) {
+    return { kind: "error", code: error.response.error.code, requestId: error.response.requestId };
+  }
+  return { kind: "error", code: "NETWORK_UNKNOWN" };
+}
+
+function errorCopy(state: Extract<SubmitState, { kind: "error" }>) {
+  const detail = state.code === "SCHEMA_INVALID" || state.code === "INVALID_INPUT"
+    ? "请选择一个选项后再试；你的选择仍保留。"
+    : state.code === "INVALID_TASK_STATE"
+      ? "这个检查状态已变化，请返回今日页查看最新安排。"
+      : state.code === "IDEMPOTENCY_KEY_REUSED"
+        ? "这次提交标识已被其他内容使用，请重新确认后再提交。"
+        : state.code === "RESOURCE_NOT_FOUND"
+          ? "没有找到这项检查，请返回今日页查看最新安排。"
+          : "网络结果未确认，未显示提交成功；请确认后再试。";
+  return <p className="attempt-feedback error" role="alert">{detail}{state.requestId ? ` 请求编号：${state.requestId}` : ""}</p>;
+}
+
+export function D1AttemptPanel({ task, timeZone }: { task: D1RetestTaskView; timeZone: string }) {
+  const [expectedVersion, setExpectedVersion] = useState<number | null>(null);
+  const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
+  const [state, setState] = useState<SubmitState>({ kind: "loading_case" });
+
+  const refreshCase = async () => {
+    setState({ kind: "loading_case" });
+    try {
+      const response = await getCaseForD1Attempt(task.caseId);
+      setExpectedVersion(response.data.stateVersion);
+      setState({ kind: "idle" });
+    } catch (error) {
+      setState(errorState(error));
+    }
+  };
+
+  useEffect(() => { void refreshCase(); }, [task.caseId]);
+
+  const submit = async () => {
+    if (expectedVersion === null || selectedChoiceId === null) return;
+    const body = createD1AttemptRequest(expectedVersion, task.item.id, selectedChoiceId);
+    if (!body) {
+      setState({ kind: "error", code: "INVALID_INPUT" });
+      return;
+    }
+    setState({ kind: "submitting" });
+    // A fresh UUID is created only for this confirmed user action. apiPost
+    // reuses this exact key and body once for unknown/retryable outcomes.
+    const idempotencyKey = crypto.randomUUID();
+    try {
+      const response = await submitD1Attempt(task.id, body, idempotencyKey);
+      const result = response.data;
+      setState({
+        kind: "success",
+        passed: result.passed,
+        state: result.state,
+        stateVersion: result.stateVersion,
+        selectedChoiceId: result.selectedChoiceId,
+        scheduledFor: result.scheduledRetest?.scheduledFor ?? null,
+      });
+    } catch (error) {
+      if (error instanceof ApiClientError && error.response.error.code === "VERSION_CONFLICT") {
+        try {
+          const latest = await getCaseForD1Attempt(task.caseId);
+          setExpectedVersion(latest.data.stateVersion);
+          setState({ kind: "conflict", requestId: error.response.requestId });
+        } catch (refreshError) {
+          setState(errorState(refreshError));
+        }
+        return;
+      }
+      setState(errorState(error));
+    }
+  };
+
+  if (state.kind === "success") {
+    return <article className="attempt-result" data-attempt-result={state.passed ? "passed" : "replan_required"}>
+      <span className="task-kind">本次提交已由服务端记录</span>
+      <h3>{state.passed ? "D+7 已安排" : "正在调整接下来的计划"}</h3>
+      <p>你本次选择：{state.selectedChoiceId}</p>
+      {state.passed && state.scheduledFor
+        ? <p>下一次延迟检查：{formatTaskDateTime(state.scheduledFor, timeZone)}。这只增加一条后续检查安排，不代表已经掌握。</p>
+        : <p>服务端正在等待异步任务处理；当前不会宣称已形成真实个性化调整。</p>}
+      <div className="config-detail">{state.state} · v{state.stateVersion}</div>
+    </article>;
+  }
+
+  const disabled = state.kind === "loading_case" || state.kind === "submitting" || selectedChoiceId === null;
+  return <div className="attempt-panel" data-d1-attempt-state={state.kind}>
+    <p className="read-only-note">选择后由服务端评分；页面不会显示答案键或评分映射。</p>
+    <fieldset disabled={state.kind === "loading_case" || state.kind === "submitting"}>
+      <legend>选择一个答案</legend>
+      <div className="attempt-choices">{task.item.choices.map(choice => <label key={choice.id}>
+        <input
+          type="radio"
+          name={`d1-${task.id}`}
+          value={choice.id}
+          checked={selectedChoiceId === choice.id}
+          onChange={() => { setSelectedChoiceId(choice.id); if (state.kind !== "submitting") setState({ kind: "idle" }); }}
+        />
+        <span>{choice.label}</span>
+      </label>)}</div>
+    </fieldset>
+    {state.kind === "conflict" ? <p className="attempt-feedback error" role="alert">内容已更新，已同步最新版本。请确认选择后重新提交。请求编号：{state.requestId}</p> : null}
+    {state.kind === "error" ? errorCopy(state) : null}
+    <button type="button" onClick={() => { void submit(); }} disabled={disabled}>
+      {state.kind === "loading_case" ? "正在同步检查" : state.kind === "submitting" ? "正在提交" : state.kind === "conflict" ? "确认后重新提交" : "提交本次选择"}
+    </button>
+  </div>;
+}

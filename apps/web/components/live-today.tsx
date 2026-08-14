@@ -1,5 +1,6 @@
 import type { D1RetestTaskView, GuidedInterventionTaskView } from "@gapproof/contracts";
 import { AppShell } from "./app-shell";
+import { D1AttemptPanel } from "./d1-attempt-panel";
 import { ApiClientError } from "@/lib/api-client";
 import { WebConfigurationError } from "@/lib/runtime-config";
 import {
@@ -80,9 +81,7 @@ function D1Current({ task, timeZone }: { task: D1RetestTaskView; timeZone: strin
     <h2>{task.title}</h2>
     <p>{task.item.prompt}</p>
     <TaskDates scheduledFor={task.scheduledFor} dueAt={task.dueAt} timeZone={timeZone}/>
-    <ul className="readonly-choices">{task.item.choices.map(choice => <li key={choice.id}>{choice.label}</li>)}</ul>
-    <p className="read-only-note">只读展示公开题面与选项；不会显示答案键，也不会提交选择。</p>
-    <button type="button" disabled aria-disabled="true">作答接入下一阶段</button>
+    <D1AttemptPanel task={task} timeZone={timeZone}/>
   </article>;
 }
 
@@ -147,7 +146,7 @@ export async function LiveToday() {
     }
 
     const actionLabel = model.current.kind === "selected"
-      ? model.current.task.taskType === "guided_intervention" ? "引导任务只读" : "作答接入下一阶段"
+      ? model.current.task.taskType === "guided_intervention" ? "引导任务只读" : "D+1 检查"
       : model.current.kind === "contract_error" ? "当前任务不可用" : "暂无当前任务";
     return <AppShell actionDisabled actionLabel={actionLabel}>
       <section className="today-page">
