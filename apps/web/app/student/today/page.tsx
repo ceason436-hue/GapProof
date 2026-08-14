@@ -2,8 +2,9 @@ import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { Icon } from "@/components/icons";
 import { getMockTodayView } from "@/lib/mock-adapter";
+import { LiveToday } from "@/components/live-today";
 
-type PageProps = { searchParams: Promise<{ state?: string }> };
+type PageProps = { searchParams: Promise<{ state?: string; source?: string }> };
 
 function Skeleton() {
   return <AppShell><section aria-busy="true" aria-label="正在加载今日安排" className="today-page"><div className="title-row"><div><div className="skeleton sk-title"/><div className="skeleton sk-line"/></div></div><div className="today-grid"><div><div className="skeleton sk-hero"/><div className="skeleton sk-overview"/></div><aside><div className="skeleton sk-side"/><div className="skeleton sk-side"/></aside></div><p className="loading-note">正在整理今日安排。可以先去做别的，完成后会出现在这里。</p></section></AppShell>;
@@ -27,7 +28,8 @@ function RegularToday() {
 }
 
 export default async function TodayPage({ searchParams }: PageProps) {
-  const { state } = await searchParams;
+  const { state, source } = await searchParams;
+  if (source === "api") return <LiveToday/>;
   const view = getMockTodayView(state);
   if (view.mode === "loading") return <Skeleton/>;
   if (view.mode === "new") return <NewUser/>;

@@ -8,7 +8,7 @@ const items = [
   ["plan", "7 日计划", "#"], ["progress", "我的进步", "#"], ["report", "学习报告", "#"],
 ] as const;
 
-export function AppShell({ children, actionHref = "/materials/demo/review", actionLabel = "开始学习" }: { children: React.ReactNode; actionHref?: string; actionLabel?: string }) {
+export function AppShell({ children, actionHref = "/materials/demo/review", actionLabel = "开始学习", actionDisabled = false }: { children: React.ReactNode; actionHref?: string; actionLabel?: string; actionDisabled?: boolean }) {
   return <div className="app-shell">
     <header className="topbar">
       <div className="brand-crop"><Image src={logo} alt="知隙 GapProof" priority className="brand-source" /></div>
@@ -17,7 +17,9 @@ export function AppShell({ children, actionHref = "/materials/demo/review", acti
     </header>
     <aside className="sidebar" aria-label="学生主导航">
       <nav>{items.map(([icon, label, href], index) => <Link key={label} href={href} className={`nav-item ${index === 0 ? "active" : ""}`} aria-current={index === 0 ? "page" : undefined}><Icon name={icon}/><span>{label}</span></Link>)}</nav>
-      <Link className="fixed-action" href={actionHref}>{actionLabel}</Link>
+      {actionDisabled
+        ? <span className="fixed-action disabled" aria-disabled="true">{actionLabel}</span>
+        : <Link className="fixed-action" href={actionHref}>{actionLabel}</Link>}
     </aside>
     <details className="mobile-menu"><summary aria-label="打开学生导航"><Icon name="menu"/></summary><nav>{items.map(([_, label, href]) => <Link key={label} href={href}>{label}</Link>)}</nav></details>
     <main className="content">{children}</main>

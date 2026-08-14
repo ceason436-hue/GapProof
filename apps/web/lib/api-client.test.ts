@@ -6,8 +6,10 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("api client", () => {
   it("parses a shared response envelope", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: { ok: true }, requestId: "r", traceId: "t" }), { status: 200 })));
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: { ok: true }, requestId: "r", traceId: "t" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
     await expect(apiGet("/api/v1/health", Type.Object({ ok: Type.Boolean() }))).resolves.toMatchObject({ data: { ok: true } });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/v1/health");
   });
   it("forwards AbortSignal", async () => {
     const controller = new AbortController();

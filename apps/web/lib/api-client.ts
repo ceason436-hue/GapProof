@@ -1,6 +1,7 @@
 import { Value } from "@sinclair/typebox/value";
 import type { Static, TSchema } from "@sinclair/typebox";
 import { ApiErrorResponseSchema, apiResponseSchema, type ApiErrorResponse, type ApiResponse } from "@gapproof/contracts";
+import { ensureContractFormats } from "./contract-formats";
 
 export class ApiClientError extends Error {
   constructor(readonly response: ApiErrorResponse, readonly status: number) {
@@ -16,18 +17,19 @@ const wait = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve, r
   signal?.addEventListener("abort", () => { clearTimeout(timer); reject(signal.reason); }, { once: true });
 });
 
-export async function apiRequest<S extends TSchema>(
-  path: `/api/v1/${string}`,
+export async function apiRequestUrl<S extends TSchema>(
+  url: string,
   schema: S,
   options: RequestOptions = {},
 ): Promise<ApiResponse<Static<S>>> {
+  ensureContractFormats();
   const method = options.method ?? "GET";
   if (method === "POST" && !options.idempotencyKey) throw new Error("POST requests require an Idempotency-Key");
   const maxAttempts = method === "GET" ? 3 : 2;
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
-      const response = await fetch(path, {
+      const response = await fetch(url, {
         method,
         ...(options.signal ? { signal: options.signal } : {}),
         headers: {
@@ -54,6 +56,14 @@ export async function apiRequest<S extends TSchema>(
     await wait(method === "GET" ? 250 * (attempt + 1) : 500, options.signal);
   }
   throw new Error("API_REQUEST_EXHAUSTED");
+}
+
+export function apiRequest<S extends TSchema>(
+  path: `/api/v1/${string}`,
+  schema: S,
+  options: RequestOptions = {},
+) {
+  return apiRequestUrl(path, schema, options);
 }
 
 export const apiGet = <S extends TSchema>(path: `/api/v1/${string}`, schema: S, signal?: AbortSignal) =>
