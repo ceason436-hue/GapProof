@@ -2,10 +2,10 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.15"
+version: "0.1.16"
 status: "ACTIVE"
 current_stage: "初赛方案冲刺；Phase A 后端 Thin Slice 已生成竞争性错因并进入等待确认小题"
-last_updated: "2026-08-14"
+last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md"
@@ -67,6 +67,7 @@ Product scope and acceptance criteria are maintained in [PRD.md](./PRD.md); tech
 6. 新事实必须附来源、适用范围、访问日期和事实类型。
 7. 新决策必须说明理由、替代方案、影响范围和是否替代旧决策。
 8. 工作完成后提交结构化更新包，由“集成窗口”统一更新本文件。
+9. 需要推送 Git 时，固定先更新 `TDD.md` 的 Push Log，再以与日志一致的清晰摘要提交和推送，并在同一工作轮次核对远端结果。
 
 建议新窗口使用以下提示：
 
@@ -1587,7 +1588,7 @@ Demo 至少现场演一个真实失败分支，视频中再展示两个。
 
 ### 18.3 已确定的轻量技术栈
 
-详细架构、选型对比和系统边界以 `TDD.md v0.3.8` 为准。本节只保留主文档级决策：
+详细架构、选型对比和系统边界以 `TDD.md v0.3.9` 为准。本节只保留主文档级决策：
 
 - 语言：TypeScript 单栈；Bun 管理 workspace 和依赖，Node.js 24 LTS 作为生产运行时。
 - 前端：Next.js App Router + React，桌面与平板完整支持，手机保留基础响应式访问和内容适配的 Web。
@@ -1605,7 +1606,7 @@ Demo 至少现场演一个真实失败分支，视频中再展示两个。
 - OCR：阿里云读光教育试卷识别为主，腾讯云高精度 OCR 为通用/备用；统一 `OcrProvider`。
 - 知识增强：PostgreSQL 全文 + pgvector；LangChain.js 仅作 Retriever 辅助层，KnowledgeService 和固定数据库工具由项目自建。
 - MVP Agent：固定六节点 `LoadCaseContext → RetrieveKnowledge → GenerateHypotheses → SelectProbe → EvaluateEvidence → CreateDecisionProposal`。
-- 数据基线：UUIDv7、PostgreSQL 16+、核心表/索引/枚举/删除策略以 `TDD.md v0.3.8` 为准。
+- 数据基线：UUIDv7、PostgreSQL 16+、核心表/索引/枚举/删除策略以 `TDD.md v0.3.9` 为准。
 - 部署：杭州阿里云单区域联网 Docker Compose；真实 Provider 用于演示，Mock 仅用于测试和故障注入。
 
 当前规模不需要 Kubernetes、Kafka、复杂分布式多 Agent 平台或大规模微调。
@@ -1801,7 +1802,7 @@ mastery:
 
 ### 技术类
 
-6. `TDD.md`：技术路线、系统边界、架构选型和工程门禁（v0.3.8，当前版本）。
+6. `TDD.md`：技术路线、系统边界、架构选型和工程门禁（v0.3.9，当前版本）。
 7. `Agent-State-Machine-Spec.md`
 8. `Tool-Contract-Spec.md`
 9. `OpenAPI.yaml`
@@ -2003,7 +2004,7 @@ review_date:
 | DEC-028 | MVP Agent 固定为六节点 LangGraph.js 图 | accepted | 新增节点必须更新图版本、Schema 和 Golden Cases |
 | DEC-029 | 所有工具先完成接口、Schema、Mock 和错误处理；verify_item/schedule_retest 做 MVP 最小实现 | accepted | 工具边界或 Provider 能力变化 |
 | DEC-030 | escalate_human 先创建待处理记录；analyze_speech/score_writing 暂缓真实能力 | accepted | 真实人工、语音或写作试点启动 |
-| DEC-031 | UUIDv7 + PostgreSQL 16+，完整表结构和删除策略以 TDD v0.3.8 为准 | accepted | 数据规模、扩展支持或合规要求变化 |
+| DEC-031 | UUIDv7 + PostgreSQL 16+，完整表结构和删除策略以 TDD v0.3.9 为准 | accepted | 数据规模、扩展支持或合规要求变化 |
 | DEC-032 | TDD 详细 API 路由为唯一正式接口 | accepted | API 版本升级或新客户端边界产生 |
 | DEC-033 | 杭州阿里云单区域联网 Docker Compose，真实 Provider 演示，Mock 仅测试/故障注入 | accepted | 比赛网络、并发、合规或可用性要求变化 |
 | DEC-034 | DeepSeek `deepseek-v4-flash`、MiniMax `minimax-m3`、腾讯混元 Embedding 作为当前模型配置 | accepted | 账号权限、供应商模型版本或评测结果变化 |
@@ -2087,6 +2088,11 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.16 — 2026-08-15
+
+- 将“先更新 TDD Push Log，再以一致的清晰摘要提交并推送，最后核对远端”写入新窗口接管规则，作为长期强制执行顺序。
+- 将当前技术文档引用提升至 TDD v0.3.9；PRD 与 DESIGN 继续引用 TDD 的统一 Git 治理规则，无需重复维护另一套流程。
 
 ### v0.1.15 — 2026-08-14
 

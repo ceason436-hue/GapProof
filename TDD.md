@@ -2,14 +2,14 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.8"
+version: "0.3.9"
 status: "DRAFT_FOR_IMPLEMENTATION"
-last_updated: "2026-08-14"
+last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.15"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.16"
   - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.8"
 ---
 
@@ -1440,7 +1440,7 @@ MVP 工具 Schema 最小字段：
 | TECH-022 | MVP Agent 固定为六节点 LangGraph.js 图 | accepted | 业务闭环增加新节点时更新图版本和 Golden Cases |
 | TECH-023 | 所有工具先完成接口、Schema、Mock 和错误处理；verify_item/schedule_retest 做 MVP 最小实现 | accepted | 工具边界或真实 Provider 能力发生变化 |
 | TECH-024 | escalate_human 先创建待处理记录；analyze_speech/score_writing 暂缓真实能力 | accepted | 真实人工流程、语音或写作试点启动 |
-| TECH-025 | UUIDv7 + PostgreSQL 16+；核心表字段/索引/枚举/删除策略按 TDD v0.3.8 | accepted | 数据规模、托管扩展或合规要求变化 |
+| TECH-025 | UUIDv7 + PostgreSQL 16+；核心表字段/索引/枚举/删除策略按 TDD v0.3.9 | accepted | 数据规模、托管扩展或合规要求变化 |
 | TECH-026 | 采用 TDD 详细 API 路由作为唯一正式接口 | accepted | API 版本升级或新客户端边界产生 |
 | TECH-027 | 杭州阿里云单区域联网 Docker Compose；真实 Provider 演示，Mock 仅测试/故障注入 | accepted | 比赛网络、并发、合规或可用性要求变化 |
 | TECH-028 | DeepSeek `deepseek-v4-flash` 主分析，MiniMax `minimax-m3` 教学/降级，腾讯混元 Embedding 1024 维 | accepted | 账号权限、供应商模型版本或评测结果变化 |
@@ -1488,15 +1488,23 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 1. 每个提交使用清楚、可追溯的摘要，优先采用 `feat:`、`fix:`、`test:`、`docs:`、`refactor:`、`chore:` 等前缀；提交正文说明主要变更、状态迁移、契约/数据影响和验证结果。
 2. 每次推送前检查待提交文件，禁止提交 `.env`、密钥、真实学生数据、未授权教材/试卷全文和本地生成目录；当前私有材料目录由 `.gitignore` 排除。
 3. 每次推送前按风险运行相应测试和类型检查；未通过时不得将失败状态写成已完成。
-4. 每个推送批次必须在下表追加日志，供后续窗口恢复上下文；至少记录 Push ID、日期、分支、提交摘要、主要内容和验证结果。
-5. Push Log 描述该次推送包含的功能/文档提交；Git commit SHA、作者和精确时间以远端 Git 历史为准，避免为记录提交自身 SHA 形成递归修改。
+4. 每次推送的固定顺序为：先在下表追加 Push Log（至少记录 Push ID、日期、分支、预期提交摘要、主要内容和验证结果）→ 审核暂存范围与验证结果 → 使用与日志一致的清晰摘要创建提交 → 推送 → 在同一工作轮次核对本地与远端分支；不得先推送、后补日志。
+5. 随待推送提交一起记录的日志可预登记为 `pushed`，但必须在该工作轮次完成远端核对；若推送失败，必须在重试前将状态改为真实状态，禁止让未成功推送的批次保留为 `pushed`。
+6. Push Log 描述该次推送包含的功能/文档提交；Git commit SHA、作者和精确时间以远端 Git 历史为准，避免为记录提交自身 SHA 形成递归修改。
 
 | Push ID | 日期 | 分支 | 状态 | 提交摘要 | 主要内容 | 验证 |
 |---|---|---|---|---|---|---|
 | PUSH-001 | 2026-08-14 | `main` | `pushed` | `feat: establish Phase A backend thin slice` | 建立首个 GitHub 基线：四份项目文档、Bun workspace、领域状态机、PostgreSQL/Drizzle、Fastify API、pg-boss Worker、fake OCR、识别确认、竞争性错因与等待确认小题闭环；同时纳入 Stitch 公开参考资产、教材/试题来源元数据、私有转换工具与 Git 隔离门禁 | 21 条快速测试、16 条真实数据库/API/Worker 集成测试及 TypeScript 严格类型检查通过；私有材料和生成目录未进入暂存区；远端 `main` 已核对为首个基线提交 |
 | PUSH-002 | 2026-08-14 | `main` | `pushed` | `docs: finalize GitHub version-management log` | 将首个基线推送成功状态回写 TDD，提升 PROJECT_MASTER/TDD 文档版本并对齐当前引用，形成可供后续窗口恢复的 GitHub 版本管理闭环 | 文档链接和版本引用检查通过；仅提交 PROJECT_MASTER/TDD，不夹带并行任务中的未提交文件；推送后核对本地与 `origin/main` 一致 |
+| PUSH-003 | 2026-08-15 | `main` | `pushed` | `docs: enforce pre-push TDD logging order` | 将“先更新 TDD Push Log，再使用一致的清晰摘要提交和推送，最后核对远端”写入 TDD 正式规则及 PROJECT_MASTER 新窗口接管规则 | 四文档职责与版本引用检查通过；仅提交 PROJECT_MASTER/TDD，不夹带并行任务中的未提交文件；推送后核对本地与 `origin/main` 一致 |
 
 ## 27. 变更日志
+
+### v0.3.9 — 2026-08-15
+
+- 明确强制顺序：先更新 TDD Push Log，再审核、提交、推送并核对远端；禁止先推送后补日志。
+- 规定日志预登记 `pushed` 时必须在同一工作轮次验证远端，失败则在重试前纠正状态。
+- 登记 `PUSH-003` 文档规则强化批次，并将上游项目总纲引用提升至 PROJECT_MASTER v0.1.16。
 
 ### v0.3.8 — 2026-08-14
 
