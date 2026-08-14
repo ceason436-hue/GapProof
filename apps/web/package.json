@@ -9,6 +9,7 @@
     "start": "bun scripts/serve.mjs start",
     "screenshots": "node tests/visual-regression.mjs",
     "screenshots:api": "node tests/real-api-visual-regression.mjs",
+    "test:browser:d1": "node tests/d1-browser-fixture.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
