@@ -2,15 +2,15 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.14"
+version: "0.3.16"
 status: "DRAFT_FOR_IMPLEMENTATION"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.21"
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.13"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.23"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.15"
 ---
 
 # 知隙 GapProof 技术设计文档（TDD）
@@ -403,7 +403,7 @@ Tailwind CSS 可随 Next.js 默认方案使用；组件层推荐 Radix Primitive
 - “重点任务卡” CTA 和侧栏固定“开始学习”必须从同一 `current_task_id` 读取，并导航至同一路由/同一任务状态；不能在前端分别创建任务、写入完成状态或绕开 API。
 - 本周学习足迹、待确认、最近进展、稍后继续和下次检查均为服务端任务/计划状态的只读投影；无数据、加载、失败和演示数据时必须使用 7.3 的状态 UX，不得伪造已完成或已掌握。
 - 当前首页不依赖显式全局搜索或“新报告”提醒；后续增加紧凑搜索时，必须有键盘焦点、可访问名称和独立的空/失败状态。
-- F0 已在隔离 Worktree 完成构建、自动化和 1440×900/1366×768 截图验收：顶部栏、Logo/品牌位与侧栏固定，仅 `.content` 内容区滚动；当前仍为 Mock 数据、尚未合并 `main` 或接入真实 API。
+- F0 已完成构建、自动化和 1440×900/1366×768 截图验收并合并 `main`：顶部栏、Logo/品牌位与侧栏固定，仅 `.content` 内容区滚动；当前仍为 Mock 数据且未接入真实 API。
 
 ### 7.6 前端—API 集成执行规范 V1
 
@@ -1179,10 +1179,10 @@ Serverless 很适合短 API 和自动扩容，但 OCR、多轮模型、报告、
 - 已实现 `GET /v1/students/{studentId}/today` 与 `POST /v1/tasks/{taskId}/submit`；完成干预后在同一事务写入 `intervention_completed { taskId, d1TaskId, d1ScheduledFor }`、完成原任务、创建 `scheduled` 的 D+1 任务并推进到 `d1_scheduled`。`scheduledFor = completedAt + 24h`，`dueAt = scheduledFor + 12h`，mastery 仅为 `pending_retest`。
 - 完成干预的同一 PostgreSQL 事务现通过 pg-boss `fromDrizzle(transaction, sql)` 写入延迟 `retest.due` Job，Job ID 与 D+1 task ID 相同；独立 `RetestDueWorker` 只把指定 Case、指定 `d1_retest` 的 `scheduled → ready`，重复/并发执行只生效一次。
 - 新增 `Clock/SystemClock/FixedClock`、`RetestDueJobData { caseId, taskId }`、`app.demo_clocks`、`demo_clock_advanced` 与迁移 `packages/db/drizzle/0004_goofy_vindicator.sql`；虚拟时钟按 Case 隔离、带版本并受环境开关保护。
-- F0 已在隔离 Worktree 完成技术与视觉验收，但仍为 Mock 数据且尚未合并 `main`，不构成真实端到端接口接入证据。
-- 当前证据为 31 条快速测试通过、35 条真实 PostgreSQL/API/Worker 集成测试通过、TypeScript 严格类型检查通过。
+- F0 已完成技术与视觉验收并合并 `main`，但仍为 Mock 数据且未接入真实 API，不构成真实端到端接口接入证据。
+- 当前证据为 38 条快速测试通过、35 条真实 PostgreSQL/API/Worker 集成测试通过、TypeScript 严格类型检查、Next.js production build 和双视口视觉/滚动回归通过。
 
-该快照不等于 Phase A 完成：F0 尚未合并和接入真实 API；真实上传/对象存储、真实 AI 干预、真实题库、D+1 作答评分、`retest_evaluated`、D+7、失败重排、通知、报告、真实 OCR/模型 Provider 和完整 Playwright Demo 仍未实现。
+该快照不等于 Phase A 完成：F0 尚未接入真实 API；真实上传/对象存储、真实 AI 干预、真实题库、D+1 作答评分、`retest_evaluated`、D+7、失败重排、通知、报告、真实 OCR/模型 Provider 和完整端到端 Playwright Demo 仍未实现。
 
 ### 21.1 Phase A：Thin Slice（先证明闭环）
 
@@ -1507,7 +1507,7 @@ MVP 工具 Schema 最小字段：
 | TECH-022 | MVP Agent 固定为六节点 LangGraph.js 图 | accepted | 业务闭环增加新节点时更新图版本和 Golden Cases |
 | TECH-023 | 所有工具先完成接口、Schema、Mock 和错误处理；verify_item/schedule_retest 做 MVP 最小实现 | accepted | 工具边界或真实 Provider 能力发生变化 |
 | TECH-024 | escalate_human 先创建待处理记录；analyze_speech/score_writing 暂缓真实能力 | accepted | 真实人工流程、语音或写作试点启动 |
-| TECH-025 | UUIDv7 + PostgreSQL 16+；核心表字段/索引/枚举/删除策略按 TDD v0.3.14 | accepted | 数据规模、托管扩展或合规要求变化 |
+| TECH-025 | UUIDv7 + PostgreSQL 16+；核心表字段/索引/枚举/删除策略按 TDD v0.3.16 | accepted | 数据规模、托管扩展或合规要求变化 |
 | TECH-026 | 采用 TDD 详细 API 路由作为唯一正式接口 | accepted | API 版本升级或新客户端边界产生 |
 | TECH-027 | 杭州阿里云单区域联网 Docker Compose；真实 Provider 演示，Mock 仅测试/故障注入 | accepted | 比赛网络、并发、合规或可用性要求变化 |
 | TECH-028 | DeepSeek `deepseek-v4-flash` 主分析，MiniMax `minimax-m3` 教学/降级，腾讯混元 Embedding 1024 维 | accepted | 账号权限、供应商模型版本或评测结果变化 |
@@ -1566,10 +1566,24 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-003 | 2026-08-15 | `main` | `pushed` | `docs: enforce pre-push TDD logging order` | 将“先更新 TDD Push Log，再使用一致的清晰摘要提交和推送，最后核对远端”写入 TDD 正式规则及 PROJECT_MASTER 新窗口接管规则 | 四文档职责与版本引用检查通过；仅提交 PROJECT_MASTER/TDD，不夹带并行任务中的未提交文件；推送后核对本地与 `origin/main` 一致 |
 | PUSH-004 | 2026-08-15 | `main` | `pushed` | `docs: align MVP material-governance boundaries` | 同步版权页不可取得、教材以 ISBN/PDF 哈希/内容快照锁定、答题卡与音频私有留存但排除 MVP，以及仅对白名单材料逐份视觉核验的决定 | 四份主文档与两份材料登记一致性检查通过；原始教材、试题、音频和私有转换结果未进入 Git；推送后核对本地与 `origin/main` 一致 |
 | PUSH-005 | 2026-08-15 | `main` | `pushed` | `feat: evaluate diagnostic probe attempts` | 新增 attempts TypeBox 契约、内部评分规则、确定性评分器和 Fastify 路由；以 `probe_evaluated` 将 Case 从 `probe_required` 推进到 `intervention_ready`，并同步四份主文档 | 24 条快速测试、20 条真实 PostgreSQL/API/Worker 集成测试及 TypeScript 严格类型检查通过；覆盖正确/错误答案、答案与评分映射不泄露、幂等重放/键复用、并发重复、旧版本、非法状态与非法选项；推送后核对本地与 `origin/main` 一致 |
-| PUSH-006 | 2026-08-15 | `main` | `pushed` | `feat: generate interventions and schedule D+1 retests` | 新增确定性最小干预工具契约与 Worker 生成路径、`intervention_active` 状态、今日任务查询、任务完成接口、`app.tasks` 与迁移；完成干预后原子创建 D+1 复测并同步四份主文档 | 27 条快速测试、23 条真实 PostgreSQL/API/Worker 集成测试及 TypeScript 严格类型检查通过；暂存范围与私有材料隔离已审计，本工作轮次须在推送后核对本地 `main` 与 `origin/main` 一致 |
-| PUSH-007 | 2026-08-15 | `main` | `pushed` | `feat: activate due retests with demo clock` | 新增生产 `retest.due` 延迟 Job 与 `SystemClock` Worker、事务内入队、受开关保护且按 Case 隔离的版本化 Demo 虚拟时钟、`demo_clock_advanced` 审计、`app.demo_clocks` 与 0004 migration；同步四文档，前端 F0 仅登记为已在隔离 Worktree 验收且尚未合并 | 31 条快速测试、35 条真实 PostgreSQL/API/Worker 集成测试、TypeScript 严格类型检查及 `git diff --check` 通过；暂存范围与私有材料隔离已审计，本工作轮次须在推送后核对本地 `main` 与 `origin/main` 一致 |
+| PUSH-006 | 2026-08-15 | `main` | `pushed` | `feat: generate interventions and schedule D+1 retests` | 新增确定性最小干预工具契约与 Worker 生成路径、`intervention_active` 状态、今日任务查询、任务完成接口、`app.tasks` 与迁移；完成干预后原子创建 D+1 复测并同步四份主文档 | 27 条快速测试、23 条真实 PostgreSQL/API/Worker 集成测试及 TypeScript 严格类型检查通过；暂存范围与私有材料隔离已审计，推送后已核对本地 `main` 与 `origin/main` 一致 |
+| PUSH-007 | 2026-08-15 | `main` | `pushed` | `feat: activate due retests with demo clock` | 新增生产 `retest.due` 延迟 Job 与 `SystemClock` Worker、事务内入队、受开关保护且按 Case 隔离的版本化 Demo 虚拟时钟、`demo_clock_advanced` 审计、`app.demo_clocks` 与 0004 migration；同步四文档，前端 F0 仅登记为已在隔离 Worktree 验收且尚未合并 | 31 条快速测试、35 条真实 PostgreSQL/API/Worker 集成测试、TypeScript 严格类型检查及 `git diff --check` 通过；暂存范围与私有材料隔离已审计，推送后已核对本地 `main` 与 `origin/main` 一致 |
+| PUSH-008 | 2026-08-15 | `main` | `pushed` | `feat: build student today frontend shell` | 合并 `apps/web` Next.js F0：Stitch V1.1 今日页多状态、固定顶栏/侧栏应用壳、Mock Adapter、共享 contracts 薄 API client、同源代理、路由骨架、双视口截图与视觉/滚动回归；同步四文档为已合并但未接真实 API | 38 条快速测试、35 条真实 PostgreSQL/API/Worker 集成测试、workspace/apps-web 严格类型检查、Next.js production build、1440×900/1366×768 视觉/滚动回归及 `git diff --check` 通过；精确范围审计未纳入私有资产、环境文件或生成缓存；用户明确授权后推送 `origin/main`，并核对本地与远端 SHA 一致 |
 
 ## 27. 变更日志
+
+### v0.3.16 — 2026-08-15
+
+- 在用户明确授权后完成 PUSH-008 发布门禁，将状态更新为 `pushed`，并要求同轮核对本地与远端 SHA。
+- 同步 PROJECT_MASTER v0.1.23、PRD v0.1.15 与 DESIGN v0.2.13；保持 F0 为 Mock、未接真实 API。
+- 将数据基线的当前版本引用更新为 TDD v0.3.16；不改变接口、状态机、数据库或 Worker 行为。
+
+### v0.3.15 — 2026-08-15
+
+- 合并 Next.js `apps/web` F0：多状态今日页、应用壳、路由骨架、Mock Adapter、共享 contracts 薄 API client 与同源 `/api` 代理。
+- 登记 1440×900/1366×768 production 截图与滚动回归：顶部栏、Logo/品牌位和侧栏固定，仅 `.content` 滚动；保留 Stitch V1.1 书本越界裁切。
+- 快速测试基线更新为 38 条；35 条真实数据库/API/Worker 集成测试、严格类型检查与前端 production build 继续通过；登记 `PUSH-008`。
+- 同步 PROJECT_MASTER v0.1.22、PRD v0.1.14 与 DESIGN v0.2.12；F0 仍为 Mock 且未接真实业务 API。
 
 ### v0.3.14 — 2026-08-15
 
