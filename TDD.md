@@ -2,15 +2,15 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.21"
+version: "0.3.22"
 status: "DRAFT_FOR_IMPLEMENTATION"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.28"
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.20"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.29"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.21"
 ---
 
 # 知隙 GapProof 技术设计文档（TDD）
@@ -906,6 +906,8 @@ demo      合成 Case 和虚拟时钟，仅 Demo 环境
 - 默认拒绝公开 ACL。
 - 删除工作流同时处理原图、派生图、缓存、向量和报告。
 
+`[PROTOTYPE]` 当前最小实现使用 `SourceAssetStorage` 与 `LocalDirectorySourceAssetStorage`，只有同时配置 `GAPPROOF_UPLOAD_DIR` 和 `GAPPROOF_UPLOAD_SIGNING_SECRET` 才启用。`POST /v1/source-assets/uploads` 要求 `Idempotency-Key`，对学生及可选 Case 做归属校验，创建 `pending_upload` 元数据并返回 10 分钟 HMAC-SHA256 上传 token；token 绑定 asset/student/hash/size/MIME/expiry。浏览器随后经同源 `/api/v1/source-assets/{assetId}/content` PUT 原始字节，API 使用 `x-gapproof-upload-token`、常量时间签名校验及实际 MIME/大小/hash 校验，受控目录以完整临时文件的原子硬链接落盘，再将元数据标记为 `uploaded`。相同字节的重复 PUT 幂等；内容不匹配保持 `pending_upload` 可重试。该目录适配器只用于本地 Demo，不等同于生产 S3、恶意文件扫描、OCR 或完整删除工作流。
+
 ## 13. 后台任务、调度与主动性
 
 ### 13.1 选择 pg-boss
@@ -1200,11 +1202,11 @@ Serverless 很适合短 API 和自动扩容，但 OCR、多轮模型、报告、
 - 新增 `Clock/SystemClock/FixedClock`、`RetestDueJobData { caseId, taskId }`、`app.demo_clocks`、`demo_clock_advanced` 与迁移 `packages/db/drizzle/0004_goofy_vindicator.sql`；虚拟时钟按 Case 隔离、带版本并受环境开关保护。
 - 已实现任务详情、Today `timeZone/currentTaskId/overview` 与 guided/D1/D7 判别联合；`currentTaskId` 仅选择 ready D1/guided，overview 为真实只读投影，D7 在 attempts 未实现前保持只读。
 - 已实现 D1 `POST /v1/tasks/{taskId}/attempts`：私有 `exact-choice-v1` 评分、`retest_evaluated(kind=d1)`、D7 144h + 12h 调度、失败事务内 `case.replan` Job、Worker 异步合成干预骨架，以及迁移 `0005_flawless_omega_flight.sql`。幂等重放、并发去重、乐观锁、事务回滚与公开响应脱敏均有测试。
-- 已实现 `app.source_assets`、冻结 `asset_type/asset_processing_status` 与迁移 `0006_source_assets.sql`：数据库只保存对象键、hash、MIME、大小、所有权/保留期和处理状态；真实文件字节、OCR 文本与答案不入该表。真实上传 API、StorageAdapter 和对象存储仍未实现。
+- 已实现 `app.source_assets`、冻结 `asset_type/asset_processing_status` 与迁移 `0006_source_assets.sql`；共享 contracts、幂等创建 API、HMAC 短期 token、同源内容 PUT、本地目录 StorageAdapter 与前端 `/materials/new` 已形成真实字节上传最小闭环。数据库仍只保存对象元数据，文件名不入库，公开响应不暴露对象键/token/文件名；本地目录适配器不是生产 S3，也不启动 OCR、Case 或学习结论。
 - F0 Mock、F1b 只读 API、F1c ready D1 客户端作答与真实 overview 已完成对应技术门禁并合并 `main`；无参数入口默认使用 API，Mock 仅显式启用。F1c 消费共享 contracts、权威 Case 版本和 UUIDv7 幂等意图，受控 HTTP 浏览器 Fixture 已验证同源 POST、成功脱敏回显、冲突重新确认和网络未知锁定。
-- 当前证据为 85 条快速测试通过、44 条真实 PostgreSQL/API/Worker 集成测试通过、56 条 apps/web 测试通过、migration drift、Mock/API 双视口、D1 浏览器 Fixture、TypeScript 严格类型检查和 Next.js production build 通过。
+- 当前证据为 96 条快速测试通过、46 条真实 PostgreSQL/API/Worker 集成测试通过、62 条 apps/web 测试通过、migration drift、Mock/API 双视口、上传与 D1 浏览器 Fixture、TypeScript 严格类型检查和 Next.js production build 通过。
 
-该快照不等于 Phase A 完成：默认 Today 入口虽已使用 API，但真实上传/对象存储、真实 AI 干预、真实题库、D7 作答评分、可执行的重排上限和差异化真实重排内容、通知、报告、真实 OCR/模型 Provider 和完整端到端 Playwright Demo 仍未实现。
+该快照不等于 Phase A 完成：真实图片字节虽可上传到受控本地目录，但生产对象存储、真实 OCR/识别确认、真实 AI 干预、真实题库、D7 作答评分、可执行的重排上限和差异化真实重排内容、通知、报告、真实模型 Provider 和上传到修复证明的完整端到端 Playwright Demo 仍未实现。
 
 ### 21.1 Phase A：Thin Slice（先证明闭环）
 
@@ -1598,8 +1600,15 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-011 | 2026-08-15 | `main` | `pushed` | `test: prove D1 browser submission safety` | 合并受控 HTTP D1 浏览器 Fixture，覆盖真实点击同源 POST、UUIDv7、权威请求体、成功脱敏回显、冲突重新确认与网络未知锁定；同步四主文档、长期任务模型默认和“项目本身初赛验收”边界，保持默认入口为 Mock、D7/首页投影/报告/完整业务闭环未完成 | 78 条快速测试、41 条真实 PostgreSQL/API/Worker 集成测试、48 条 apps/web 测试、D1 浏览器 Fixture、全仓 TypeScript、Next.js production build、API 视觉/滚动回归、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；须在同轮推送并核对本地/远端 SHA 一致 |
 | PUSH-012 | 2026-08-15 | `main` | `pushed` | `feat: project factual Today overview` | 合并 Today overview 共享 contracts、PostgreSQL 只读投影、API 必返字段和显式 API 页面；展示连续 7 个学生本地日、`weeklyGoal:null`、真实待确认数、最多两条脱敏进展与最早 scheduled D1/D7 检查；缺失 overview 不回退 Mock，默认入口仍为 Mock，D7/报告/完整闭环仍未完成 | 82 条快速测试、42 条真实 PostgreSQL/API/Worker 集成测试、53 条 apps/web 测试、D1 浏览器 Fixture、API 双视口视觉回归、全仓 TypeScript、Next.js production build、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；须在同轮推送并核对本地/远端 SHA 一致 |
 | PUSH-013 | 2026-08-15 | `main` | `pushed` | `feat: default Today to API and persist source asset metadata` | Today 无参数入口默认进入真实 API、Mock 仅由 `?source=mock` 显式启用；新增 `app.source_assets`、冻结枚举与 0006 migration，只存对象元数据/所有权/保留期/处理状态，不含文件字节、OCR 文本或答案；真实上传/StorageAdapter/D7/报告仍未完成 | 85 条快速测试、44 条真实 PostgreSQL/API/Worker 集成测试、56 条 apps/web 测试、Drizzle migration drift、Mock/API 双视口、D1 浏览器 Fixture、全仓 TypeScript、Next.js production build、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；须在同轮推送并核对本地/远端 SHA 一致 |
+| PUSH-014 | 2026-08-15 | `main` | `local_checkpoint` | `feat: upload source asset bytes safely` | 冻结上传 contracts；实现幂等创建、10 分钟 HMAC token、同源原始字节 PUT、实际 MIME/大小/hash 校验、本地目录原子落盘与 `pending_upload → uploaded`；`/materials/new` 使用 SHA-256、UUIDv7 和同 key/token 单次未知结果重试，成功页明确识别尚未开始。仅为本地 Demo StorageAdapter，不是生产 S3/OCR/学习效果；D7/报告/重排产品决策继续暂停 | 96 条快速测试、46 条真实 PostgreSQL/API/Worker 集成测试、62 条 apps/web 测试、Drizzle migration drift、Mock/API 双视口、上传与 D1 浏览器 Fixture、上传双视口截图、全仓 TypeScript、Next.js production build 已通过；当前按用户要求暂停，尚未执行最终暂存隐私审计、文档后全量复跑、推送或远端 SHA 核对。下次继续前须先复核四文档交接规则并向用户复述确认 |
 
 ## 27. 变更日志
+
+### v0.3.22 — 2026-08-15
+
+- 冻结 source asset 上传 DTO，并实现幂等创建、短期 HMAC 授权、同源内容 PUT、实际 MIME/大小/hash 校验、本地目录原子写入及上传状态持久化。
+- `/materials/new` 以真实文件选择、浏览器 SHA-256、UUIDv7 意图和同 key/token 单次未知结果重试完成最小上传；成功只声明上传完成、识别尚未开始。
+- 同步 PROJECT_MASTER v0.1.29、PRD v0.1.21、DESIGN v0.2.19 与 PUSH-014 `local_checkpoint`；96 fast、46 integration、62 apps/web、migration drift、Mock/API/上传视觉、上传与 D1 浏览器 Fixture、全仓 TypeScript 与 Next build 已通过。当前暂停，尚未推送。
 
 ### v0.3.21 — 2026-08-15
 

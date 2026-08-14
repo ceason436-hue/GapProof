@@ -38,10 +38,11 @@ export function verifySourceAssetUploadToken(
   expected: Omit<SourceAssetTokenClaims, "expiresAt">,
   now = Date.now(),
 ): boolean {
-  const [encodedPayload, providedSignature] = token.split(".");
-  if (encodedPayload === undefined || providedSignature === undefined) {
+  const tokenParts = token.split(".");
+  if (tokenParts.length !== 2) {
     return false;
   }
+  const [encodedPayload, providedSignature] = tokenParts as [string, string];
   let payload: string;
   try {
     payload = Buffer.from(encodedPayload, "base64url").toString("utf8");

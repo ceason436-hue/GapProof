@@ -99,7 +99,7 @@ export function SourceUpload({ studentId }: { studentId: string }) {
         UploadedSourceAssetViewSchema,
         intent.file,
         {
-          Authorization: `Bearer ${target.token}`,
+          "x-gapproof-upload-token": target.token,
           "Content-Type": intent.file.type,
         },
       );

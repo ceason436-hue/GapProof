@@ -692,6 +692,7 @@ export async function buildApi(options: BuildApiOptions) {
       }
 
       const result = await initiateSourceAssetUpload(options.database, {
+        assetId: uuidv7(),
         idempotencyRecordId: uuidv7(),
         idempotencyKey,
         studentId: ownership.student.id,
@@ -747,6 +748,9 @@ export async function buildApi(options: BuildApiOptions) {
       if (asset === undefined || asset.deletedAt !== null) {
         throw new ResourceNotFoundError("Source asset", request.params.assetId);
       }
+      if (asset.studentId === null) {
+        throw new ApiHttpError(500, "STORED_SOURCE_ASSET_INVALID", "The stored source asset is invalid.");
+      }
       const token = request.headers["x-gapproof-upload-token"];
       if (
         typeof token !== "string" ||
@@ -755,7 +759,7 @@ export async function buildApi(options: BuildApiOptions) {
           token,
           {
             assetId: asset.id,
-            studentId: asset.studentId ?? "",
+            studentId: asset.studentId,
             sha256: asset.sha256,
             byteSize: asset.byteSize,
             mimeType: asset.mimeType,
@@ -764,7 +768,7 @@ export async function buildApi(options: BuildApiOptions) {
       ) {
         throw new ApiHttpError(401, "UPLOAD_TOKEN_INVALID", "The upload token is invalid or expired.");
       }
-      const contentType = String(request.headers["content-type"] ?? "").split(";", 1)[0];
+      const contentType = String(request.headers["content-type"] ?? "").split(";", 1)[0] ?? "";
       const bytes = Buffer.isBuffer(request.body)
         ? request.body
         : Buffer.from(request.body as unknown as Uint8Array);

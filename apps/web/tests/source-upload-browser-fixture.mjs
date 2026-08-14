@@ -23,7 +23,8 @@ const token = "fixture-upload-token-012345678901234567890123";
 const bytes = Buffer.from("synthetic browser upload bytes\n", "utf8");
 const sha256 = createHash("sha256").update(bytes).digest("hex");
 const fileName = "fixture-wrong-answer.png";
-const uploadPath = `/v1/source-assets/${assetId}/content`;
+const uploadPath = `/api/v1/source-assets/${assetId}/content`;
+const backendUploadPath = `/v1/source-assets/${assetId}/content`;
 
 const initiated = {
   assetId,
@@ -71,11 +72,11 @@ const fixtureServer = createServer(async (request, response) => {
     json(response, 200, envelope(initiated));
     return;
   }
-  if (request.method === "PUT" && request.url === uploadPath) {
+  if (request.method === "PUT" && request.url === backendUploadPath) {
     const body = await readBody(request);
     puts.push({
       body,
-      authorization: request.headers.authorization,
+      uploadToken: request.headers["x-gapproof-upload-token"],
       contentType: request.headers["content-type"],
     });
     if (scenario === "put-network-unknown" && puts.length === 1) {
@@ -131,7 +132,12 @@ const visitAndUpload = async (page, expectedPosts = 1, expectedPuts = 1) => {
   assert(await page.getByText("真实上传会在后续阶段接入", { exact: false }).count() === 0, "Upload route still renders the F0 placeholder.");
   await choose(page);
   await page.getByRole("button", { name: "开始上传" }).click();
-  await page.locator("[data-upload-success]").waitFor();
+  try {
+    await page.locator("[data-upload-success]").waitFor();
+  } catch (error) {
+    const statusText = await page.locator("[data-upload-status]").textContent().catch(() => null);
+    throw new Error(`Upload UI did not reach success. scenario=${scenario}; status=${statusText}; posts=${posts.length}; puts=${puts.length}; server=${serverOutput}`, { cause: error });
+  }
   assert(posts.length === expectedPosts, `Expected ${expectedPosts} POST requests, observed ${posts.length}.`);
   assert(puts.length === expectedPuts, `Expected ${expectedPuts} PUT requests, observed ${puts.length}.`);
   assert(uuidV7Pattern.test(posts[0].idempotencyKey ?? ""), "Upload intent did not use UUIDv7.");
@@ -145,7 +151,7 @@ const visitAndUpload = async (page, expectedPosts = 1, expectedPuts = 1) => {
   }), "POST body did not match the shared upload contract.");
   assert(posts.every(post => post.idempotencyKey === posts[0].idempotencyKey), "POST retry changed the idempotency key.");
   assert(browserPaths.every(path => path === "/api/v1/source-assets/uploads" || path === `/api/v1/source-assets/${assetId}/content`), "Browser did not use same-origin API paths.");
-  assert(puts.every(put => put.authorization === `Bearer ${token}`), "PUT did not use the short-lived upload token.");
+  assert(puts.every(put => put.uploadToken === token), "PUT did not use the short-lived upload token.");
   assert(puts.every(put => put.contentType === "image/png"), "PUT changed the original Content-Type.");
   assert(puts.every(put => Buffer.compare(put.body, bytes) === 0), "PUT changed the original bytes.");
   const visibleText = await page.locator("body").innerText();

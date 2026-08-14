@@ -1,7 +1,11 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { SourceUpload } from "./source-upload";
+
+vi.mock("next/image", () => ({
+  default: ({ alt }: { alt: string }) => createElement("img", { alt }),
+}));
 
 describe("SourceUpload component", () => {
   it("renders an accessible image picker and neutral initial state", () => {

@@ -20,6 +20,7 @@ describe("source asset upload tokens", () => {
     expect(verifySourceAssetUploadToken("test-secret", token, claims, 1_800_000_000_000)).toBe(true);
     expect(verifySourceAssetUploadToken("wrong-secret", token, claims, 1_800_000_000_000)).toBe(false);
     expect(verifySourceAssetUploadToken("test-secret", `${token}x`, claims, 1_800_000_000_000)).toBe(false);
+    expect(verifySourceAssetUploadToken("test-secret", `${token}.ignored`, claims, 1_800_000_000_000)).toBe(false);
     expect(verifySourceAssetUploadToken("test-secret", token, claims, 1_900_000_000_001)).toBe(false);
     expect(
       verifySourceAssetUploadToken(

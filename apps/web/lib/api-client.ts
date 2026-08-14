@@ -14,7 +14,7 @@ type RequestOptions = {
   signal?: AbortSignal;
   method?: "GET" | "POST" | "PUT";
   body?: unknown;
-  rawBody?: BodyInit;
+  rawBody?: NonNullable<Parameters<typeof fetch>[1]>["body"];
   headers?: Record<string, string>;
   idempotencyKey?: string;
   cache?: "no-store";
@@ -53,7 +53,12 @@ export async function apiRequestUrl<S extends TSchema>(
             ? {}
             : { body: JSON.stringify(options.body) }),
       });
-      const payload: unknown = await response.json();
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch {
+        throw new TypeError("API_RESPONSE_NOT_JSON");
+      }
       if (response.ok) {
         if (!Value.Check(apiResponseSchema(schema), payload)) throw new Error("API_RESPONSE_INVALID");
         return payload as unknown as ApiResponse<Static<S>>;
@@ -95,7 +100,7 @@ export const apiPost = <S extends TSchema>(
 export const apiPut = <S extends TSchema>(
   path: `/api/v1/${string}`,
   schema: S,
-  body: BodyInit,
+  body: NonNullable<Parameters<typeof fetch>[1]>["body"],
   headers: Record<string, string>,
   signal?: AbortSignal,
 ) => apiRequest(path, schema, {

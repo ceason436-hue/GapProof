@@ -1,6 +1,4 @@
 import { and, eq } from "drizzle-orm";
-import { v7 as uuidv7 } from "uuid";
-
 import type { Database } from "./client.ts";
 import { isPostgresUniqueViolation } from "./case-repository.ts";
 import {
@@ -23,6 +21,7 @@ export class SourceAssetIdempotencyKeyReusedError extends Error {
 }
 
 export interface InitiateSourceAssetUploadInput {
+  readonly assetId: string;
   readonly idempotencyRecordId: string;
   readonly idempotencyKey: string;
   readonly studentId: string;
@@ -97,7 +96,7 @@ export async function initiateSourceAssetUpload(
     return { asset: existing, replayed: true } as const;
   }
 
-  const assetId = uuidv7();
+  const assetId = input.assetId;
   const objectKey = `source-assets/${input.tenantId}/${input.studentId}/${assetId}`;
   const values: NewSourceAssetRow = {
     id: assetId,

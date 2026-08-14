@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { link, mkdir, open, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 export const MAX_SOURCE_ASSET_BYTES = 10_485_760;
@@ -47,7 +47,7 @@ export class LocalDirectorySourceAssetStorage implements SourceAssetStorage {
     try {
       await writeFile(temporary, input.bytes, { flag: "wx" });
       try {
-        await rename(temporary, destination);
+        await link(temporary, destination);
         return { created: true };
       } catch (error) {
         if (!isFileExistsError(error)) {
