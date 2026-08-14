@@ -2,6 +2,7 @@ import { createDatabase } from "@gapproof/db";
 import { createJobQueue } from "@gapproof/jobs";
 
 import { createRunNextWorker } from "./run-next-worker.ts";
+import { createRetestDueWorker } from "./retest-due-worker.ts";
 
 const databaseUrl =
   process.env.DATABASE_URL ??
@@ -15,9 +16,15 @@ queue.boss.on("error", (error) => {
 
 await queue.start();
 const worker = createRunNextWorker({ database: database.db, queue });
+const retestDueWorker = createRetestDueWorker({
+  database: database.db,
+  queue,
+});
 await worker.start();
+await retestDueWorker.start();
 
 async function shutdown() {
+  await retestDueWorker.stop();
   await worker.stop();
   await queue.stop();
   await database.close();
@@ -25,4 +32,3 @@ async function shutdown() {
 
 process.once("SIGINT", () => void shutdown());
 process.once("SIGTERM", () => void shutdown());
-

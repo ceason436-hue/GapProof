@@ -2,7 +2,13 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createDatabase } from "./client.ts";
-import { cases, learningEvidenceEvents, students, tasks } from "./schema.ts";
+import {
+  cases,
+  demoClocks,
+  learningEvidenceEvents,
+  students,
+  tasks,
+} from "./schema.ts";
 import {
   persistCaseTransition,
   VersionConflictError,
@@ -27,6 +33,7 @@ describeWithDatabase("PostgreSQL evidence ledger", () => {
   beforeAll(async () => {
     await database.db.delete(tasks);
     await database.db.delete(learningEvidenceEvents);
+    await database.db.delete(demoClocks);
     await database.db.delete(cases);
     await database.db.delete(students);
 
@@ -92,6 +99,28 @@ describeWithDatabase("PostgreSQL evidence ledger", () => {
         .update(cases)
         .set({ stateVersion: -1 })
         .where(eq(cases.id, ids.case)),
+    ).rejects.toThrow();
+  });
+
+  it("enforces one nonnegative-version Demo clock per Case", async () => {
+    await database.db.insert(demoClocks).values({
+      id: "0198a111-1111-7000-8000-000000000010",
+      caseId: ids.case,
+      effectiveNow: new Date("2026-08-15T00:00:00.000Z"),
+    });
+
+    await expect(
+      database.db.insert(demoClocks).values({
+        id: "0198a111-1111-7000-8000-000000000011",
+        caseId: ids.case,
+        effectiveNow: new Date("2026-08-15T00:00:01.000Z"),
+      }),
+    ).rejects.toThrow();
+    await expect(
+      database.db
+        .update(demoClocks)
+        .set({ clockVersion: -1 })
+        .where(eq(demoClocks.caseId, ids.case)),
     ).rejects.toThrow();
   });
 

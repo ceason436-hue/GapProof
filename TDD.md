@@ -2,15 +2,15 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.13"
+version: "0.3.14"
 status: "DRAFT_FOR_IMPLEMENTATION"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.20"
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.12"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.21"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.13"
 ---
 
 # 知隙 GapProof 技术设计文档（TDD）
@@ -403,6 +403,7 @@ Tailwind CSS 可随 Next.js 默认方案使用；组件层推荐 Radix Primitive
 - “重点任务卡” CTA 和侧栏固定“开始学习”必须从同一 `current_task_id` 读取，并导航至同一路由/同一任务状态；不能在前端分别创建任务、写入完成状态或绕开 API。
 - 本周学习足迹、待确认、最近进展、稍后继续和下次检查均为服务端任务/计划状态的只读投影；无数据、加载、失败和演示数据时必须使用 7.3 的状态 UX，不得伪造已完成或已掌握。
 - 当前首页不依赖显式全局搜索或“新报告”提醒；后续增加紧凑搜索时，必须有键盘焦点、可访问名称和独立的空/失败状态。
+- F0 已在隔离 Worktree 完成构建、自动化和 1440×900/1366×768 截图验收：顶部栏、Logo/品牌位与侧栏固定，仅 `.content` 内容区滚动；当前仍为 Mock 数据、尚未合并 `main` 或接入真实 API。
 
 ### 7.6 前端—API 集成执行规范 V1
 
@@ -443,6 +444,13 @@ Tailwind CSS 可随 Next.js 默认方案使用；组件层推荐 Radix Primitive
 - 干预任务提交必须恰好覆盖服务端任务的全部步骤；不完整或额外步骤返回 `INVALID_INPUT`。非 `ready` 干预任务返回 `INVALID_TASK_STATE`；旧 Case 版本返回 `VERSION_CONFLICT`；非法 Case 状态返回 `INVALID_CASE_TRANSITION`；资源缺失沿用 `RESOURCE_NOT_FOUND`。
 - 幂等重放返回 `200`，同一个 key 配不同 Body 返回 `IDEMPOTENCY_KEY_REUSED`；并发相同提交只允许一个 `intervention_completed` 事件和一个 D+1 任务。
 - 公开 DTO 禁止包含 `selectedHypothesisId`、答案键、工具 `warnings` 或内部版本；前端只能消费共享 contracts，不得从数据库 payload 反推私有字段。
+
+Demo 虚拟时钟接口已冻结为：
+
+- `POST /v1/demo/clock/advance` 仅在 `GAPPROOF_DEMO_CLOCK_ENABLED === "true"`（或测试显式注入）时注册，关闭时路由为 `404`；必须携带 `Idempotency-Key`。
+- 请求为 `{ caseId, clockId, expectedClockVersion, advanceBySeconds }`；三个 ID/版本字段按共享 Schema 校验，`advanceBySeconds` 为 `1..2678400` 秒。
+- 成功数据为 `{ caseId, clockId, clockVersion, previousEffectiveNow, effectiveNow, activatedTaskIds }`；时间为 ISO 8601，任务 ID 稳定排序，不返回答案或内部 payload。
+- 相同幂等键同 Body 重放返回原响应；同 key 异 Body 返回 `IDEMPOTENCY_KEY_REUSED`。旧时钟版本返回 `VERSION_CONFLICT`，`details={ resource:"demo_clock", resourceId, expected, actual }`；Case 已绑定其他时钟返回 `DEMO_CLOCK_MISMATCH`；非 `simulation` Case 返回 `DEMO_CASE_REQUIRED`。
 
 ## 8. API 与后端选择
 
@@ -521,7 +529,7 @@ type ApiErrorResponse = {
 };
 ```
 
-API 错误码至少包括：`INVALID_INPUT`、`SCHEMA_INVALID`、`UNAUTHORIZED`、`FORBIDDEN`、`RESOURCE_NOT_FOUND`、`VERSION_CONFLICT`、`INVALID_CASE_TRANSITION`、`INVALID_TASK_STATE`、`IDEMPOTENCY_KEY_REUSED`、`STORED_EVENT_INVALID`、`LOW_CONFIDENCE`、`NO_SOURCE`、`SOURCE_CONFLICT`、`PROVIDER_TIMEOUT`、`PROVIDER_RATE_LIMITED`、`PROVIDER_UNAVAILABLE`、`HUMAN_REVIEW_REQUIRED`、`TOOL_DISABLED`、`INTERNAL_ERROR`。
+API 错误码至少包括：`INVALID_INPUT`、`SCHEMA_INVALID`、`UNAUTHORIZED`、`FORBIDDEN`、`RESOURCE_NOT_FOUND`、`VERSION_CONFLICT`、`INVALID_CASE_TRANSITION`、`INVALID_TASK_STATE`、`IDEMPOTENCY_KEY_REUSED`、`STORED_EVENT_INVALID`、`DEMO_CLOCK_MISMATCH`、`DEMO_CASE_REQUIRED`、`LOW_CONFIDENCE`、`NO_SOURCE`、`SOURCE_CONFLICT`、`PROVIDER_TIMEOUT`、`PROVIDER_RATE_LIMITED`、`PROVIDER_UNAVAILABLE`、`HUMAN_REVIEW_REQUIRED`、`TOOL_DISABLED`、`INTERNAL_ERROR`。
 
 ## 9. Agent 技术路线
 
@@ -897,7 +905,11 @@ pg-boss 运行在 PostgreSQL 上，适合初期的 OCR、模型、报告、D+1/D
 
 ### 13.3 虚拟时钟
 
-Demo 使用 `demo_clock` 服务：只计算“Case 的演示当前时间”，不修改操作系统时钟。所有由虚拟时间产生的事件写 `simulation=true` 和 `clock_id`。生产构建可完全禁用 Demo routes。
+Demo 使用 `demo_clock` 服务：只计算“Case 的演示当前时间”，不修改操作系统时钟。每个 Case 在 `app.demo_clocks` 只有一条权威、带 `clock_version` 的时间线；推进时锁定 Case/时钟，在同一事务累加时间、仅激活该 Case 已到期的 `scheduled` D+1 任务并写 `demo_clock_advanced` 审计。
+
+`demo_clock_advanced` payload 保存原始 request、冻结 response 和 `{ simulation:true, clockId, previousEffectiveNow, effectiveNow, activatedTaskIds }`。它是审计事件，不属于 `CaseEventSchema`，不得进入 `transitionCase` reducer；因此推进虚拟时间不改变 Case `state/stateVersion` 或 mastery。生产默认不注册该路由，仅在显式环境开关开启时可用。
+
+生产时间使用可注入的 `Clock` 契约：API/Worker 默认 `SystemClock`，测试使用 `FixedClock`。`retest.due` Worker 以系统时间判断 `scheduledFor <= now`；如 pg-boss 提前投递则抛错并有限重试，不能成功吞掉未到期 Job。
 
 ## 14. OCR 与多模态边界
 
@@ -1165,10 +1177,12 @@ Serverless 很适合短 API 和自动扩容，但 OCR、多轮模型、报告、
 - attempts 写入具备请求 Schema、幂等重放/键复用拒绝、并发去重、乐观锁、非法状态/探针/选项校验；评分事件保存请求、结果与上游 hypotheses 事件引用。
 - Worker 在 `intervention_ready` 调用确定性 `FakeBuildInterventionAdapter`，引用 `probe_evaluated` 事件与评分结果，生成 3 步/8 分钟的最小干预；`intervention_generated { taskId }`、Case `intervention_active` 状态和 `guided_intervention` 任务在同一事务持久化。
 - 已实现 `GET /v1/students/{studentId}/today` 与 `POST /v1/tasks/{taskId}/submit`；完成干预后在同一事务写入 `intervention_completed { taskId, d1TaskId, d1ScheduledFor }`、完成原任务、创建 `scheduled` 的 D+1 任务并推进到 `d1_scheduled`。`scheduledFor = completedAt + 24h`，`dueAt = scheduledFor + 12h`，mastery 仅为 `pending_retest`。
-- 新增 `app.task_type`、`app.task_status`、`intervention_active`、`intervention_generated` 与 `app.tasks`；迁移为 `packages/db/drizzle/0003_graceful_maggott.sql`，任务原子生成/完成和查询由 `packages/db/src/task-repository.ts` 承担。
-- 当前证据为 27 条快速测试通过、23 条真实 PostgreSQL/API/Worker 集成测试通过、TypeScript 严格类型检查通过。
+- 完成干预的同一 PostgreSQL 事务现通过 pg-boss `fromDrizzle(transaction, sql)` 写入延迟 `retest.due` Job，Job ID 与 D+1 task ID 相同；独立 `RetestDueWorker` 只把指定 Case、指定 `d1_retest` 的 `scheduled → ready`，重复/并发执行只生效一次。
+- 新增 `Clock/SystemClock/FixedClock`、`RetestDueJobData { caseId, taskId }`、`app.demo_clocks`、`demo_clock_advanced` 与迁移 `packages/db/drizzle/0004_goofy_vindicator.sql`；虚拟时钟按 Case 隔离、带版本并受环境开关保护。
+- F0 已在隔离 Worktree 完成技术与视觉验收，但仍为 Mock 数据且尚未合并 `main`，不构成真实端到端接口接入证据。
+- 当前证据为 31 条快速测试通过、35 条真实 PostgreSQL/API/Worker 集成测试通过、TypeScript 严格类型检查通过。
 
-该快照不等于 Phase A 完成：前端仍在独立 Worktree 验证，真实上传/对象存储、真实 AI 干预、真实题库、到期执行/虚拟时钟、D+1 作答评分、D+7、失败重排、报告、真实 OCR/模型 Provider 和完整 Playwright Demo 仍未实现。
+该快照不等于 Phase A 完成：F0 尚未合并和接入真实 API；真实上传/对象存储、真实 AI 干预、真实题库、D+1 作答评分、`retest_evaluated`、D+7、失败重排、通知、报告、真实 OCR/模型 Provider 和完整 Playwright Demo 仍未实现。
 
 ### 21.1 Phase A：Thin Slice（先证明闭环）
 
@@ -1256,7 +1270,7 @@ LoadCaseContext
 | `redact_pii`、`retrieve_curriculum` | 仍按第一阶段计划完成接口、Schema、fake/mock、错误处理并接入 MVP 主链 |
 | `score_objective`、`update_mastery`、`render_report` | MVP 实现确定性/规则版本 |
 | `verify_item` | MVP 最小实现：唯一答案、技能绑定、答案格式、错因标签、审核状态、教材版本、版权来源 |
-| `schedule_retest` | MVP 最小实现：D+1/D+7、应用内任务、虚拟时钟、取消/重排；不接短信/微信/邮件 |
+| `schedule_retest` | 已实现 D+1 任务创建、事务内延迟 Job、生产到期激活和受开关保护的 Case 级虚拟时钟；D+7、取消/重排及短信/微信/邮件尚未实现 |
 | `escalate_human` | 只创建 `human_review_tasks` 待处理记录，不接真实人工系统 |
 | `analyze_speech` | 仅接口、Schema、Mock 和错误处理；暂缓真实 ASR/发音分析 |
 | `score_writing` | 仅接口、Schema、Mock 和错误处理；暂缓真实写作评分 |
@@ -1281,6 +1295,7 @@ LoadCaseContext
 | `knowledge_items` | `id`；可选 Skill 外键 | 地区/年级/版次/单元；全文索引；`VECTOR(1024)` |
 | `diagnostic_probes` | `id`；Skill 外键 | Skill+审核状态；版本 |
 | `tasks` | `id`；Student/Case 外键 | Student+计划时间；状态+计划时间 |
+| `demo_clocks` | `id`；`case_id → cases.id` | 每 Case 唯一；`clock_version >= 0` |
 | `jobs` | `id`；可选 Case 外键 | `dedupe_key` 唯一；状态+可执行时间 |
 | `human_review_tasks` | `id`；Case/Student 外键 | 状态+优先级+创建时间 |
 
@@ -1345,6 +1360,11 @@ tasks(id uuidv7 PK, student_id uuidv7 NOT NULL, case_id uuidv7 NULL, task_type t
   scheduled_for timestamptz NOT NULL, due_at timestamptz NULL, status task_status NOT NULL,
   payload jsonb NOT NULL, source_event_id uuidv7 NOT NULL, created_at timestamptz NOT NULL,
   completed_at timestamptz NULL)
+
+demo_clocks(id uuid PK, case_id uuid UNIQUE NOT NULL FK cases(id),
+  clock_version integer NOT NULL DEFAULT 0 CHECK(clock_version >= 0),
+  effective_now timestamptz NOT NULL, created_at timestamptz NOT NULL,
+  updated_at timestamptz NOT NULL)
 
 jobs(id uuidv7 PK, job_type text NOT NULL, status job_status NOT NULL, case_id uuidv7 NULL,
   dedupe_key text UNIQUE NOT NULL, payload jsonb NOT NULL, attempt_count integer NOT NULL DEFAULT 0,
@@ -1487,7 +1507,7 @@ MVP 工具 Schema 最小字段：
 | TECH-022 | MVP Agent 固定为六节点 LangGraph.js 图 | accepted | 业务闭环增加新节点时更新图版本和 Golden Cases |
 | TECH-023 | 所有工具先完成接口、Schema、Mock 和错误处理；verify_item/schedule_retest 做 MVP 最小实现 | accepted | 工具边界或真实 Provider 能力发生变化 |
 | TECH-024 | escalate_human 先创建待处理记录；analyze_speech/score_writing 暂缓真实能力 | accepted | 真实人工流程、语音或写作试点启动 |
-| TECH-025 | UUIDv7 + PostgreSQL 16+；核心表字段/索引/枚举/删除策略按 TDD v0.3.13 | accepted | 数据规模、托管扩展或合规要求变化 |
+| TECH-025 | UUIDv7 + PostgreSQL 16+；核心表字段/索引/枚举/删除策略按 TDD v0.3.14 | accepted | 数据规模、托管扩展或合规要求变化 |
 | TECH-026 | 采用 TDD 详细 API 路由作为唯一正式接口 | accepted | API 版本升级或新客户端边界产生 |
 | TECH-027 | 杭州阿里云单区域联网 Docker Compose；真实 Provider 演示，Mock 仅测试/故障注入 | accepted | 比赛网络、并发、合规或可用性要求变化 |
 | TECH-028 | DeepSeek `deepseek-v4-flash` 主分析，MiniMax `minimax-m3` 教学/降级，腾讯混元 Embedding 1024 维 | accepted | 账号权限、供应商模型版本或评测结果变化 |
@@ -1547,8 +1567,16 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-004 | 2026-08-15 | `main` | `pushed` | `docs: align MVP material-governance boundaries` | 同步版权页不可取得、教材以 ISBN/PDF 哈希/内容快照锁定、答题卡与音频私有留存但排除 MVP，以及仅对白名单材料逐份视觉核验的决定 | 四份主文档与两份材料登记一致性检查通过；原始教材、试题、音频和私有转换结果未进入 Git；推送后核对本地与 `origin/main` 一致 |
 | PUSH-005 | 2026-08-15 | `main` | `pushed` | `feat: evaluate diagnostic probe attempts` | 新增 attempts TypeBox 契约、内部评分规则、确定性评分器和 Fastify 路由；以 `probe_evaluated` 将 Case 从 `probe_required` 推进到 `intervention_ready`，并同步四份主文档 | 24 条快速测试、20 条真实 PostgreSQL/API/Worker 集成测试及 TypeScript 严格类型检查通过；覆盖正确/错误答案、答案与评分映射不泄露、幂等重放/键复用、并发重复、旧版本、非法状态与非法选项；推送后核对本地与 `origin/main` 一致 |
 | PUSH-006 | 2026-08-15 | `main` | `pushed` | `feat: generate interventions and schedule D+1 retests` | 新增确定性最小干预工具契约与 Worker 生成路径、`intervention_active` 状态、今日任务查询、任务完成接口、`app.tasks` 与迁移；完成干预后原子创建 D+1 复测并同步四份主文档 | 27 条快速测试、23 条真实 PostgreSQL/API/Worker 集成测试及 TypeScript 严格类型检查通过；暂存范围与私有材料隔离已审计，本工作轮次须在推送后核对本地 `main` 与 `origin/main` 一致 |
+| PUSH-007 | 2026-08-15 | `main` | `pushed` | `feat: activate due retests with demo clock` | 新增生产 `retest.due` 延迟 Job 与 `SystemClock` Worker、事务内入队、受开关保护且按 Case 隔离的版本化 Demo 虚拟时钟、`demo_clock_advanced` 审计、`app.demo_clocks` 与 0004 migration；同步四文档，前端 F0 仅登记为已在隔离 Worktree 验收且尚未合并 | 31 条快速测试、35 条真实 PostgreSQL/API/Worker 集成测试、TypeScript 严格类型检查及 `git diff --check` 通过；暂存范围与私有材料隔离已审计，本工作轮次须在推送后核对本地 `main` 与 `origin/main` 一致 |
 
 ## 27. 变更日志
+
+### v0.3.14 — 2026-08-15
+
+- 实现 `Clock` 抽象、生产 `SystemClock`、测试 `FixedClock`、pg-boss `retest.due` 延迟 Job 与独立到期 Worker；干预完成与延迟 Job 在同一 PostgreSQL 事务提交。
+- 冻结 `POST /v1/demo/clock/advance` 请求/响应、开关、幂等、版本冲突和 Case 隔离规则；登记 `demo_clock_advanced` 不进入 Case reducer 的审计边界。
+- 登记 `app.demo_clocks`、`0004_goofy_vindicator.sql` 与 31 fast / 35 integration / strict typecheck 基线；记录随本工作轮次提交、推送并核对远端的 `PUSH-007`。
+- 同步 PROJECT_MASTER v0.1.21、PRD v0.1.13 与 DESIGN v0.2.11；准确记录 F0 已验收但尚未合并/接入真实 API。
 
 ### v0.3.13 — 2026-08-15
 

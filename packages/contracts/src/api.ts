@@ -195,6 +195,55 @@ export const TaskCompletionViewSchema = Type.Object({
 
 export type TaskCompletionView = Static<typeof TaskCompletionViewSchema>;
 
+export const DemoClockAdvanceRequestSchema = Type.Object({
+  caseId: Type.String({ format: "uuid" }),
+  clockId: Type.String({ format: "uuid" }),
+  expectedClockVersion: Type.Integer({ minimum: 0 }),
+  advanceBySeconds: Type.Integer({
+    minimum: 1,
+    maximum: 31 * 24 * 60 * 60,
+  }),
+});
+
+export type DemoClockAdvanceRequest = Static<
+  typeof DemoClockAdvanceRequestSchema
+>;
+
+export const DemoClockAdvanceViewSchema = Type.Object({
+  caseId: Type.String({ format: "uuid" }),
+  clockId: Type.String({ format: "uuid" }),
+  clockVersion: Type.Integer({ minimum: 1 }),
+  previousEffectiveNow: Type.String({ format: "date-time" }),
+  effectiveNow: Type.String({ format: "date-time" }),
+  activatedTaskIds: Type.Array(Type.String({ format: "uuid" })),
+});
+
+export type DemoClockAdvanceView = Static<
+  typeof DemoClockAdvanceViewSchema
+>;
+
+export const RetestDueJobDataSchema = Type.Object({
+  caseId: Type.String({ format: "uuid" }),
+  taskId: Type.String({ format: "uuid" }),
+});
+
+export type RetestDueJobData = Static<typeof RetestDueJobDataSchema>;
+
+export function isRetestDueJobData(value: unknown): value is RetestDueJobData {
+  const uuidPattern =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "caseId" in value &&
+    typeof value.caseId === "string" &&
+    uuidPattern.test(value.caseId) &&
+    "taskId" in value &&
+    typeof value.taskId === "string" &&
+    uuidPattern.test(value.taskId)
+  );
+}
+
 export const RunNextRequestSchema = Type.Object({
   expectedVersion: Type.Integer({ minimum: 0 }),
 });

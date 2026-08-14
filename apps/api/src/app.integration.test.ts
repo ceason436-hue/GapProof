@@ -5,27 +5,35 @@ import type {
   ApiResponse,
   AttemptView,
   CaseView,
+  DemoClockAdvanceView,
   HypothesesView,
   TaskCompletionView,
   TodayTasksView,
 } from "@gapproof/contracts";
 import {
   apiIdempotencyRecords,
+  activateDueRetestTask,
   cases,
   createDatabase,
+  demoClocks,
   eq,
   learningEvidenceEvents,
   runMigrations,
   students,
   tasks,
 } from "@gapproof/db";
-import { createJobQueue } from "@gapproof/jobs";
-import { createRunNextWorker } from "@gapproof/worker";
+import { FixedClock } from "@gapproof/domain";
+import { createJobQueue, RETEST_DUE_QUEUE } from "@gapproof/jobs";
+import {
+  createRetestDueWorker,
+  createRunNextWorker,
+} from "@gapproof/worker";
 
 import { buildApi } from "./app.ts";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const describeWithDatabase = databaseUrl === undefined ? describe.skip : describe;
+const fixedNow = "2026-08-15T00:00:00.000Z";
 
 async function waitForState(
   api: Awaited<ReturnType<typeof buildApi>>,
@@ -118,28 +126,74 @@ async function createInterventionReadyCase(
   return prepared;
 }
 
+async function createD1ScheduledCase(
+  api: Awaited<ReturnType<typeof buildApi>>,
+  keyPrefix: string,
+) {
+  const prepared = await createInterventionReadyCase(api, keyPrefix);
+  await api.inject({
+    method: "POST",
+    url: `/v1/cases/${prepared.caseId}/commands/run-next`,
+    headers: { "idempotency-key": `${keyPrefix}-intervention` },
+    payload: { expectedVersion: 4 },
+  });
+  await waitForState(api, prepared.caseId, "intervention_active");
+  const today = await api.inject({
+    method: "GET",
+    url: `/v1/students/${prepared.studentId}/today`,
+  });
+  const intervention = today.json<ApiResponse<TodayTasksView>>().data.tasks[0];
+  expect(intervention).toBeDefined();
+  const completed = await api.inject({
+    method: "POST",
+    url: `/v1/tasks/${intervention?.id}/submit`,
+    headers: { "idempotency-key": `${keyPrefix}-complete` },
+    payload: {
+      expectedVersion: 5,
+      completedStepIds: intervention?.steps.map(({ id }) => id),
+    },
+  });
+  expect(completed.statusCode).toBe(200);
+  const completion = completed.json<ApiResponse<TaskCompletionView>>().data;
+  return { ...prepared, completion };
+}
+
 describeWithDatabase("Fastify API and run-next worker", () => {
   const database = createDatabase(databaseUrl ?? "");
   const queue = createJobQueue(databaseUrl ?? "");
   let api: Awaited<ReturnType<typeof buildApi>>;
   let worker: ReturnType<typeof createRunNextWorker>;
+  let retestDueWorker: ReturnType<typeof createRetestDueWorker>;
 
   beforeAll(async () => {
     await runMigrations(database.db);
     await database.db.delete(tasks);
     await database.db.delete(learningEvidenceEvents);
+    await database.db.delete(demoClocks);
     await database.db.delete(apiIdempotencyRecords);
     await database.db.delete(cases);
     await database.db.delete(students);
 
     await queue.start();
+    await queue.boss.deleteAllJobs(RETEST_DUE_QUEUE);
     worker = createRunNextWorker({ database: database.db, queue });
     await worker.start();
-    api = await buildApi({ database: database.db, queue });
+    retestDueWorker = createRetestDueWorker({
+      database: database.db,
+      queue,
+    });
+    await retestDueWorker.start();
+    api = await buildApi({
+      database: database.db,
+      queue,
+      clock: new FixedClock(fixedNow),
+      demoClockEnabled: true,
+    });
   });
 
   afterAll(async () => {
     await api.close();
+    await retestDueWorker.stop();
     await worker.stop();
     await queue.stop();
     await database.close();
@@ -796,6 +850,17 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     expect(storedTasks).toHaveLength(2);
     expect(storedTasks.filter(({ status }) => status === "completed")).toHaveLength(1);
     expect(storedTasks.filter(({ status }) => status === "scheduled")).toHaveLength(1);
+    const dueJob = await queue.boss.getJobById<{
+      caseId: string;
+      taskId: string;
+    }>(RETEST_DUE_QUEUE, body.data.scheduledRetest.id);
+    expect(dueJob?.data).toEqual({
+      caseId,
+      taskId: body.data.scheduledRetest.id,
+    });
+    expect(dueJob?.startAfter.toISOString()).toBe(
+      body.data.scheduledRetest.scheduledFor,
+    );
   }, 15_000);
 
   it("rejects incomplete, stale, and concurrent duplicate completions safely", async () => {
@@ -865,4 +930,434 @@ describeWithDatabase("Fastify API and run-next worker", () => {
       events.filter((event) => event.eventType === "intervention_completed"),
     ).toHaveLength(1);
   }, 15_000);
+
+  it("keeps a D+1 task scheduled before due and activates it exactly at due", async () => {
+    const prepared = await createD1ScheduledCase(api, "demo-clock-boundary-v1");
+    const clockId = "0198b111-1111-7000-8000-000000000001";
+
+    const beforeDue = await api.inject({
+      method: "POST",
+      url: "/v1/demo/clock/advance",
+      headers: { "idempotency-key": "demo-clock-before-due-v1" },
+      payload: {
+        caseId: prepared.caseId,
+        clockId,
+        expectedClockVersion: 0,
+        advanceBySeconds: 24 * 60 * 60 - 1,
+      },
+    });
+    expect(beforeDue.statusCode).toBe(200);
+    expect(beforeDue.json<ApiResponse<DemoClockAdvanceView>>().data).toMatchObject({
+      caseId: prepared.caseId,
+      clockId,
+      clockVersion: 1,
+      previousEffectiveNow: fixedNow,
+      effectiveNow: "2026-08-15T23:59:59.000Z",
+      activatedTaskIds: [],
+    });
+
+    const atDue = await api.inject({
+      method: "POST",
+      url: "/v1/demo/clock/advance",
+      headers: { "idempotency-key": "demo-clock-at-due-v1" },
+      payload: {
+        caseId: prepared.caseId,
+        clockId,
+        expectedClockVersion: 1,
+        advanceBySeconds: 1,
+      },
+    });
+    const activation = atDue.json<ApiResponse<DemoClockAdvanceView>>().data;
+    expect(atDue.statusCode).toBe(200);
+    expect(activation.activatedTaskIds).toEqual([
+      prepared.completion.scheduledRetest.id,
+    ]);
+
+    const today = await api.inject({
+      method: "GET",
+      url: `/v1/students/${prepared.studentId}/today`,
+    });
+    const retest = today
+      .json<ApiResponse<TodayTasksView>>()
+      .data.tasks.find(({ taskType }) => taskType === "d1_retest");
+    expect(retest?.status).toBe("ready");
+    expect(retest).not.toHaveProperty("simulation");
+    expect(retest).not.toHaveProperty("clockId");
+
+    const caseAfter = await api.inject({
+      method: "GET",
+      url: `/v1/cases/${prepared.caseId}`,
+    });
+    expect(caseAfter.json<ApiResponse<CaseView>>().data).toMatchObject({
+      state: "d1_scheduled",
+      stateVersion: 6,
+    });
+  }, 20_000);
+
+  it("activates an overdue task without affecting another Case or clock", async () => {
+    const left = await createD1ScheduledCase(api, "demo-clock-isolation-left-v1");
+    const right = await createD1ScheduledCase(api, "demo-clock-isolation-right-v1");
+    const response = await api.inject({
+      method: "POST",
+      url: "/v1/demo/clock/advance",
+      headers: { "idempotency-key": "demo-clock-isolation-v1" },
+      payload: {
+        caseId: left.caseId,
+        clockId: "0198b111-1111-7000-8000-000000000002",
+        expectedClockVersion: 0,
+        advanceBySeconds: 24 * 60 * 60 + 1,
+      },
+    });
+    expect(response.statusCode).toBe(200);
+
+    const [leftTasks, rightTasks] = await Promise.all([
+      database.db.select().from(tasks).where(eq(tasks.caseId, left.caseId)),
+      database.db.select().from(tasks).where(eq(tasks.caseId, right.caseId)),
+    ]);
+    expect(leftTasks.find(({ taskType }) => taskType === "d1_retest")?.status).toBe("ready");
+    expect(rightTasks.find(({ taskType }) => taskType === "d1_retest")?.status).toBe("scheduled");
+    const rightClocks = await database.db
+      .select()
+      .from(demoClocks)
+      .where(eq(demoClocks.caseId, right.caseId));
+    expect(rightClocks).toHaveLength(0);
+  }, 30_000);
+
+  it("replays sequential and concurrent advances once with stable audit data", async () => {
+    const prepared = await createD1ScheduledCase(api, "demo-clock-replay-v1");
+    const clockId = "0198b111-1111-7000-8000-000000000003";
+    const request = {
+      method: "POST" as const,
+      url: "/v1/demo/clock/advance",
+      headers: { "idempotency-key": "demo-clock-concurrent-v1" },
+      payload: {
+        caseId: prepared.caseId,
+        clockId,
+        expectedClockVersion: 0,
+        advanceBySeconds: 24 * 60 * 60,
+      },
+    };
+    const [left, right] = await Promise.all([api.inject(request), api.inject(request)]);
+    const replay = await api.inject(request);
+    expect(left.statusCode).toBe(200);
+    expect(right.statusCode).toBe(200);
+    expect(replay.statusCode).toBe(200);
+    expect(right.json<ApiResponse<DemoClockAdvanceView>>().data).toEqual(
+      left.json<ApiResponse<DemoClockAdvanceView>>().data,
+    );
+    expect(replay.json<ApiResponse<DemoClockAdvanceView>>().data).toEqual(
+      left.json<ApiResponse<DemoClockAdvanceView>>().data,
+    );
+
+    const [clock] = await database.db
+      .select()
+      .from(demoClocks)
+      .where(eq(demoClocks.caseId, prepared.caseId));
+    expect(clock).toMatchObject({ id: clockId, clockVersion: 1 });
+    const events = await database.db
+      .select()
+      .from(learningEvidenceEvents)
+      .where(eq(learningEvidenceEvents.caseId, prepared.caseId));
+    const audits = events.filter(({ eventType }) => eventType === "demo_clock_advanced");
+    expect(audits).toHaveLength(1);
+    expect(audits[0]?.payload).toMatchObject({
+      request: request.payload,
+      result: left.json<ApiResponse<DemoClockAdvanceView>>().data,
+      audit: {
+        simulation: true,
+        clockId,
+        previousEffectiveNow: fixedNow,
+        effectiveNow: "2026-08-16T00:00:00.000Z",
+        activatedTaskIds: [prepared.completion.scheduledRetest.id],
+      },
+    });
+  }, 20_000);
+
+  it("lets only one distinct concurrent advance win the same clock version", async () => {
+    const prepared = await createD1ScheduledCase(api, "demo-clock-race-v1");
+    const payload = {
+      caseId: prepared.caseId,
+      clockId: "0198b111-1111-7000-8000-000000000009",
+      expectedClockVersion: 0,
+      advanceBySeconds: 24 * 60 * 60,
+    };
+    const [left, right] = await Promise.all([
+      api.inject({
+        method: "POST",
+        url: "/v1/demo/clock/advance",
+        headers: { "idempotency-key": "demo-clock-race-left-v1" },
+        payload,
+      }),
+      api.inject({
+        method: "POST",
+        url: "/v1/demo/clock/advance",
+        headers: { "idempotency-key": "demo-clock-race-right-v1" },
+        payload,
+      }),
+    ]);
+    expect([left.statusCode, right.statusCode].sort()).toEqual([200, 409]);
+    const rejected = left.statusCode === 409 ? left : right;
+    expect(rejected.json<ApiErrorResponse>().error).toMatchObject({
+      code: "VERSION_CONFLICT",
+      details: { resource: "demo_clock", expected: 0, actual: 1 },
+    });
+
+    const storedTasks = await database.db
+      .select()
+      .from(tasks)
+      .where(eq(tasks.caseId, prepared.caseId));
+    expect(storedTasks.filter(({ taskType, status }) =>
+      taskType === "d1_retest" && status === "ready"
+    )).toHaveLength(1);
+    const events = await database.db
+      .select()
+      .from(learningEvidenceEvents)
+      .where(eq(learningEvidenceEvents.caseId, prepared.caseId));
+    expect(events.filter(({ eventType }) => eventType === "demo_clock_advanced")).toHaveLength(1);
+  }, 20_000);
+
+  it("rejects changed replays, stale clock versions, mismatched clocks, and invalid advances", async () => {
+    const created = await api.inject({
+      method: "POST",
+      url: "/v1/cases",
+      headers: { "idempotency-key": "demo-clock-errors-create-v1" },
+      payload: { entry: "synthetic_demo" },
+    });
+    const caseId = created.json<ApiResponse<CaseView>>().data.id;
+    const clockId = "0198b111-1111-7000-8000-000000000004";
+    const first = {
+      caseId,
+      clockId,
+      expectedClockVersion: 0,
+      advanceBySeconds: 1,
+    };
+    expect((await api.inject({
+      method: "POST",
+      url: "/v1/demo/clock/advance",
+      headers: { "idempotency-key": "demo-clock-errors-v1" },
+      payload: first,
+    })).statusCode).toBe(200);
+
+    const changed = await api.inject({
+      method: "POST",
+      url: "/v1/demo/clock/advance",
+      headers: { "idempotency-key": "demo-clock-errors-v1" },
+      payload: { ...first, advanceBySeconds: 2 },
+    });
+    expect(changed.statusCode).toBe(409);
+    expect(changed.json<ApiErrorResponse>().error.code).toBe("IDEMPOTENCY_KEY_REUSED");
+
+    const stale = await api.inject({
+      method: "POST",
+      url: "/v1/demo/clock/advance",
+      headers: { "idempotency-key": "demo-clock-stale-v1" },
+      payload: first,
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json<ApiErrorResponse>().error).toMatchObject({
+      code: "VERSION_CONFLICT",
+      details: { resource: "demo_clock", expected: 0, actual: 1 },
+    });
+
+    const mismatch = await api.inject({
+      method: "POST",
+      url: "/v1/demo/clock/advance",
+      headers: { "idempotency-key": "demo-clock-mismatch-v1" },
+      payload: {
+        ...first,
+        clockId: "0198b111-1111-7000-8000-000000000005",
+        expectedClockVersion: 1,
+      },
+    });
+    expect(mismatch.statusCode).toBe(409);
+    expect(mismatch.json<ApiErrorResponse>().error.code).toBe("DEMO_CLOCK_MISMATCH");
+
+    for (const advanceBySeconds of [0, -1, 31 * 24 * 60 * 60 + 1]) {
+      const invalid = await api.inject({
+        method: "POST",
+        url: "/v1/demo/clock/advance",
+        headers: { "idempotency-key": `demo-clock-invalid-${advanceBySeconds}` },
+        payload: { ...first, expectedClockVersion: 1, advanceBySeconds },
+      });
+      expect(invalid.statusCode).toBe(400);
+      expect(invalid.json<ApiErrorResponse>().error.code).toBe("SCHEMA_INVALID");
+    }
+  });
+
+  it("keeps the Demo route unavailable unless the environment-level switch is enabled", async () => {
+    const disabledApi = await buildApi({
+      database: database.db,
+      queue,
+      clock: new FixedClock(fixedNow),
+      demoClockEnabled: false,
+    });
+    const response = await disabledApi.inject({
+      method: "POST",
+      url: "/v1/demo/clock/advance",
+      headers: { "idempotency-key": "demo-clock-disabled-v1" },
+      payload: {
+        caseId: "0198b111-1111-7000-8000-000000000006",
+        clockId: "0198b111-1111-7000-8000-000000000007",
+        expectedClockVersion: 0,
+        advanceBySeconds: 1,
+      },
+    });
+    expect(response.statusCode).toBe(404);
+    await disabledApi.close();
+  });
+
+  it("requires an idempotency key for Demo clock advances", async () => {
+    const response = await api.inject({
+      method: "POST",
+      url: "/v1/demo/clock/advance",
+      payload: {
+        caseId: "0198b111-1111-7000-8000-000000000010",
+        clockId: "0198b111-1111-7000-8000-000000000011",
+        expectedClockVersion: 0,
+        advanceBySeconds: 1,
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json<ApiErrorResponse>().error.code).toBe("INVALID_INPUT");
+  });
+
+  it("rejects a non-simulation Case even when the Demo route is enabled", async () => {
+    const created = await api.inject({
+      method: "POST",
+      url: "/v1/cases",
+      headers: { "idempotency-key": "demo-clock-real-case-create-v1" },
+      payload: { entry: "synthetic_demo" },
+    });
+    const caseId = created.json<ApiResponse<CaseView>>().data.id;
+    await database.db
+      .update(cases)
+      .set({ simulation: false })
+      .where(eq(cases.id, caseId));
+
+    const response = await api.inject({
+      method: "POST",
+      url: "/v1/demo/clock/advance",
+      headers: { "idempotency-key": "demo-clock-real-case-v1" },
+      payload: {
+        caseId,
+        clockId: "0198b111-1111-7000-8000-000000000012",
+        expectedClockVersion: 0,
+        advanceBySeconds: 1,
+      },
+    });
+    expect(response.statusCode).toBe(403);
+    expect(response.json<ApiErrorResponse>().error.code).toBe(
+      "DEMO_CASE_REQUIRED",
+    );
+  });
+
+  it("uses SystemClock when no test clock is injected", async () => {
+    const systemApi = await buildApi({
+      database: database.db,
+      queue,
+      demoClockEnabled: true,
+    });
+    const created = await systemApi.inject({
+      method: "POST",
+      url: "/v1/cases",
+      headers: { "idempotency-key": "demo-clock-system-create-v1" },
+      payload: { entry: "synthetic_demo" },
+    });
+    const caseId = created.json<ApiResponse<CaseView>>().data.id;
+    const before = Date.now();
+    const advanced = await systemApi.inject({
+      method: "POST",
+      url: "/v1/demo/clock/advance",
+      headers: { "idempotency-key": "demo-clock-system-v1" },
+      payload: {
+        caseId,
+        clockId: "0198b111-1111-7000-8000-000000000008",
+        expectedClockVersion: 0,
+        advanceBySeconds: 1,
+      },
+    });
+    const after = Date.now();
+    const body = advanced.json<ApiResponse<DemoClockAdvanceView>>().data;
+    expect(Date.parse(body.previousEffectiveNow)).toBeGreaterThanOrEqual(before);
+    expect(Date.parse(body.previousEffectiveNow)).toBeLessThanOrEqual(after);
+    expect(Date.parse(body.effectiveNow) - Date.parse(body.previousEffectiveNow)).toBe(1_000);
+    await systemApi.close();
+  });
+
+  it("lets the retest.due Worker activate a due task with SystemClock", async () => {
+    const prepared = await createD1ScheduledCase(api, "retest-due-worker-v1");
+    const taskId = prepared.completion.scheduledRetest.id;
+    const past = new Date(Date.now() - 1_000);
+    await database.db
+      .update(tasks)
+      .set({ scheduledFor: past })
+      .where(eq(tasks.id, taskId));
+    await queue.boss.send(
+      RETEST_DUE_QUEUE,
+      { taskId, caseId: prepared.caseId },
+      { startAfter: past },
+    );
+
+    const deadline = Date.now() + 8_000;
+    let status: string | undefined;
+    while (Date.now() < deadline) {
+      const [row] = await database.db
+        .select({ status: tasks.status })
+        .from(tasks)
+        .where(eq(tasks.id, taskId));
+      status = row?.status;
+      if (status === "ready") {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    expect(status).toBe("ready");
+    const caseAfter = await api.inject({
+      method: "GET",
+      url: `/v1/cases/${prepared.caseId}`,
+    });
+    expect(caseAfter.json<ApiResponse<CaseView>>().data).toMatchObject({
+      state: "d1_scheduled",
+      stateVersion: 6,
+    });
+  }, 20_000);
+
+  it("serializes concurrent retest.due activators without duplicate effects", async () => {
+    const prepared = await createD1ScheduledCase(api, "retest-due-race-v1");
+    const taskId = prepared.completion.scheduledRetest.id;
+    const effectiveNow = new Date("2026-08-16T00:00:00.000Z");
+    const early = await activateDueRetestTask(database.db, {
+      caseId: prepared.caseId,
+      taskId,
+      effectiveNow: new Date(effectiveNow.getTime() - 1),
+    });
+    expect(early).toMatchObject({
+      activated: false,
+      reason: "not_due",
+      taskId,
+    });
+    const input = { caseId: prepared.caseId, taskId, effectiveNow };
+    const results = await Promise.all([
+      activateDueRetestTask(database.db, input),
+      activateDueRetestTask(database.db, input),
+    ]);
+
+    expect(results.map(({ activated }) => activated).sort()).toEqual([
+      false,
+      true,
+    ]);
+    const [task] = await database.db
+      .select()
+      .from(tasks)
+      .where(eq(tasks.id, taskId));
+    expect(task?.status).toBe("ready");
+    const caseAfter = await api.inject({
+      method: "GET",
+      url: `/v1/cases/${prepared.caseId}`,
+    });
+    expect(caseAfter.json<ApiResponse<CaseView>>().data).toMatchObject({
+      state: "d1_scheduled",
+      stateVersion: 6,
+    });
+  }, 20_000);
 });

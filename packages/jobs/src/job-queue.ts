@@ -1,4 +1,7 @@
-import type { RunNextJobData } from "@gapproof/contracts";
+import type {
+  RetestDueJobData,
+  RunNextJobData,
+} from "@gapproof/contracts";
 import {
   apiIdempotencyRecords,
   and,
@@ -14,6 +17,7 @@ import { fromDrizzle, type Job, PgBoss } from "pg-boss";
 import { v7 as uuidv7 } from "uuid";
 
 export const RUN_NEXT_QUEUE = "case-run-next";
+export const RETEST_DUE_QUEUE = "retest.due";
 
 export interface EnqueueRunNextInput extends RunNextJobData {
   readonly idempotencyKey: string;
@@ -36,6 +40,7 @@ export class JobQueue {
   async start(): Promise<void> {
     await this.boss.start();
     await this.boss.createQueue(RUN_NEXT_QUEUE);
+    await this.boss.createQueue(RETEST_DUE_QUEUE);
   }
 
   async stop(): Promise<void> {
@@ -60,10 +65,57 @@ export class JobQueue {
   async stopWorker(workerId: string): Promise<void> {
     await this.boss.offWork(RUN_NEXT_QUEUE, { id: workerId, wait: true });
   }
+
+  async workRetestDue(
+    handler: (job: Job<RetestDueJobData>) => Promise<object>,
+  ): Promise<string> {
+    return this.boss.work<RetestDueJobData, object>(
+      RETEST_DUE_QUEUE,
+      { batchSize: 1, pollingIntervalSeconds: 1 },
+      async ([job]) => {
+        if (job === undefined) {
+          throw new Error("pg-boss delivered an empty retest.due batch.");
+        }
+        return handler(job);
+      },
+    );
+  }
+
+  async stopRetestDueWorker(workerId: string): Promise<void> {
+    await this.boss.offWork(RETEST_DUE_QUEUE, { id: workerId, wait: true });
+  }
 }
 
 export function createJobQueue(databaseUrl: string): JobQueue {
   return new JobQueue(databaseUrl);
+}
+
+export interface EnqueueRetestDueInput extends RetestDueJobData {
+  readonly startAfter: Date;
+}
+
+export async function enqueueRetestDueTransactional(
+  database: Parameters<Parameters<Database["transaction"]>[0]>[0],
+  queue: JobQueue,
+  input: EnqueueRetestDueInput,
+) {
+  const jobId = await queue.boss.send(
+    RETEST_DUE_QUEUE,
+    { caseId: input.caseId, taskId: input.taskId } satisfies RetestDueJobData,
+    {
+      id: input.taskId,
+      startAfter: input.startAfter,
+      retryLimit: 10,
+      retryDelay: 1,
+      retryBackoff: true,
+      retryDelayMax: 60,
+      db: fromDrizzle(database, sql),
+    },
+  );
+  if (jobId === null) {
+    throw new Error("pg-boss did not enqueue the retest.due job transactionally.");
+  }
+  return jobId;
 }
 
 export async function enqueueRunNextIdempotent(

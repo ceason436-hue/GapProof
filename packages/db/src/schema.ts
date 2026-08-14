@@ -41,6 +41,7 @@ export const evidenceEventType = evidenceSchema.enum("evidence_event_type", [
   "probe_evaluated",
   "intervention_generated",
   "intervention_completed",
+  "demo_clock_advanced",
   "retest_evaluated",
   "plan_replanned",
 ]);
@@ -211,6 +212,31 @@ export const tasks = appSchema.table(
   ],
 );
 
+export const demoClocks = appSchema.table(
+  "demo_clocks",
+  {
+    id: uuid("id").primaryKey(),
+    caseId: uuid("case_id")
+      .notNull()
+      .references(() => cases.id),
+    clockVersion: integer("clock_version").notNull().default(0),
+    effectiveNow: timestamp("effective_now", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("demo_clocks_case_id_uidx").on(table.caseId),
+    check(
+      "demo_clocks_version_nonnegative",
+      sql`${table.clockVersion} >= 0`,
+    ),
+  ],
+);
+
 export type StudentRow = typeof students.$inferSelect;
 export type NewStudentRow = typeof students.$inferInsert;
 export type CaseRow = typeof cases.$inferSelect;
@@ -223,3 +249,4 @@ export type NewLearningEvidenceEventRow =
   typeof learningEvidenceEvents.$inferInsert;
 export type TaskRow = typeof tasks.$inferSelect;
 export type NewTaskRow = typeof tasks.$inferInsert;
+export type DemoClockRow = typeof demoClocks.$inferSelect;

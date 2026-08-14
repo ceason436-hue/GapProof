@@ -21,6 +21,9 @@ import {
   type ConfirmExtractionRequest,
   CreateCaseRequestSchema,
   type CreateCaseRequest,
+  DemoClockAdvanceRequestSchema,
+  type DemoClockAdvanceRequest,
+  DemoClockAdvanceViewSchema,
   type FormHypothesesOutput,
   HypothesesViewSchema,
   type HypothesesView,
@@ -40,6 +43,7 @@ import {
   TodayTasksViewSchema,
 } from "@gapproof/contracts";
 import {
+  advanceDemoClock,
   completeInterventionTask,
   createSyntheticCaseIdempotent,
   findEvidenceEventByIdempotencyKey,
@@ -53,16 +57,23 @@ import {
   type Database,
   type LearningEvidenceEventRow,
   type TaskRow,
+  DemoCaseRequiredError,
+  DemoClockIdempotencyKeyReusedError,
+  DemoClockMismatchError,
+  DemoClockVersionConflictError,
   ResourceNotFoundError,
   VersionConflictError,
 } from "@gapproof/db";
 import {
+  type Clock,
   CaseTransitionError,
+  SystemClock,
   ProbeScoringError,
   scoreProbeAttempt,
   transitionCase,
 } from "@gapproof/domain";
 import {
+  enqueueRetestDueTransactional,
   enqueueRunNextIdempotent,
   type JobQueue,
 } from "@gapproof/jobs";
@@ -70,6 +81,8 @@ import {
 export interface BuildApiOptions {
   readonly database: Database;
   readonly queue: JobQueue;
+  readonly clock?: Clock;
+  readonly demoClockEnabled?: boolean;
 }
 
 class ApiHttpError extends Error {
@@ -312,6 +325,22 @@ export async function buildApi(options: BuildApiOptions) {
 
     if (error instanceof ApiHttpError) {
       ({ statusCode, code, message, retryable, details } = error);
+    } else if (error instanceof DemoClockVersionConflictError) {
+      statusCode = 409;
+      code = error.code;
+      message = error.message;
+      details = error.details;
+    } else if (
+      error instanceof DemoClockIdempotencyKeyReusedError ||
+      error instanceof DemoClockMismatchError
+    ) {
+      statusCode = 409;
+      code = error.code;
+      message = error.message;
+    } else if (error instanceof DemoCaseRequiredError) {
+      statusCode = 403;
+      code = error.code;
+      message = error.message;
     } else if (error instanceof ResourceNotFoundError) {
       statusCode = 404;
       code = error.code;
@@ -351,6 +380,8 @@ export async function buildApi(options: BuildApiOptions) {
     };
     void reply.status(statusCode).send(body);
   });
+
+  const clock = options.clock ?? new SystemClock();
 
   api.post<{ Body: CreateCaseRequest }>(
     "/v1/cases",
@@ -932,7 +963,7 @@ export async function buildApi(options: BuildApiOptions) {
         );
       }
 
-      const completedAt = new Date();
+      const completedAt = clock.now();
       const d1ScheduledFor = new Date(
         completedAt.getTime() + 24 * 60 * 60 * 1_000,
       );
@@ -1011,6 +1042,13 @@ export async function buildApi(options: BuildApiOptions) {
           },
           sourceEventId: event.eventId,
         },
+        scheduleD1Retest: async (transaction, task) => {
+          await enqueueRetestDueTransactional(transaction, options.queue, {
+            caseId: task.caseId,
+            taskId: task.id,
+            startAfter: task.scheduledFor,
+          });
+        },
       });
 
       const persistedEvent = await findEvidenceEventByIdempotencyKey(
@@ -1080,6 +1118,32 @@ export async function buildApi(options: BuildApiOptions) {
       );
     },
   );
+
+  if (options.demoClockEnabled === true) {
+    api.post<{ Body: DemoClockAdvanceRequest }>(
+      "/v1/demo/clock/advance",
+      {
+        schema: {
+          body: DemoClockAdvanceRequestSchema,
+          response: {
+            200: apiResponseSchema(DemoClockAdvanceViewSchema),
+            "4xx": ApiErrorResponseSchema,
+            500: ApiErrorResponseSchema,
+          },
+        },
+      },
+      async (request) => {
+        const result = await advanceDemoClock(options.database, {
+          caseId: request.body.caseId,
+          eventId: uuidv7(),
+          idempotencyKey: `demo-clock-advance:${getIdempotencyKey(request)}`,
+          baseNow: clock.now(),
+          request: { ...request.body },
+        });
+        return success(request, result.response);
+      },
+    );
+  }
 
   return api;
 }

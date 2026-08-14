@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.20"
+version: "0.1.21"
 status: "ACTIVE"
-current_stage: "初赛方案冲刺；Phase A 后端已生成最小干预任务并在完成后调度 D+1 复测"
+current_stage: "初赛方案冲刺；Phase A 后端已可调度并到期激活 D+1 复测，学生端今日页 F0 已在独立 Worktree 验收、尚未合并"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -131,7 +131,7 @@ next_action:
 
 `[FACT]` GOAI 无界应用赛道参赛手册列出的初赛截止日期为 2026-08-16；具体当天截止时刻、入口、文件大小及后续通知仍须在官网、提交系统或官方群再次核对。
 
-`[DECISION]` 当前处于：**初赛方案提交前冲刺；学生端“今日”页桌面视觉基线已定，Phase A 后端已从 `intervention_ready` 生成最小干预任务，并在任务完成后将 Case 推进到 `d1_scheduled`**。
+`[DECISION]` 当前处于：**初赛方案提交前冲刺；学生端“今日”页 F0 已在独立 Worktree 完成视觉与技术验收但尚未合并，Phase A 后端已从最小干预完成推进到 D+1 调度，并能用生产延迟 Job 或受开关保护的 Demo 虚拟时钟将到期复测激活为 `ready`**。
 
 ### 1.2 已完成
 
@@ -147,19 +147,21 @@ next_action:
 - `[DECISION]` 已确定比赛阶段优先使用原创、公开许可或合成数据，不等待真实学生试卷渠道。
 - `[DECISION]` 已确定后台多 Agent、前台单一 AI 学习教练的产品形态。
 - `[DECISION]` 已确定苏格拉底脚手架、学习证据图谱和延迟迁移验证为核心设计。
-- `[RESULT]` 已在 Stitch 中选定学生端“今日”页桌面高保真视觉基线：连续顶部栏、左导航、黑色重点任务卡、右侧蓝色学习足迹、绿色今日概览及下次检查。该结果是静态原型，不代表功能已实现。
-- `[DECISION]` 当前学生首页的核心视觉色为蓝 `#0036FF` 与青柠绿 `#B5F800`；学生端、家长端和后续页面的详细规范以 `DESIGN.md v0.2.10` 为准。
+- `[RESULT]` 已在 Stitch 中选定学生端“今日”页桌面高保真视觉基线，并在隔离 Worktree 完成 F0 页面编码、构建、自动化与截图验收；当前仍是 Mock 数据且尚未合并到 `main`，不代表真实接口或业务主闭环已接通。
+- `[DECISION]` 当前学生首页的核心视觉色为蓝 `#0036FF` 与青柠绿 `#B5F800`；学生端、家长端和后续页面的详细规范以 `DESIGN.md v0.2.11` 为准。
 - `[FACT]` 用户已将目标教材 ISBN 确认为 `978-7-5720-3630-9`，与当前 161 页教材 PDF 封底条码一致；版权页照片无法提供，因此版次、印次保持未知，不再作为 MVP 开工阻塞项。
 - `[FACT]` 已收到线上购买的教研与试题资料 191 个文件：184 个 DOCX、4 个 PDF 和 3 个 MP3，覆盖学生/考试版、参考答案、教师/解析版、知识清单、答题卡和听力等类型；这些内容资产不是真实学生作答数据。
 - `[DECISION]` 用户确认教材与试题材料可供本项目使用和公开展示，并确认 `logo.png` 可作为 MVP Logo V1；权利台账记录为 `user_asserted_permitted`，购买页/许可条款凭证待归档；教材版权页不可取得。
 - `[DECISION]` 教材和试题的完整 Markdown 转换结果仅保存在 `.gitignore` 覆盖的本地私有目录，不进入 Git；公开仓库只保存来源元数据、哈希、处理程序及项目原创/合成内容。
 - `[DECISION]` 答题卡与听力音频不进入 MVP 题库、RAG 或视觉 QA；原文件继续私有留存，不做永久删除。视觉核验只覆盖实际入选 Demo/题库的文件，且入选文件逐份核验，其余材料不要求逐份目视。
-- `[RESULT]` 已初始化 Bun workspace 的 `contracts`、`domain`、`db`、`jobs` 与 `testkit` 骨架；首个原创合成 Case 已保存为可版本化 Fixture，快速测试共 27 条通过；PostgreSQL/Drizzle、pgvector、事件幂等、乐观锁、Fastify API 与 Worker 共通过 23 条真实 PostgreSQL/API/Worker 集成测试，TypeScript 严格类型检查通过。
+- `[RESULT]` 已初始化 Bun workspace 的 `contracts`、`domain`、`db`、`jobs` 与 `testkit` 骨架；首个原创合成 Case 已保存为可版本化 Fixture，快速测试共 31 条通过；PostgreSQL/Drizzle、pgvector、事件幂等、乐观锁、Fastify API 与 Worker 共通过 35 条真实 PostgreSQL/API/Worker 集成测试，TypeScript 严格类型检查通过。
 - `[RESULT]` 已实现 `parse_paper` 的 TypeBox/JSON Schema、统一 `ToolResult` 契约与确定性 fake adapter；成功、低置信、超时、权限失败四类 Fixture 已通过 7 条契约测试。尚未接入真实 OCR Provider。
 - `[RESULT]` 已实现 Case 创建/读取、异步 `run-next`、识别确认和 `GET /v1/cases/{caseId}/hypotheses`。Worker 可从 `ready_for_diagnosis` 生成两条有证据引用的竞争性错因和一条确认小题，以 `hypotheses_generated` 将 Case 推进到 `probe_required`；查询响应不暴露答案键。
 - `[RESULT]` 已实现 `POST /v1/cases/{caseId}/attempts`：服务端从内部评分规则执行 `exact_choice_v1`，以 `probe_evaluated` 原子推进至 `intervention_ready`；答错时映射受支持的竞争性错因，答对时不虚构已确认错因。接口具备 Schema、幂等重放、并发去重、版本冲突和非法状态/选项保护。
 - `[RESULT]` Worker 已在 `intervention_ready` 调用确定性 `FakeBuildInterventionAdapter`，写入 `intervention_generated { taskId }` 证据事件、创建 3 步/8 分钟的 `guided_intervention` 任务，并将 Case 原子推进到 `intervention_active`；公开任务 DTO 不暴露候选错因 ID、答案键、工具 warnings 或内部版本。
 - `[RESULT]` 已实现 `GET /v1/students/{studentId}/today` 与 `POST /v1/tasks/{taskId}/submit`。完成请求必须恰好覆盖全部步骤；成功后原子完成干预、写入带 D+1 引用的 `intervention_completed` 事件、创建 24 小时后开始且 12 小时后到期的 `d1_retest` 任务，并将 Case 推进到 `d1_scheduled`。领域 mastery 仅为 `pending_retest`，不得提前宣称 repaired。
+- `[RESULT]` 完成干预的同一 PostgreSQL 事务现同时写入 D+1 延迟 `retest.due` Job；独立 Worker 使用 `SystemClock`，仅在 `scheduledFor <= now` 时将指定 Case 的 `d1_retest` 从 `scheduled` 原子激活为 `ready`，重复与并发执行不会产生重复效果。
+- `[RESULT]` 已实现受 `GAPPROOF_DEMO_CLOCK_ENABLED=true` 保护的 `POST /v1/demo/clock/advance`。它为每个合成 Demo Case 持久化独立、带版本的虚拟时间线，可快进并在同一事务激活该 Case 的到期复测、写入 `demo_clock_advanced` 审计；不修改操作系统时间，也不改变 Case 的 `d1_scheduled`、`stateVersion` 或 `pending_retest` mastery。
 
 ### 1.3 尚未完成或尚未验证
 
@@ -168,8 +170,8 @@ next_action:
 - `[PLANNED]` 尚未建立 30–40 个技能节点及 12 个深度节点的图谱 V0.1。
 - `[PLANNED]` 尚未制作比赛用原创模拟试卷、合成学生轨迹和独立金标集。
 - `[PLANNED]` 尚未确认至少一位英语教育背景人员能否短时抽检核心金标内容。
-- `[PROTOTYPE]` 已建立最小后端 Thin Slice，并完成确定性干预生成、今日任务查询、干预提交和 D+1 任务调度；尚未形成可点击主闭环或从上传到报告的完整端到端 Demo。真实 AI 干预、真实题库、到期执行/虚拟时钟、D+1 作答评分、D+7、失败重排和报告仍未实现。
-- `[PLANNED]` 除学生端“今日”页静态视觉基线外，其余学生 P0 页面、家长端页面、评委最小页、交互原型和前端组件均未完成。
+- `[PROTOTYPE]` 已建立最小后端 Thin Slice，并完成确定性干预生成、今日任务查询、干预提交、D+1 调度与到期激活；尚未形成从上传到报告的完整端到端 Demo。真实 AI 干预、真实题库、D+1 作答评分、`retest_evaluated`、D+7、失败重排、真实通知和报告仍未实现。
+- `[PROTOTYPE]` 学生端“今日”页 F0 已在独立 Worktree 使用 Mock 数据完成视觉与技术验收，但尚未保存为可合并分支、尚未合并 `main`、也未接入真实 API；其余学生 P0 页面、家长端页面和评委最小页仍未完成。
 - `[PLANNED]` 尚未完成正式 500 字简介、初赛 PPT、视频、README、数据卡、依赖清单和合规一页纸。
 - `[PLANNED]` 尚未产生可报告的工程评测结果或真实学生学习效果。
 
@@ -1592,7 +1594,7 @@ Demo 至少现场演一个真实失败分支，视频中再展示两个。
 
 ### 18.3 已确定的轻量技术栈
 
-详细架构、选型对比和系统边界以 `TDD.md v0.3.13` 为准。本节只保留主文档级决策：
+详细架构、选型对比和系统边界以 `TDD.md v0.3.14` 为准。本节只保留主文档级决策：
 
 - 语言：TypeScript 单栈；Bun 管理 workspace 和依赖，Node.js 24 LTS 作为生产运行时。
 - 前端：Next.js App Router + React，桌面与平板完整支持，手机保留基础响应式访问和内容适配的 Web。
@@ -1610,7 +1612,7 @@ Demo 至少现场演一个真实失败分支，视频中再展示两个。
 - OCR：阿里云读光教育试卷识别为主，腾讯云高精度 OCR 为通用/备用；统一 `OcrProvider`。
 - 知识增强：PostgreSQL 全文 + pgvector；LangChain.js 仅作 Retriever 辅助层，KnowledgeService 和固定数据库工具由项目自建。
 - MVP Agent：固定六节点 `LoadCaseContext → RetrieveKnowledge → GenerateHypotheses → SelectProbe → EvaluateEvidence → CreateDecisionProposal`。
-- 数据基线：UUIDv7、PostgreSQL 16+、核心表/索引/枚举/删除策略以 `TDD.md v0.3.13` 为准。
+- 数据基线：UUIDv7、PostgreSQL 16+、核心表/索引/枚举/删除策略以 `TDD.md v0.3.14` 为准。
 - 部署：杭州阿里云单区域联网 Docker Compose；真实 Provider 用于演示，Mock 仅用于测试和故障注入。
 
 当前规模不需要 Kubernetes、Kafka、复杂分布式多 Agent 平台或大规模微调。
@@ -2008,11 +2010,11 @@ review_date:
 | DEC-028 | MVP Agent 固定为六节点 LangGraph.js 图 | accepted | 新增节点必须更新图版本、Schema 和 Golden Cases |
 | DEC-029 | 所有工具先完成接口、Schema、Mock 和错误处理；verify_item/schedule_retest 做 MVP 最小实现 | accepted | 工具边界或 Provider 能力变化 |
 | DEC-030 | escalate_human 先创建待处理记录；analyze_speech/score_writing 暂缓真实能力 | accepted | 真实人工、语音或写作试点启动 |
-| DEC-031 | UUIDv7 + PostgreSQL 16+，完整表结构和删除策略以 TDD v0.3.13 为准 | accepted | 数据规模、扩展支持或合规要求变化 |
+| DEC-031 | UUIDv7 + PostgreSQL 16+，完整表结构和删除策略以 TDD v0.3.14 为准 | accepted | 数据规模、扩展支持或合规要求变化 |
 | DEC-032 | TDD 详细 API 路由为唯一正式接口 | accepted | API 版本升级或新客户端边界产生 |
 | DEC-033 | 杭州阿里云单区域联网 Docker Compose，真实 Provider 演示，Mock 仅测试/故障注入 | accepted | 比赛网络、并发、合规或可用性要求变化 |
 | DEC-034 | DeepSeek `deepseek-v4-flash`、MiniMax `minimax-m3`、腾讯混元 Embedding 作为当前模型配置 | accepted | 账号权限、供应商模型版本或评测结果变化 |
-| DEC-035 | 学生端“今日”页桌面视觉基线已选定；使用 `#0036FF` 导航/进度与 `#B5F800` 行动/积极变化，完整规范以 DESIGN v0.2.10 为准 | accepted | 真实前端实现、可用性测试或品牌资产定稿产生反证 |
+| DEC-035 | 学生端“今日”页桌面视觉基线已选定；使用 `#0036FF` 导航/进度与 `#B5F800` 行动/积极变化，完整规范以 DESIGN v0.2.11 为准 | accepted | 真实前端实现、可用性测试或品牌资产定稿产生反证 |
 | DEC-036 | 新用户今日页先完成第一次检查，不显示虚构的足迹、进展或下次检查；首次任务生成后切换常规今日页 | accepted | onboarding 实测或产品范围变化 |
 | DEC-037 | 目标教材 ISBN 为 `978-7-5720-3630-9`；配套练习 `978-7-5720-3519-7` 不纳入 MVP | accepted | 版权页或出版社正式材料产生冲突 |
 | DEC-038 | 购买教材/试题及完整转换文本保持本地私有并排除 Git；仓库只保存元数据、处理器和项目原创/合成内容 | accepted | 取得可归档的明确再分发许可且完成权利复核 |
@@ -2034,7 +2036,7 @@ review_date:
 | 初赛 PPT | `[PLANNED]` | 8–10 页覆盖评分项 | 原型/图表 |
 | 原创模拟试卷 | `[PLANNED]` | 来源自有、已知根因、许可清楚 | 技能示例 |
 | 合成 Case | `[PROTOTYPE]` | 已完成 1 个原创合成 Case 及低置信、复测失败重排、D+7 成功分支；仍需扩充同题同错不同根因与回归集 | 数据 Schema/教材映射 |
-| 学生“今日”页视觉基线 | `[PROTOTYPE]` | 已选定静态桌面稿；前端 F0 在独立 Worktree 实现与验收中，不宣称已接入真实任务数据 | DESIGN v0.2.10 |
+| 学生“今日”页视觉基线 | `[PROTOTYPE]` | 已选定 Stitch 桌面稿；前端 F0 已在独立 Worktree 完成构建、自动化与截图验收，仍为 Mock 且尚未合并，不宣称已接入真实任务数据 | DESIGN v0.2.11 |
 | 其余学生/家长关键页设计 | `[PLANNED]` | 覆盖主闭环并遵循今日页设计准则 | 视觉基线 |
 | 可点击 Thin Slice | `[PLANNED]` | 上传到修复证明全链路 | 设计/开发 |
 | 数据与合规页 | `[PLANNED]` | 类型、来源、授权、脱敏、删除、边界 | 数据选择 |
@@ -2093,6 +2095,13 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.21 — 2026-08-15
+
+- 同步生产 `retest.due` 延迟 Job、`SystemClock` Worker 与事务内入队；到期只将 D+1 任务从 `scheduled` 激活为 `ready`，Case 与 mastery 保持等待复测语义。
+- 登记受开关保护、按 Case 隔离且带版本的 Demo 虚拟时钟、`demo_clock_advanced` 审计边界、`app.demo_clocks` 与 `0004_goofy_vindicator.sql`。
+- 测试证据更新为 31 条快速测试、35 条真实 PostgreSQL/API/Worker 集成测试和严格类型检查通过；同步 F0 已在独立 Worktree 验收但尚未合并/接入真实 API 的准确状态。
+- 同步 PRD v0.1.13、TDD v0.3.14 与 DESIGN v0.2.11。
 
 ### v0.1.20 — 2026-08-15
 

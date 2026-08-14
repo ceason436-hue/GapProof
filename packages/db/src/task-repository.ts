@@ -127,6 +127,10 @@ export interface CompleteInterventionTaskInput extends TaskTransitionBase {
   readonly taskId: string;
   readonly completedAt: Date;
   readonly d1Task: NewTaskRow;
+  readonly scheduleD1Retest?: (
+    transaction: Parameters<Parameters<Database["transaction"]>[0]>[0],
+    task: NewTaskRow,
+  ) => Promise<void>;
 }
 
 export async function completeInterventionTask(
@@ -204,6 +208,7 @@ export async function completeInterventionTask(
       .set({ status: "completed", completedAt: input.completedAt })
       .where(eq(tasks.id, input.taskId));
     await transaction.insert(tasks).values(input.d1Task);
+    await input.scheduleD1Retest?.(transaction, input.d1Task);
 
     return { applied: true, ...updatedCase } as const;
   });

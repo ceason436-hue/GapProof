@@ -29,6 +29,13 @@
       "when": 1786727062215,
       "tag": "0003_graceful_maggott",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786728784686,
+      "tag": "0004_goofy_vindicator",
+      "breakpoints": true
     }
   ]
 }

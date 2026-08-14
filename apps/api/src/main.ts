@@ -15,7 +15,11 @@ queue.boss.on("error", (error) => {
 });
 
 await queue.start();
-const api = await buildApi({ database: database.db, queue });
+const api = await buildApi({
+  database: database.db,
+  queue,
+  demoClockEnabled: process.env.GAPPROOF_DEMO_CLOCK_ENABLED === "true",
+});
 
 async function shutdown() {
   await api.close();
@@ -27,4 +31,3 @@ process.once("SIGINT", () => void shutdown());
 process.once("SIGTERM", () => void shutdown());
 
 await api.listen({ host: "0.0.0.0", port });
-
