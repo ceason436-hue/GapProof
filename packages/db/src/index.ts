@@ -6,6 +6,7 @@ export * from "./persist-case-transition.ts";
 export * from "./retest-repository.ts";
 export * from "./run-migrations.ts";
 export * from "./schema.ts";
+export * from "./source-asset-repository.ts";
 export * from "./task-repository.ts";
 export * from "./today-overview-repository.ts";
 export { and, eq, sql } from "drizzle-orm";

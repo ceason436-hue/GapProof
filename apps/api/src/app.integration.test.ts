@@ -1,3 +1,7 @@
+import { createHash } from "node:crypto";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { v7 as uuidv7 } from "uuid";
 
@@ -9,9 +13,11 @@ import type {
   D1RetestAttemptView,
   DemoClockAdvanceView,
   HypothesesView,
+  InitiatedSourceAssetUploadView,
   LearningTaskView,
   TaskCompletionView,
   TodayTasksView,
+  UploadedSourceAssetView,
 } from "@gapproof/contracts";
 import {
   apiIdempotencyRecords,
@@ -24,6 +30,7 @@ import {
   learningEvidenceEvents,
   persistD1RetestEvaluation,
   runMigrations,
+  sourceAssets,
   students,
   tasks,
 } from "@gapproof/db";
@@ -41,6 +48,7 @@ import {
 } from "@gapproof/worker";
 
 import { buildApi } from "./app.ts";
+import { LocalDirectorySourceAssetStorage, MAX_SOURCE_ASSET_BYTES } from "./source-asset-storage.ts";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const describeWithDatabase = databaseUrl === undefined ? describe.skip : describe;
@@ -200,10 +208,13 @@ describeWithDatabase("Fastify API and run-next worker", () => {
   let api: Awaited<ReturnType<typeof buildApi>>;
   let worker: ReturnType<typeof createRunNextWorker>;
   let retestDueWorker: ReturnType<typeof createRetestDueWorker>;
+  let uploadRoot: string;
+  let uploadStorage: LocalDirectorySourceAssetStorage;
 
   beforeAll(async () => {
     await runMigrations(database.db);
     await database.db.delete(tasks);
+    await database.db.delete(sourceAssets);
     await database.db.delete(learningEvidenceEvents);
     await database.db.delete(demoClocks);
     await database.db.delete(apiIdempotencyRecords);
@@ -221,11 +232,15 @@ describeWithDatabase("Fastify API and run-next worker", () => {
       queue,
     });
     await retestDueWorker.start();
+    uploadRoot = await mkdtemp(path.join(os.tmpdir(), "gapproof-api-upload-"));
+    uploadStorage = new LocalDirectorySourceAssetStorage(uploadRoot);
     api = await buildApi({
       database: database.db,
       queue,
       clock: new FixedClock(fixedNow),
       demoClockEnabled: true,
+      uploadStorage,
+      uploadSigningSecret: "integration-upload-secret",
     });
   });
 
@@ -235,6 +250,7 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     await worker.stop();
     await queue.stop();
     await database.close();
+    await rm(uploadRoot, { recursive: true, force: true });
   });
 
   it("rejects a write request without an idempotency key", async () => {
@@ -286,6 +302,154 @@ describeWithDatabase("Fastify API and run-next worker", () => {
 
     expect([left.statusCode, right.statusCode].sort()).toEqual([200, 201]);
     expect(leftBody.data.id).toBe(rightBody.data.id);
+  });
+
+  it("initiates and completes a source asset upload without exposing storage metadata", async () => {
+    const created = await api.inject({
+      method: "POST",
+      url: "/v1/cases",
+      headers: { "idempotency-key": "source-upload-case-v1" },
+      payload: { entry: "synthetic_demo" },
+    });
+    const caseView = created.json<ApiResponse<CaseView>>().data;
+    const bytes = Buffer.from("source upload integration bytes");
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    const payload = {
+      studentId: caseView.studentId,
+      caseId: caseView.id,
+      fileName: "worksheet.png",
+      mimeType: "image/png" as const,
+      byteSize: bytes.byteLength,
+      sha256,
+    };
+    const first = await api.inject({
+      method: "POST",
+      url: "/v1/source-assets/uploads",
+      headers: { "idempotency-key": "source-upload-init-v1" },
+      payload,
+    });
+    const firstBody = first.json<ApiResponse<InitiatedSourceAssetUploadView>>();
+    expect(first.statusCode).toBe(201);
+    expect(firstBody.data.upload.path).toBe(`/api/v1/source-assets/${firstBody.data.assetId}/content`);
+    expect(firstBody.data.upload.token).toBeTruthy();
+    expect(firstBody.data).not.toHaveProperty("objectKey");
+
+    const replay = await api.inject({
+      method: "POST",
+      url: "/v1/source-assets/uploads",
+      headers: { "idempotency-key": "source-upload-init-v1" },
+      payload: { ...payload, fileName: "renamed-locally.png" },
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json<ApiResponse<InitiatedSourceAssetUploadView>>().data.assetId).toBe(firstBody.data.assetId);
+
+    const reused = await api.inject({
+      method: "POST",
+      url: "/v1/source-assets/uploads",
+      headers: { "idempotency-key": "source-upload-init-v1" },
+      payload: { ...payload, byteSize: payload.byteSize + 1 },
+    });
+    expect(reused.statusCode).toBe(409);
+    expect(reused.json<ApiErrorResponse>().error.code).toBe("IDEMPOTENCY_KEY_REUSED");
+
+    const tampered = await api.inject({
+      method: "PUT",
+      url: firstBody.data.upload.path.replace("/api", ""),
+      headers: {
+        "x-gapproof-upload-token": `${firstBody.data.upload.token}tampered`,
+        "content-type": "image/png",
+      },
+      payload: bytes,
+    });
+    expect(tampered.statusCode).toBe(401);
+
+    const mismatch = await api.inject({
+      method: "PUT",
+      url: firstBody.data.upload.path.replace("/api", ""),
+      headers: {
+        "x-gapproof-upload-token": firstBody.data.upload.token,
+        "content-type": "image/png",
+      },
+      payload: Buffer.from("different bytes"),
+    });
+    expect(mismatch.statusCode).toBe(400);
+    expect(mismatch.json<ApiErrorResponse>().error.code).toBe("UPLOAD_CONTENT_MISMATCH");
+
+    const uploaded = await api.inject({
+      method: "PUT",
+      url: firstBody.data.upload.path.replace("/api", ""),
+      headers: {
+        "x-gapproof-upload-token": firstBody.data.upload.token,
+        "content-type": "image/png",
+      },
+      payload: bytes,
+    });
+    const uploadedBody = uploaded.json<ApiResponse<UploadedSourceAssetView>>();
+    expect(uploaded.statusCode).toBe(200);
+    expect(uploadedBody.data).toEqual({
+      assetId: firstBody.data.assetId,
+      processingStatus: "uploaded",
+      mimeType: "image/png",
+      byteSize: bytes.byteLength,
+      sha256,
+    });
+    expect(uploadedBody.data).not.toHaveProperty("token");
+    expect(uploadedBody.data).not.toHaveProperty("fileName");
+
+    const [storedAsset] = await database.db
+      .select()
+      .from(sourceAssets)
+      .where(eq(sourceAssets.id, firstBody.data.assetId));
+    expect(storedAsset?.processingStatus).toBe("uploaded");
+    expect(await readFile(uploadStorage.pathFor(storedAsset!.id, storedAsset!.objectKey))).toEqual(bytes);
+
+    const replayedPut = await api.inject({
+      method: "PUT",
+      url: firstBody.data.upload.path.replace("/api", ""),
+      headers: {
+        "x-gapproof-upload-token": firstBody.data.upload.token,
+        "content-type": "image/png",
+      },
+      payload: bytes,
+    });
+    expect(replayedPut.statusCode).toBe(200);
+  });
+
+  it("accepts the exact 10 MiB upload boundary", async () => {
+    const created = await api.inject({
+      method: "POST",
+      url: "/v1/cases",
+      headers: { "idempotency-key": "source-upload-boundary-case-v1" },
+      payload: { entry: "synthetic_demo" },
+    });
+    const caseView = created.json<ApiResponse<CaseView>>().data;
+    const bytes = Buffer.alloc(MAX_SOURCE_ASSET_BYTES, 7);
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    const initiated = await api.inject({
+      method: "POST",
+      url: "/v1/source-assets/uploads",
+      headers: { "idempotency-key": "source-upload-boundary-init-v1" },
+      payload: {
+        studentId: caseView.studentId,
+        caseId: null,
+        fileName: "boundary.webp",
+        mimeType: "image/webp",
+        byteSize: MAX_SOURCE_ASSET_BYTES,
+        sha256,
+      },
+    });
+    expect(initiated.statusCode).toBe(201);
+    const upload = initiated.json<ApiResponse<InitiatedSourceAssetUploadView>>().data.upload;
+    const uploaded = await api.inject({
+      method: "PUT",
+      url: upload.path.replace("/api", ""),
+      headers: {
+        "x-gapproof-upload-token": upload.token,
+        "content-type": "image/webp",
+      },
+      payload: bytes,
+    });
+    expect(uploaded.statusCode).toBe(200);
   });
 
   it("returns a unified not-found error", async () => {

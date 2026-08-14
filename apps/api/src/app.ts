@@ -2,6 +2,7 @@ import Fastify, {
   type FastifyReply,
   type FastifyRequest,
 } from "fastify";
+import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { v7 as uuidv7 } from "uuid";
 
@@ -31,6 +32,10 @@ import {
   type FormHypothesesOutput,
   HypothesesViewSchema,
   type HypothesesView,
+  InitiateSourceAssetUploadRequestSchema,
+  type InitiateSourceAssetUploadRequest,
+  InitiatedSourceAssetUploadViewSchema,
+  type InitiatedSourceAssetUploadView,
   type InterventionStep,
   type LearningTaskView,
   LearningTaskViewSchema,
@@ -43,11 +48,15 @@ import {
   type SubmitD1RetestAttemptRequest,
   StudentIdParamsSchema,
   type StudentIdParams,
+  SourceAssetIdParamsSchema,
+  type SourceAssetIdParams,
   TaskCompletionViewSchema,
   type TaskCompletionView,
   TaskIdParamsSchema,
   type TaskIdParams,
   TodayTasksViewSchema,
+  UploadedSourceAssetViewSchema,
+  type UploadedSourceAssetView,
 } from "@gapproof/contracts";
 import {
   advanceDemoClock,
@@ -58,6 +67,10 @@ import {
   findCaseById,
   findLatestCaseEvidenceEventByType,
   findStudentById,
+  findSourceAssetById,
+  findUploadStudentAndCase,
+  initiateSourceAssetUpload,
+  markSourceAssetUploaded,
   findTaskById,
   findTodayOverview,
   findTasksByStudentId,
@@ -73,6 +86,7 @@ import {
   DemoClockMismatchError,
   DemoClockVersionConflictError,
   ResourceNotFoundError,
+  SourceAssetIdempotencyKeyReusedError,
   VersionConflictError,
 } from "@gapproof/db";
 import {
@@ -91,12 +105,22 @@ import {
   enqueueRunNextIdempotent,
   type JobQueue,
 } from "@gapproof/jobs";
+import {
+  MAX_SOURCE_ASSET_BYTES,
+  type SourceAssetStorage,
+} from "./source-asset-storage.ts";
+import {
+  createSourceAssetUploadToken,
+  verifySourceAssetUploadToken,
+} from "./source-asset-token.ts";
 
 export interface BuildApiOptions {
   readonly database: Database;
   readonly queue: JobQueue;
   readonly clock?: Clock;
   readonly demoClockEnabled?: boolean;
+  readonly uploadStorage?: SourceAssetStorage;
+  readonly uploadSigningSecret?: string;
 }
 
 class ApiHttpError extends Error {
@@ -110,6 +134,51 @@ class ApiHttpError extends Error {
     super(message);
     this.name = "ApiHttpError";
   }
+}
+
+function requireUploadConfiguration(options: BuildApiOptions): {
+  readonly storage: SourceAssetStorage;
+  readonly secret: string;
+} {
+  if (
+    options.uploadStorage === undefined ||
+    options.uploadSigningSecret === undefined ||
+    options.uploadSigningSecret.length === 0
+  ) {
+    throw new ApiHttpError(
+      503,
+      "UPLOAD_NOT_CONFIGURED",
+      "Source asset uploads are not configured.",
+      true,
+    );
+  }
+  return {
+    storage: options.uploadStorage,
+    secret: options.uploadSigningSecret,
+  };
+}
+
+function uploadedSourceAssetView(
+  asset: Awaited<ReturnType<typeof findSourceAssetById>>,
+): UploadedSourceAssetView {
+  if (
+    asset === undefined ||
+    asset.processingStatus !== "uploaded" ||
+    !["image/jpeg", "image/png", "image/webp"].includes(asset.mimeType)
+  ) {
+    throw new ApiHttpError(
+      500,
+      "STORED_SOURCE_ASSET_INVALID",
+      "The stored source asset is invalid.",
+    );
+  }
+  return {
+    assetId: asset.id,
+    processingStatus: "uploaded",
+    mimeType: asset.mimeType as UploadedSourceAssetView["mimeType"],
+    byteSize: asset.byteSize,
+    sha256: asset.sha256,
+  };
 }
 
 function toCaseView(row: CaseRow): CaseView {
@@ -463,7 +532,12 @@ function isSamePayload(
 }
 
 export async function buildApi(options: BuildApiOptions) {
-  const api = Fastify({ logger: false });
+  const api = Fastify({ logger: false, bodyLimit: MAX_SOURCE_ASSET_BYTES });
+  api.addContentTypeParser(
+    ["image/jpeg", "image/png", "image/webp", "application/octet-stream"],
+    { parseAs: "buffer" },
+    (_request, body, done) => done(null, body),
+  );
   const traceIds = new WeakMap<object, string>();
 
   api.addHook("onRequest", async (request) => {
@@ -496,6 +570,10 @@ export async function buildApi(options: BuildApiOptions) {
 
     if (error instanceof ApiHttpError) {
       ({ statusCode, code, message, retryable, details } = error);
+    } else if (error instanceof SourceAssetIdempotencyKeyReusedError) {
+      statusCode = 409;
+      code = error.code;
+      message = error.message;
     } else if (error instanceof DemoClockVersionConflictError) {
       statusCode = 409;
       code = error.code;
@@ -538,6 +616,16 @@ export async function buildApi(options: BuildApiOptions) {
     } else if (
       typeof error === "object" &&
       error !== null &&
+      "code" in error &&
+      (error.code === "FST_ERR_CTP_BODY_TOO_LARGE" ||
+        error.code === "FST_ERR_CTP_INVALID_MEDIA_TYPE")
+    ) {
+      statusCode = 400;
+      code = "UPLOAD_CONTENT_MISMATCH";
+      message = "The uploaded content exceeds the maximum allowed size.";
+    } else if (
+      typeof error === "object" &&
+      error !== null &&
       "validation" in error &&
       error.validation !== undefined
     ) {
@@ -561,6 +649,172 @@ export async function buildApi(options: BuildApiOptions) {
   });
 
   const clock = options.clock ?? new SystemClock();
+
+  api.post<{ Body: InitiateSourceAssetUploadRequest }>(
+    "/v1/source-assets/uploads",
+    {
+      schema: {
+        body: InitiateSourceAssetUploadRequestSchema,
+        response: {
+          200: apiResponseSchema(InitiatedSourceAssetUploadViewSchema),
+          201: apiResponseSchema(InitiatedSourceAssetUploadViewSchema),
+          "4xx": ApiErrorResponseSchema,
+          500: ApiErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      requireUploadConfiguration(options);
+      const idempotencyKey = getIdempotencyKey(request);
+      const ownership = await findUploadStudentAndCase(options.database, {
+        studentId: request.body.studentId,
+        caseId: request.body.caseId,
+      });
+      if (
+        ownership.student === undefined ||
+        ownership.student.status === "deleted" ||
+        ownership.student.deletedAt !== null
+      ) {
+        throw new ResourceNotFoundError("Student", request.body.studentId);
+      }
+      if (
+        request.body.caseId !== null &&
+        (ownership.caseRow === undefined ||
+          ownership.caseRow.deletedAt !== null ||
+          ownership.caseRow.studentId !== ownership.student.id ||
+          ownership.caseRow.tenantId !== ownership.student.tenantId)
+      ) {
+        throw new ApiHttpError(
+          403,
+          "FORBIDDEN",
+          "The case does not belong to the requested student.",
+        );
+      }
+
+      const result = await initiateSourceAssetUpload(options.database, {
+        idempotencyRecordId: uuidv7(),
+        idempotencyKey,
+        studentId: ownership.student.id,
+        caseId: request.body.caseId,
+        mimeType: request.body.mimeType,
+        byteSize: request.body.byteSize,
+        sha256: request.body.sha256,
+        tenantId: ownership.student.tenantId,
+      });
+      const expiresAt = Date.now() + 10 * 60 * 1000;
+      const token = createSourceAssetUploadToken(
+        options.uploadSigningSecret ?? "",
+        {
+          assetId: result.asset.id,
+          studentId: result.asset.studentId ?? ownership.student.id,
+          sha256: result.asset.sha256,
+          byteSize: result.asset.byteSize,
+          mimeType: result.asset.mimeType,
+          expiresAt,
+        },
+      );
+      const data: InitiatedSourceAssetUploadView = {
+        assetId: result.asset.id,
+        processingStatus: "pending_upload",
+        upload: {
+          method: "PUT",
+          path: `/api/v1/source-assets/${result.asset.id}/content`,
+          token,
+          expiresAt: new Date(expiresAt).toISOString(),
+          mimeType: result.asset.mimeType as InitiatedSourceAssetUploadView["upload"]["mimeType"],
+          byteSize: result.asset.byteSize,
+        },
+      };
+      return reply.status(result.replayed ? 200 : 201).send(success(request, data));
+    },
+  );
+
+  api.put<{ Params: SourceAssetIdParams; Body: Buffer }>(
+    "/v1/source-assets/:assetId/content",
+    {
+      schema: {
+        params: SourceAssetIdParamsSchema,
+        response: {
+          200: apiResponseSchema(UploadedSourceAssetViewSchema),
+          "4xx": ApiErrorResponseSchema,
+          500: ApiErrorResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      const { storage, secret } = requireUploadConfiguration(options);
+      const asset = await findSourceAssetById(options.database, request.params.assetId);
+      if (asset === undefined || asset.deletedAt !== null) {
+        throw new ResourceNotFoundError("Source asset", request.params.assetId);
+      }
+      const token = request.headers["x-gapproof-upload-token"];
+      if (
+        typeof token !== "string" ||
+        !verifySourceAssetUploadToken(
+          secret,
+          token,
+          {
+            assetId: asset.id,
+            studentId: asset.studentId ?? "",
+            sha256: asset.sha256,
+            byteSize: asset.byteSize,
+            mimeType: asset.mimeType,
+          },
+        )
+      ) {
+        throw new ApiHttpError(401, "UPLOAD_TOKEN_INVALID", "The upload token is invalid or expired.");
+      }
+      const contentType = String(request.headers["content-type"] ?? "").split(";", 1)[0];
+      const bytes = Buffer.isBuffer(request.body)
+        ? request.body
+        : Buffer.from(request.body as unknown as Uint8Array);
+      const actualSha256 = createHash("sha256").update(bytes).digest("hex");
+      if (
+        !["image/jpeg", "image/png", "image/webp"].includes(contentType) ||
+        contentType !== asset.mimeType ||
+        bytes.byteLength < 1 ||
+        bytes.byteLength > MAX_SOURCE_ASSET_BYTES ||
+        bytes.byteLength !== asset.byteSize ||
+        actualSha256 !== asset.sha256
+      ) {
+        throw new ApiHttpError(
+          400,
+          "UPLOAD_CONTENT_MISMATCH",
+          "The uploaded content does not match the upload intent.",
+        );
+      }
+
+      if (asset.processingStatus === "uploaded") {
+        return success(request, uploadedSourceAssetView(asset));
+      }
+      if (asset.processingStatus !== "pending_upload") {
+        throw new ApiHttpError(
+          409,
+          "UPLOAD_NOT_READY",
+          "The source asset is not accepting content.",
+        );
+      }
+
+      let stored: { readonly created: boolean } | undefined;
+      try {
+        stored = await storage.put({
+          assetId: asset.id,
+          objectKey: asset.objectKey,
+          bytes,
+        });
+        const updated = await markSourceAssetUploaded(options.database, asset.id);
+        if (updated === undefined || updated.processingStatus !== "uploaded") {
+          throw new Error("The source asset upload status was not persisted.");
+        }
+        return success(request, uploadedSourceAssetView(updated));
+      } catch (error) {
+        if (stored?.created === true) {
+          await storage.remove({ assetId: asset.id, objectKey: asset.objectKey }).catch(() => undefined);
+        }
+        throw error;
+      }
+    },
+  );
 
   api.post<{ Body: CreateCaseRequest }>(
     "/v1/cases",

@@ -2,11 +2,14 @@ import { createDatabase } from "@gapproof/db";
 import { createJobQueue } from "@gapproof/jobs";
 
 import { buildApi } from "./app.ts";
+import { LocalDirectorySourceAssetStorage } from "./source-asset-storage.ts";
 
 const databaseUrl =
   process.env.DATABASE_URL ??
   "postgres://gapproof:gapproof_local@localhost:55432/gapproof";
 const port = Number(process.env.API_PORT ?? "4000");
+const uploadDirectory = process.env.GAPPROOF_UPLOAD_DIR;
+const uploadSigningSecret = process.env.GAPPROOF_UPLOAD_SIGNING_SECRET;
 
 const database = createDatabase(databaseUrl);
 const queue = createJobQueue(databaseUrl);
@@ -19,6 +22,13 @@ const api = await buildApi({
   database: database.db,
   queue,
   demoClockEnabled: process.env.GAPPROOF_DEMO_CLOCK_ENABLED === "true",
+  ...(uploadDirectory !== undefined && uploadDirectory.length > 0 &&
+  uploadSigningSecret !== undefined && uploadSigningSecret.length > 0
+    ? {
+        uploadStorage: new LocalDirectorySourceAssetStorage(uploadDirectory),
+        uploadSigningSecret,
+      }
+    : {}),
 });
 
 async function shutdown() {
