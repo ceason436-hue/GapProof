@@ -60,6 +60,34 @@ function progressKind(
   }
 }
 
+function toNextCheck(
+  row:
+    | {
+        readonly id: string;
+        readonly taskType: "guided_intervention" | "d1_retest" | "d7_retest";
+        readonly title: string;
+        readonly scheduledFor: Date;
+        readonly dueAt: Date | null;
+        readonly estimatedMinutes: number;
+      }
+    | undefined,
+): TodayOverview["nextCheck"] {
+  if (
+    row === undefined ||
+    (row.taskType !== "d1_retest" && row.taskType !== "d7_retest")
+  ) {
+    return null;
+  }
+  return {
+    taskId: row.id,
+    taskType: row.taskType,
+    title: row.title,
+    scheduledFor: row.scheduledFor.toISOString(),
+    dueAt: row.dueAt?.toISOString() ?? null,
+    estimatedMinutes: row.estimatedMinutes,
+  };
+}
+
 export async function findTodayOverview(
   database: TodayOverviewDatabase,
   input: TodayOverviewInput,
@@ -154,7 +182,6 @@ export async function findTodayOverview(
     .filter((row): row is NonNullable<typeof row> => row !== null)
     .slice(0, 2);
 
-  const nextCheck = nextCheckRows[0];
   return {
     activityDays: dates.map((date) => ({
       localDate: date,
@@ -163,15 +190,6 @@ export async function findTodayOverview(
     weeklyGoal: null,
     pendingConfirmationCount: pendingConfirmationRows.length,
     recentProgress,
-    nextCheck: nextCheck === undefined
-      ? null
-      : {
-          taskId: nextCheck.id,
-          taskType: nextCheck.taskType,
-          title: nextCheck.title,
-          scheduledFor: nextCheck.scheduledFor.toISOString(),
-          dueAt: nextCheck.dueAt?.toISOString() ?? null,
-          estimatedMinutes: nextCheck.estimatedMinutes,
-        },
+    nextCheck: toNextCheck(nextCheckRows[0]),
   };
 }
