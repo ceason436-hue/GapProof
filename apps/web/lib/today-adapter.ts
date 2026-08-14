@@ -3,6 +3,7 @@ import type {
   D7RetestTaskView,
   GuidedInterventionTaskView,
   LearningTaskView,
+  TodayOverview,
   TodayTasksView,
 } from "@gapproof/contracts";
 
@@ -27,7 +28,17 @@ export type TodayReadModel = {
   taskCount: number;
   current: CurrentTaskSelection;
   retests: RetestTaskView[];
+  overview: TodayOverview;
 };
+
+export class TodayOverviewContractError extends Error {
+  readonly code = "TODAY_OVERVIEW_MISSING" as const;
+
+  constructor() {
+    super("Today overview is required in explicit API mode.");
+    this.name = "TodayOverviewContractError";
+  }
+}
 
 function requireUsableTimeZone(timeZone: string): void {
   // The API validates the student's IANA time zone. Recheck at the rendering
@@ -59,6 +70,7 @@ function selectCurrentTask(view: TodayTasksView): CurrentTaskSelection {
 
 export function toTodayReadModel(view: TodayTasksView): TodayReadModel {
   requireUsableTimeZone(view.timeZone);
+  if (!view.overview) throw new TodayOverviewContractError();
   return {
     studentId: view.studentId,
     timeZone: view.timeZone,
@@ -69,6 +81,7 @@ export function toTodayReadModel(view: TodayTasksView): TodayReadModel {
     retests: view.tasks.filter(
       (task): task is RetestTaskView => task.taskType !== "guided_intervention",
     ),
+    overview: view.overview,
   };
 }
 

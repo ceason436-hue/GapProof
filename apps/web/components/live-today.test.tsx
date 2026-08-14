@@ -1,8 +1,8 @@
-import type { D1RetestTaskView, D7RetestTaskView } from "@gapproof/contracts";
+import type { D1RetestTaskView, D7RetestTaskView, TodayOverview } from "@gapproof/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { RetestCard } from "./live-today";
+import { OverviewNextCheck, RetestCard, TodayOverviewPanel } from "./live-today";
 
 vi.mock("server-only", () => ({}));
 
@@ -57,5 +57,66 @@ describe("D+1/D+7 read-only cards", () => {
     expect(d7).toContain("D+7 检查只读");
     expect(d7).toContain("只读待接入");
     expect(d7).not.toContain("可以检查");
+  });
+});
+
+const overview: TodayOverview = {
+  activityDays: Array.from({ length: 7 }, (_, index) => ({
+    localDate: `2026-08-${String(10 + index).padStart(2, "0")}`,
+    completedTaskCount: index === 6 ? 2 : index === 5 ? 1 : 0,
+  })),
+  weeklyGoal: { targetDays: 5, completedDays: 2 },
+  pendingConfirmationCount: 2,
+  recentProgress: [{
+    eventId: "0198b111-1111-7000-8000-000000000030",
+    caseId: "22222222-2222-4222-8222-222222222222",
+    kind: "practice_completed",
+    occurredAt: "2026-08-15T01:00:00.000Z",
+  }],
+  nextCheck: {
+    taskId: "0198b111-1111-7000-8000-000000000021",
+    taskType: "d7_retest",
+    title: "D+7 延迟检查",
+    scheduledFor: "2026-08-22T01:00:00.000Z",
+    dueAt: "2026-08-22T13:00:00.000Z",
+    estimatedMinutes: 5,
+  },
+};
+
+describe("Today overview projection", () => {
+  it("renders only service facts and neutral progress copy", () => {
+    const html = renderToStaticMarkup(createElement(TodayOverviewPanel, { overview }));
+    expect(html).toContain('data-local-date="2026-08-16"');
+    expect(html).toContain('data-pending-confirmations="2"');
+    expect(html).toContain("2 / 5 天");
+    expect(html).toContain("完成了一次练习");
+    expect(html).not.toContain("eventId");
+    expect(html).not.toContain("caseId");
+    expect(html).not.toContain("已掌握");
+  });
+
+  it("keeps a D7 next check read-only and handles no check", () => {
+    const d7 = renderToStaticMarkup(createElement(OverviewNextCheck, { nextCheck: overview.nextCheck, timeZone: "Asia/Tokyo" }));
+    expect(d7).toContain("D+7 检查只读");
+    expect(d7).toContain("disabled");
+    const none = renderToStaticMarkup(createElement(OverviewNextCheck, { nextCheck: null, timeZone: "Asia/Tokyo" }));
+    expect(none).toContain("暂无已安排检查");
+  });
+
+  it("does not invent activity or progress for a new-user overview", () => {
+    const empty: TodayOverview = {
+      ...overview,
+      activityDays: overview.activityDays.map(day => ({ ...day, completedTaskCount: 0 })),
+      weeklyGoal: null,
+      pendingConfirmationCount: 0,
+      recentProgress: [],
+      nextCheck: null,
+    };
+    const html = renderToStaticMarkup(createElement(TodayOverviewPanel, { overview: empty }));
+    expect(html).toContain("目标待设置");
+    expect(html).toContain("当前没有待确认事项");
+    expect(html).toContain("暂无新的学习进展");
+    expect(html).not.toContain("坚持");
+    expect(html).not.toContain("2 / 5 天");
   });
 });

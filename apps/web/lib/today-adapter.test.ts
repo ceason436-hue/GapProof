@@ -3,14 +3,25 @@ import type {
   D7RetestTaskView,
   GuidedInterventionTaskView,
   LearningTaskView,
+  TodayOverview,
   TodayTasksView,
 } from "@gapproof/contracts";
 import { describe, expect, it } from "vitest";
-import { formatTaskDateTime, toTodayReadModel } from "./today-adapter";
+import { formatTaskDateTime, TodayOverviewContractError, toTodayReadModel } from "./today-adapter";
 
 const studentId = "11111111-1111-4111-8111-111111111111";
 const caseId = "22222222-2222-4222-8222-222222222222";
 const scheduledFor = "2026-08-16T12:00:00.000Z";
+const overview: TodayOverview = {
+  activityDays: Array.from({ length: 7 }, (_, index) => ({
+    localDate: `2026-08-${String(10 + index).padStart(2, "0")}`,
+    completedTaskCount: index === 6 ? 1 : 0,
+  })),
+  weeklyGoal: null,
+  pendingConfirmationCount: 0,
+  recentProgress: [],
+  nextCheck: null,
+};
 
 function base(id: string, status: LearningTaskView["status"]) {
   return {
@@ -57,7 +68,7 @@ function retest(
 }
 
 function today(tasks: LearningTaskView[], currentTaskId: string | null): TodayTasksView {
-  return { studentId, timeZone: "Asia/Tokyo", currentTaskId, tasks };
+  return { studentId, timeZone: "Asia/Tokyo", currentTaskId, tasks, overview };
 }
 
 describe("Today contract adapter", () => {
@@ -109,6 +120,17 @@ describe("Today contract adapter", () => {
       ["d1_retest", "scheduled"],
       ["d7_retest", "completed"],
     ]);
+  });
+
+  it("requires overview in explicit API mode instead of allowing a Mock fallback", () => {
+    const withoutOverview = { ...today([], null) };
+    delete withoutOverview.overview;
+    expect(() => toTodayReadModel(withoutOverview)).toThrow(TodayOverviewContractError);
+  });
+
+  it("keeps overview facts unchanged for the rendering boundary", () => {
+    const model = toTodayReadModel(today([], null));
+    expect(model.overview).toBe(overview);
   });
 
   it("formats task dates only in the response time zone", () => {

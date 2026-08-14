@@ -52,24 +52,55 @@ const scheduledD7 = {
   item: retestItem("d7"),
 };
 
+const overview = ({ completedToday = 0, weeklyGoal = null, pendingConfirmationCount = 0, recentProgress = [], nextCheck = null } = {}) => ({
+  activityDays: Array.from({ length: 7 }, (_, index) => ({
+    localDate: `2026-08-${String(10 + index).padStart(2, "0")}`,
+    completedTaskCount: index === 6 ? completedToday : 0,
+  })),
+  weeklyGoal,
+  pendingConfirmationCount,
+  recentProgress,
+  nextCheck,
+});
+
 const fixtures = {
   "current-guided": {
     studentId,
     timeZone: "Asia/Tokyo",
     currentTaskId: guided.id,
     tasks: [guided, scheduledD1, scheduledD7],
+    overview: overview({
+      weeklyGoal: { targetDays: 5, completedDays: 2 },
+      pendingConfirmationCount: 1,
+      recentProgress: [{
+        eventId: "0198b111-1111-7000-8000-000000000030",
+        caseId,
+        kind: "practice_completed",
+        occurredAt: "2026-08-15T01:00:00.000Z",
+      }],
+      nextCheck: {
+        taskId: scheduledD1.id,
+        taskType: "d1_retest",
+        title: scheduledD1.title,
+        scheduledFor: scheduledD1.scheduledFor,
+        dueAt: scheduledD1.dueAt,
+        estimatedMinutes: scheduledD1.estimatedMinutes,
+      },
+    }),
   },
   "scheduled-null": {
     studentId,
     timeZone: "America/New_York",
     currentTaskId: null,
     tasks: [scheduledD1, scheduledD7],
+    overview: overview({ nextCheck: null }),
   },
   empty: {
     studentId,
     timeZone: "Europe/Paris",
     currentTaskId: null,
     tasks: [],
+    overview: overview(),
   },
 };
 

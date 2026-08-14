@@ -1,10 +1,11 @@
-import type { D1RetestTaskView, GuidedInterventionTaskView } from "@gapproof/contracts";
+import type { D1RetestTaskView, GuidedInterventionTaskView, TodayOverview } from "@gapproof/contracts";
 import { AppShell } from "./app-shell";
 import { D1AttemptPanel } from "./d1-attempt-panel";
 import { ApiClientError } from "@/lib/api-client";
 import { WebConfigurationError } from "@/lib/runtime-config";
 import {
   formatTaskDateTime,
+  TodayOverviewContractError,
   toTodayReadModel,
   type CurrentTaskSelection,
   type RetestTaskView,
@@ -20,6 +21,82 @@ function TaskDates({
     <span>计划：{formatTaskDateTime(scheduledFor, timeZone)}</span>
     {dueAt ? <span>截止：{formatTaskDateTime(dueAt, timeZone)}</span> : null}
   </div>;
+}
+
+function activityLevel(completedTaskCount: number): string {
+  return `activity-level-${Math.min(completedTaskCount, 3)}`;
+}
+
+const progressCopy: Record<TodayOverview["recentProgress"][number]["kind"], string> = {
+  recognition_confirmed: "学习材料已确认",
+  diagnosis_checked: "完成了一次学习检查",
+  practice_completed: "完成了一次练习",
+  d1_passed: "一次延迟检查已完成，下一次已安排",
+  d1_needs_followup: "这次检查后还需要再练习",
+  plan_adjusted: "后续学习安排已更新",
+};
+
+function OverviewActivity({ overview }: { overview: TodayOverview }) {
+  return <section className="overview-activity" aria-labelledby="activity-title">
+    <h3 id="activity-title">本周学习足迹</h3>
+    <div className="day-grid server-day-grid" role="list" aria-label="服务端记录的本周学习足迹">
+      {overview.activityDays.map((day, index) => <span
+        className={`${activityLevel(day.completedTaskCount)}${index === overview.activityDays.length - 1 ? " today" : ""}`}
+        data-local-date={day.localDate}
+        key={day.localDate}
+        role="listitem"
+        aria-label={`${day.localDate}，完成任务 ${day.completedTaskCount} 项`}
+        title={`${day.localDate}：完成任务 ${day.completedTaskCount} 项`}
+      />)}
+    </div>
+    <p>{overview.activityDays[overview.activityDays.length - 1]?.localDate} 为今天；颜色深浅仅表示服务端完成任务数。</p>
+  </section>;
+}
+
+function OverviewGoal({ overview }: { overview: TodayOverview }) {
+  return <section className="overview-goal" aria-labelledby="goal-title">
+    <h3 id="goal-title">本周目标</h3>
+    {overview.weeklyGoal
+      ? <p data-weekly-goal>{overview.weeklyGoal.completedDays} / {overview.weeklyGoal.targetDays} 天</p>
+      : <p data-weekly-goal="unset">目标待设置</p>}
+    <span>{overview.weeklyGoal ? "按服务端已设置的目标显示" : "暂无明确周目标"}</span>
+  </section>;
+}
+
+function OverviewPending({ overview }: { overview: TodayOverview }) {
+  const count = overview.pendingConfirmationCount;
+  return <article className="lime-card overview-fact-card" data-pending-confirmations={count}>
+    <div className="lime-heading"><h3>等你确认</h3></div>
+    <p>{count > 0 ? `有 ${count} 项内容等你确认。` : "当前没有待确认事项。"}</p>
+  </article>;
+}
+
+function OverviewProgress({ overview }: { overview: TodayOverview }) {
+  return <article className="lime-card overview-fact-card" data-recent-progress-count={overview.recentProgress.length}>
+    <div className="lime-heading"><h3>最近进展</h3></div>
+    {overview.recentProgress.length
+      ? <ul className="recent-progress-list">{overview.recentProgress.slice(0, 2).map(progress => <li key={progress.eventId}>{progressCopy[progress.kind]}</li>)}</ul>
+      : <p>暂无新的学习进展。</p>}
+  </article>;
+}
+
+export function TodayOverviewPanel({ overview }: { overview: TodayOverview }) {
+  return <article className="live-panel overview-panel" data-today-overview>
+    <h2>今日概览</h2>
+    <div className="overview-summary"><OverviewActivity overview={overview}/><OverviewGoal overview={overview}/></div>
+    <div className="overview-facts"><OverviewPending overview={overview}/><OverviewProgress overview={overview}/></div>
+  </article>;
+}
+
+export function OverviewNextCheck({ nextCheck, timeZone }: { nextCheck: TodayOverview["nextCheck"]; timeZone: string }) {
+  if (!nextCheck) return <section className="next-check" data-next-check="none"><header><span>下次检查</span><strong>尚未安排</strong></header><p>暂无已安排检查。</p></section>;
+  const cycle = nextCheck.taskType === "d7_retest" ? "D+7" : "D+1";
+  return <section className="next-check" data-next-check={nextCheck.taskType}>
+    <header><span>下次检查 · {cycle}</span><strong>{formatTaskDateTime(nextCheck.scheduledFor, timeZone)}</strong></header>
+    <div><h2>{nextCheck.title}</h2><p>预计时长：约 {nextCheck.estimatedMinutes} 分钟</p>{nextCheck.dueAt ? <p>截止：{formatTaskDateTime(nextCheck.dueAt, timeZone)}</p> : null}</div>
+    <button type="button" disabled>{nextCheck.taskType === "d7_retest" ? "D+7 检查只读" : "等待服务端安排"}</button>
+    <small>{nextCheck.taskType === "d7_retest" ? "D+7 作答尚未接入，本轮保持只读。" : "完成后会更新学习记录。"}</small>
+  </section>;
 }
 
 export function RetestCard({
@@ -128,6 +205,10 @@ function LiveError({ error }: { error: unknown }) {
     title = "学生时区无法用于日期显示";
     detail = "页面拒绝回退到浏览器、服务器或固定时区，请修正服务端学生时区。";
     code = "TODAY_TIME_ZONE_INVALID";
+  } else if (error instanceof TodayOverviewContractError) {
+    title = "今日概览暂不可用";
+    detail = "服务端尚未返回必需的今日概览数据；页面没有回退到 Mock。";
+    code = error.code;
   }
   return <AppShell actionDisabled actionLabel="等待配置">
     <section className="today-page"><div className="title-row"><div><span className="status-chip error">真实 API 模式</span><h1>{title}</h1><p>{detail}</p><div className="config-detail">{code}</div></div></div></section>
@@ -154,12 +235,9 @@ export async function LiveToday() {
         <div className="live-today-grid">
           <div className="live-main-column">
             <CurrentPanel current={model.current} timeZone={model.timeZone}/>
-            <article className="live-panel unavailable-panel"><h2>尚无真实首页投影</h2><div className="unavailable-list">
-              <div className="unavailable-row"><strong>本周学习足迹</strong><span>当前接口没有真实投影，未显示 Mock 数据。</span></div>
-              <div className="unavailable-row"><strong>周目标、待确认与最近进展</strong><span>当前接口没有真实投影，保持不可用态。</span></div>
-            </div></article>
+            <TodayOverviewPanel overview={model.overview}/>
           </div>
-          <aside className="live-panel"><h2>D+1 / D+7 检查状态</h2><p>ready D1 可在当前任务区作答；D+7 仍只读。默认入口仍为 Mock。</p><div className="retest-list">
+          <aside className="live-panel"><OverviewNextCheck nextCheck={model.overview.nextCheck} timeZone={model.timeZone}/><h2>D+1 / D+7 检查状态</h2><p>ready D1 可在当前任务区作答；D+7 仍只读。默认入口仍为 Mock。</p><div className="retest-list">
             {model.retests.length
               ? model.retests.map(retest => <RetestCard key={retest.id} retest={retest} timeZone={model.timeZone}/>)
               : <div className="unavailable-row"><strong>暂无延迟检查</strong><span>服务端创建后才会显示。</span></div>}

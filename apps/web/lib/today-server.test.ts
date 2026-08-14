@@ -20,7 +20,19 @@ describe("server-side Today fetch", () => {
     process.env.GAPPROOF_API_ORIGIN = "http://127.0.0.1:3001";
     process.env.GAPPROOF_DEMO_STUDENT_ID = studentId;
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      data: { studentId, timeZone: "Asia/Tokyo", currentTaskId: null, tasks: [] },
+      data: {
+        studentId,
+        timeZone: "Asia/Tokyo",
+        currentTaskId: null,
+        tasks: [],
+        overview: {
+          activityDays: Array.from({ length: 7 }, (_, index) => ({ localDate: `2026-08-${String(10 + index).padStart(2, "0")}`, completedTaskCount: 0 })),
+          weeklyGoal: null,
+          pendingConfirmationCount: 0,
+          recentProgress: [],
+          nextCheck: null,
+        },
+      },
       requestId: "request-1",
       traceId: "trace-1",
     }), { status: 200 }));
