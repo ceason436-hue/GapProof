@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.24"
+version: "0.1.25"
 status: "ACTIVE"
-current_stage: "初赛方案冲刺；后端已完成 D+1 客观复测评分与失败异步重排骨架，学生端今日页 F1b 已接共享 Today 只读契约但默认入口仍为 Mock"
+current_stage: "初赛方案冲刺；学生端今日页 F1c 已接 ready D1 客户端作答，默认入口仍为 Mock；D7、首页真实投影与报告未完成"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -121,6 +121,16 @@ next_action:
 
 合并前必须检查：来源、状态、范围、版权、合规、与既有决策的冲突，以及 PPT、Demo、代码、README 是否需要同步。
 
+### 0.5 单一控制面与选择性迁移
+
+- 协调/文档治理任务是四主文档、TDD Push Log、跨端契约解释、`main` 合并与推送的唯一控制面；前后端任务只执行明确切片，不直接改四主文档或推送 `main`。
+- 执行任务只在 `complete / failed / blocked / migration_required` 时发送一次结构化终报。协调任务使用只读 heartbeat 观察；除安全或契约错误外，不在原子步骤中插入新任务。
+- 新执行任务采用轻量交接，只提供 Git 锚点、四文档版本、相关章节/决策、共享 contracts 路径、精确范围、禁止项、验收命令和未决风险，不复制历史对话、完整事实包或长测试日志。执行任务只核对四文档版本头并阅读指定切片、contracts 与代码；协调任务负责完整阅读和冲突解释。终报只保留 Git 状态、精确文件与行为、测试汇总、风险和上下文健康度，失败日志仅给关键错误与复现命令。
+- 背景窗口达到 `80%` 仅为 soft warning：停止扩范围，优先完成当前 bounded slice、测试与 clean commit，不因高百分比单独迁移。每次自动压缩后须 recovery audit，核对 `main/origin` SHA、四文档版本、Push Log、branch/base/HEAD/clean、活动任务、当前切片、未决决策与禁区；全部匹配可继续，任何事实矛盾、遗忘决策、误报 Mock/`[PLANNED]`、分支或范围不清均须 safe checkpoint 后迁移。
+- 写入型前后端任务允许 1–2 次压缩（第 2 次开始收口，第 3 次为 hard cap）；只读审计任务最多 4 次（第 5 次停止）；协调任务最多 3 次（第 3 次收口交接，第 4 次为 hard cap）。事实漂移不受次数预算保护，须立即迁移。
+- 迁移保持选择性：只替换达到阈值或漂移的任务，健康任务继续使用；仅协调任务自身触发阈值时才迁移控制面。新任务从最新 Git 锚点创建，不携带旧全文上下文。
+- 协调迁移时只更新同一个 heartbeat target，并停止旧协调的持续目标/自动续跑；不得复制 heartbeat。执行任务不创建独立长期目标。
+
 ---
 
 ## 1. 当前项目快照
@@ -131,7 +141,7 @@ next_action:
 
 `[FACT]` GOAI 无界应用赛道参赛手册列出的初赛截止日期为 2026-08-16；具体当天截止时刻、入口、文件大小及后续通知仍须在官网、提交系统或官方群再次核对。
 
-`[DECISION]` 当前处于：**初赛方案提交前冲刺；学生端“今日”页 F1b 已消费共享 Today contracts，可在显式 `?source=api` 模式只读展示服务端 `timeZone`、`currentTaskId` 与 guided/D1/D7 任务，但默认入口仍为 Mock，尚无写入闭环；Phase A 后端已完成 D+1 客观复测提交与确定性评分，成功调度 D7、失败事务内入队异步重排**。
+`[DECISION]` 当前处于：**初赛方案提交前冲刺；学生端“今日”页 F1c 已在显式 `?source=api` 模式接入 ready D1 客户端作答，使用服务端权威 Case `stateVersion`、共享 attempts contracts、UUIDv7 幂等键、同 key/body 单次未知结果重试、冲突刷新后重新确认与网络未知锁定；默认入口仍为 Mock。D7 作答、首页真实投影、报告与完整端到端浏览器 POST 证据仍未完成**。
 
 ### 1.2 已完成
 
@@ -147,14 +157,14 @@ next_action:
 - `[DECISION]` 已确定比赛阶段优先使用原创、公开许可或合成数据，不等待真实学生试卷渠道。
 - `[DECISION]` 已确定后台多 Agent、前台单一 AI 学习教练的产品形态。
 - `[DECISION]` 已确定苏格拉底脚手架、学习证据图谱和延迟迁移验证为核心设计。
-- `[RESULT]` 已在 Stitch 中选定学生端“今日”页桌面高保真视觉基线；F0 页面编码与 F1b Today 只读契约接入均已通过构建、自动化、双桌面视口截图和滚动固定验收。默认入口仍是 Mock；显式 API 模式仅为只读接入，不代表业务主闭环已接通。
-- `[DECISION]` 当前学生首页的核心视觉色为蓝 `#0036FF` 与青柠绿 `#B5F800`；学生端、家长端和后续页面的详细规范以 `DESIGN.md v0.2.14` 为准。
+- `[RESULT]` 已在 Stitch 中选定学生端“今日”页桌面高保真视觉基线；F0、F1b 与 F1c 已通过相应构建和自动化门禁。F1c 只为显式 API 模式的 ready D1 增加安全客户端作答；默认入口仍是 Mock，也没有完整浏览器 POST Fixture，因此不代表业务主闭环已接通。
+- `[DECISION]` 当前学生首页的核心视觉色为蓝 `#0036FF` 与青柠绿 `#B5F800`；学生端、家长端和后续页面的详细规范以 `DESIGN.md v0.2.15` 为准。
 - `[FACT]` 用户已将目标教材 ISBN 确认为 `978-7-5720-3630-9`，与当前 161 页教材 PDF 封底条码一致；版权页照片无法提供，因此版次、印次保持未知，不再作为 MVP 开工阻塞项。
 - `[FACT]` 已收到线上购买的教研与试题资料 191 个文件：184 个 DOCX、4 个 PDF 和 3 个 MP3，覆盖学生/考试版、参考答案、教师/解析版、知识清单、答题卡和听力等类型；这些内容资产不是真实学生作答数据。
 - `[DECISION]` 用户确认教材与试题材料可供本项目使用和公开展示，并确认 `logo.png` 可作为 MVP Logo V1；权利台账记录为 `user_asserted_permitted`，购买页/许可条款凭证待归档；教材版权页不可取得。
 - `[DECISION]` 教材和试题的完整 Markdown 转换结果仅保存在 `.gitignore` 覆盖的本地私有目录，不进入 Git；公开仓库只保存来源元数据、哈希、处理程序及项目原创/合成内容。
 - `[DECISION]` 答题卡与听力音频不进入 MVP 题库、RAG 或视觉 QA；原文件继续私有留存，不做永久删除。视觉核验只覆盖实际入选 Demo/题库的文件，且入选文件逐份核验，其余材料不要求逐份目视。
-- `[RESULT]` 已初始化 Bun workspace 的 `web`、`contracts`、`domain`、`db`、`jobs` 与 `testkit`；首个原创合成 Case 已保存为可版本化 Fixture。当前组合基线为 69 条快速测试通过、41 条真实 PostgreSQL/API/Worker 集成测试通过、TypeScript 严格类型检查和 Next.js production build 通过。
+- `[RESULT]` 已初始化 Bun workspace 的 `web`、`contracts`、`domain`、`db`、`jobs` 与 `testkit`；首个原创合成 Case 已保存为可版本化 Fixture。当前组合基线为 78 条快速测试通过、41 条真实 PostgreSQL/API/Worker 集成测试通过、48 条 apps/web 测试通过、TypeScript 严格类型检查和 Next.js production build 通过。
 - `[RESULT]` 已实现 `parse_paper` 的 TypeBox/JSON Schema、统一 `ToolResult` 契约与确定性 fake adapter；成功、低置信、超时、权限失败四类 Fixture 已通过 7 条契约测试。尚未接入真实 OCR Provider。
 - `[RESULT]` 已实现 Case 创建/读取、异步 `run-next`、识别确认和 `GET /v1/cases/{caseId}/hypotheses`。Worker 可从 `ready_for_diagnosis` 生成两条有证据引用的竞争性错因和一条确认小题，以 `hypotheses_generated` 将 Case 推进到 `probe_required`；查询响应不暴露答案键。
 - `[RESULT]` 已实现 `POST /v1/cases/{caseId}/attempts`：服务端从内部评分规则执行 `exact_choice_v1`，以 `probe_evaluated` 原子推进至 `intervention_ready`；答错时映射受支持的竞争性错因，答对时不虚构已确认错因。接口具备 Schema、幂等重放、并发去重、版本冲突和非法状态/选项保护。
@@ -163,7 +173,7 @@ next_action:
 - `[RESULT]` 完成干预的同一 PostgreSQL 事务现同时写入 D+1 延迟 `retest.due` Job；独立 Worker 使用 `SystemClock`，仅在 `scheduledFor <= now` 时将指定 Case 的 `d1_retest` 从 `scheduled` 原子激活为 `ready`，重复与并发执行不会产生重复效果。
 - `[RESULT]` 已实现受 `GAPPROOF_DEMO_CLOCK_ENABLED=true` 保护的 `POST /v1/demo/clock/advance`。它为每个合成 Demo Case 持久化独立、带版本的虚拟时间线，可快进并在同一事务激活该 Case 的到期复测、写入 `demo_clock_advanced` 审计；不修改操作系统时间，也不改变 Case 的 `d1_scheduled`、`stateVersion` 或 `pending_retest` mastery。
 - `[RESULT]` 已实现 `GET /v1/tasks/{taskId}` 与 `POST /v1/tasks/{taskId}/attempts` 的 D1 客观复测最小切片。服务端用私有答案执行 `exact-choice-v1`：通过时原子完成 D1、追加 `retest_evaluated { kind:"d1", passed:true }`，并按 `evaluatedAt + 144h` 创建 D7、再给出 12 小时窗口；失败时原子进入 `replan_required` 并入队 `case.replan`，由 Worker 异步生成合成干预骨架。公开响应不含答案键，幂等、并发与乐观锁已有测试覆盖。
-- `[RESULT]` Today contracts 已扩展为服务端学生 `timeZone`、`currentTaskId: uuid | null` 与 guided/D1/D7 判别联合；只有服务端判定的 ready D1 或 guided 任务可成为当前任务，D7 在 attempts 未实现前保持只读。F1b 只读 API 模式严格按该契约显示任务和学生时区，无数据时不回退 Mock，也没有提交、评分或状态迁移。
+- `[RESULT]` Today contracts 已扩展为服务端学生 `timeZone`、`currentTaskId: uuid | null` 与 guided/D1/D7 判别联合；只有服务端判定的 ready D1 或 guided 任务可成为当前任务。F1c 对 ready D1 使用共享 attempts contracts、权威 Case 版本和 UUIDv7 幂等意图提交；D7 在 attempts 未实现前保持只读。
 
 ### 1.3 尚未完成或尚未验证
 
@@ -173,7 +183,7 @@ next_action:
 - `[PLANNED]` 尚未制作比赛用原创模拟试卷、合成学生轨迹和独立金标集。
 - `[PLANNED]` 尚未确认至少一位英语教育背景人员能否短时抽检核心金标内容。
 - `[PROTOTYPE]` 已建立最小后端 Thin Slice，并完成确定性干预生成、今日任务查询、干预提交、D+1 调度/到期/客观评分及失败后的异步重排骨架；尚未形成从上传到报告的完整端到端 Demo。真实 AI 干预、真实题库、D7 作答评分、可执行的重排上限、真实个性化重排内容、通知和报告仍未实现。
-- `[PROTOTYPE]` 学生端“今日”页 F0 Mock 与 F1b 只读 API 模式均已完成视觉与技术验收；真实模式仅通过显式 `?source=api` 启用，D1 作答、默认入口切换、首页统计投影和业务主闭环仍未接入，其余学生 P0 页面、家长端页面和评委最小页仍未完成。
+- `[PROTOTYPE]` 学生端“今日”页 F0 Mock、F1b 只读 API 与 F1c ready D1 客户端作答已完成对应技术门禁；真实模式仍仅通过显式 `?source=api` 启用。current-ready-D1 浏览器 POST/冲突/网络未知 Fixture、默认入口切换、首页统计投影和业务主闭环仍未完成，其余学生 P0 页面、家长端页面和评委最小页仍未完成。
 - `[PLANNED]` 尚未完成正式 500 字简介、初赛 PPT、视频、README、数据卡、依赖清单和合规一页纸。
 - `[PLANNED]` 尚未产生可报告的工程评测结果或真实学生学习效果。
 
@@ -1596,7 +1606,7 @@ Demo 至少现场演一个真实失败分支，视频中再展示两个。
 
 ### 18.3 已确定的轻量技术栈
 
-详细架构、选型对比和系统边界以 `TDD.md v0.3.17` 为准。本节只保留主文档级决策：
+详细架构、选型对比和系统边界以 `TDD.md v0.3.18` 为准。本节只保留主文档级决策：
 
 - 语言：TypeScript 单栈；Bun 管理 workspace 和依赖，Node.js 24 LTS 作为生产运行时。
 - 前端：Next.js App Router + React，桌面与平板完整支持，手机保留基础响应式访问和内容适配的 Web。
@@ -1614,7 +1624,7 @@ Demo 至少现场演一个真实失败分支，视频中再展示两个。
 - OCR：阿里云读光教育试卷识别为主，腾讯云高精度 OCR 为通用/备用；统一 `OcrProvider`。
 - 知识增强：PostgreSQL 全文 + pgvector；LangChain.js 仅作 Retriever 辅助层，KnowledgeService 和固定数据库工具由项目自建。
 - MVP Agent：固定六节点 `LoadCaseContext → RetrieveKnowledge → GenerateHypotheses → SelectProbe → EvaluateEvidence → CreateDecisionProposal`。
-- 数据基线：UUIDv7、PostgreSQL 16+、核心表/索引/枚举/删除策略以 `TDD.md v0.3.17` 为准。
+- 数据基线：UUIDv7、PostgreSQL 16+、核心表/索引/枚举/删除策略以 `TDD.md v0.3.18` 为准。
 - 部署：杭州阿里云单区域联网 Docker Compose；真实 Provider 用于演示，Mock 仅用于测试和故障注入。
 
 当前规模不需要 Kubernetes、Kafka、复杂分布式多 Agent 平台或大规模微调。
@@ -1810,7 +1820,7 @@ mastery:
 
 ### 技术类
 
-6. `TDD.md`：技术路线、系统边界、架构选型和工程门禁（v0.3.17，当前版本）。
+6. `TDD.md`：技术路线、系统边界、架构选型和工程门禁（v0.3.18，当前版本）。
 7. `Agent-State-Machine-Spec.md`
 8. `Tool-Contract-Spec.md`
 9. `OpenAPI.yaml`
@@ -2012,11 +2022,11 @@ review_date:
 | DEC-028 | MVP Agent 固定为六节点 LangGraph.js 图 | accepted | 新增节点必须更新图版本、Schema 和 Golden Cases |
 | DEC-029 | 所有工具先完成接口、Schema、Mock 和错误处理；verify_item/schedule_retest 做 MVP 最小实现 | accepted | 工具边界或 Provider 能力变化 |
 | DEC-030 | escalate_human 先创建待处理记录；analyze_speech/score_writing 暂缓真实能力 | accepted | 真实人工、语音或写作试点启动 |
-| DEC-031 | UUIDv7 + PostgreSQL 16+，完整表结构和删除策略以 TDD v0.3.17 为准 | accepted | 数据规模、扩展支持或合规要求变化 |
+| DEC-031 | UUIDv7 + PostgreSQL 16+，完整表结构和删除策略以 TDD v0.3.18 为准 | accepted | 数据规模、扩展支持或合规要求变化 |
 | DEC-032 | TDD 详细 API 路由为唯一正式接口 | accepted | API 版本升级或新客户端边界产生 |
 | DEC-033 | 杭州阿里云单区域联网 Docker Compose，真实 Provider 演示，Mock 仅测试/故障注入 | accepted | 比赛网络、并发、合规或可用性要求变化 |
 | DEC-034 | DeepSeek `deepseek-v4-flash`、MiniMax `minimax-m3`、腾讯混元 Embedding 作为当前模型配置 | accepted | 账号权限、供应商模型版本或评测结果变化 |
-| DEC-035 | 学生端“今日”页桌面视觉基线已选定；使用 `#0036FF` 导航/进度与 `#B5F800` 行动/积极变化，完整规范以 DESIGN v0.2.14 为准 | accepted | 真实前端实现、可用性测试或品牌资产定稿产生反证 |
+| DEC-035 | 学生端“今日”页桌面视觉基线已选定；使用 `#0036FF` 导航/进度与 `#B5F800` 行动/积极变化，完整规范以 DESIGN v0.2.15 为准 | accepted | 真实前端实现、可用性测试或品牌资产定稿产生反证 |
 | DEC-036 | 新用户今日页先完成第一次检查，不显示虚构的足迹、进展或下次检查；首次任务生成后切换常规今日页 | accepted | onboarding 实测或产品范围变化 |
 | DEC-037 | 目标教材 ISBN 为 `978-7-5720-3630-9`；配套练习 `978-7-5720-3519-7` 不纳入 MVP | accepted | 版权页或出版社正式材料产生冲突 |
 | DEC-038 | 购买教材/试题及完整转换文本保持本地私有并排除 Git；仓库只保存元数据、处理器和项目原创/合成内容 | accepted | 取得可归档的明确再分发许可且完成权利复核 |
@@ -2038,7 +2048,7 @@ review_date:
 | 初赛 PPT | `[PLANNED]` | 8–10 页覆盖评分项 | 原型/图表 |
 | 原创模拟试卷 | `[PLANNED]` | 来源自有、已知根因、许可清楚 | 技能示例 |
 | 合成 Case | `[PROTOTYPE]` | 已完成 1 个原创合成 Case 及低置信、复测失败重排、D+7 成功分支；仍需扩充同题同错不同根因与回归集 | 数据 Schema/教材映射 |
-| 学生“今日”页视觉基线 | `[PROTOTYPE]` | 已选定 Stitch 桌面稿；F0 Mock 与 F1b 显式只读 API 模式已完成构建、自动化与截图验收并合并 `main`，默认入口仍为 Mock，不宣称已完成写入闭环 | DESIGN v0.2.14 |
+| 学生“今日”页视觉基线 | `[PROTOTYPE]` | 已选定 Stitch 桌面稿；F0/F1b 与 F1c ready D1 客户端作答已合并 `main` 并通过技术门禁；默认入口仍为 Mock，浏览器 POST Fixture 与完整写入闭环未完成 | DESIGN v0.2.15 |
 | 其余学生/家长关键页设计 | `[PLANNED]` | 覆盖主闭环并遵循今日页设计准则 | 视觉基线 |
 | 可点击 Thin Slice | `[PLANNED]` | 上传到修复证明全链路 | 设计/开发 |
 | 数据与合规页 | `[PLANNED]` | 类型、来源、授权、脱敏、删除、边界 | 数据选择 |
@@ -2097,6 +2107,13 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.25 — 2026-08-15
+
+- 合并学生端今日页 F1c：ready D1 客户端作答、服务端权威 Case 版本、共享 attempts contracts、UUIDv7 幂等意图、同 key/body 一次网络未知重试、冲突刷新后重新确认及未知结果锁定。
+- 保持默认入口为 Mock、D7 只读、首页真实投影与完整浏览器 POST Fixture未完成；合成重排骨架不描述为真实个性化。
+- 登记单一协调控制面、选择性迁移、轻量交接、消息节流、压缩后 recovery audit 与分角色压缩预算；同步 PRD v0.1.17、TDD v0.3.18、DESIGN v0.2.15 与 PUSH-010。
+- 本轮门禁为 78 fast、41 integration、48 apps/web、全仓 TypeScript、Next production build、API 视觉/滚动回归及敏感范围审计。
 
 ### v0.1.24 — 2026-08-15
 
