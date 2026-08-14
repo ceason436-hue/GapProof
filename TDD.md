@@ -2,15 +2,15 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.19"
+version: "0.3.20"
 status: "DRAFT_FOR_IMPLEMENTATION"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.26"
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.18"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.27"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.19"
 ---
 
 # 知隙 GapProof 技术设计文档（TDD）
@@ -438,7 +438,9 @@ Tailwind CSS 可随 Next.js 默认方案使用；组件层推荐 Radix Primitive
 
 学习任务接口已冻结为：
 
-- `GET /v1/students/{studentId}/today` 成功数据为 `TodayTasksView { studentId, timeZone, currentTaskId, tasks }`。`timeZone` 必须是目标学生记录中可由 `Intl.DateTimeFormat` 接受的 IANA 标识；无效存储值返回 `STORED_STUDENT_INVALID`，不得回退系统或浏览器时区。
+- `GET /v1/students/{studentId}/today` 成功数据为 `TodayTasksView { studentId, timeZone, currentTaskId, tasks, overview }`。`timeZone` 必须是目标学生记录中可由 `Intl.DateTimeFormat` 接受的 IANA 标识；无效存储值返回 `STORED_STUDENT_INVALID`，不得回退系统或浏览器时区。
+- API 必须始终填充 `overview`：`activityDays` 为截至注入 `Clock.now()`、按学生 IANA 时区计算的连续 7 个本地日及真实 completed task 数；`weeklyGoal` 在没有权威存储前固定为 `null`；`pendingConfirmationCount` 仅统计该学生未删除的 `awaiting_confirmation` Case；`recentProgress` 按 `occurredAt DESC, eventId DESC` 稳定取最多 2 条公开映射，禁止输出 payload、答案或选项；`nextCheck` 只取最早 scheduled D1/D7，不能复制 ready current task。
+- `TodayTasksView.overview` 仅为 contract-first 合并期间保持 Schema 可选；当前 API 实现必须返回，显式 API 前端必须视为必需字段。缺失时进入 `TODAY_OVERVIEW_MISSING`，不得回退 Mock。周目标、掌握度和学习效果不得从任务数量、视觉稿或 Fixture 推断。
 - `currentTaskId` 为 `uuid | null`，只指向服务端判定的当前可行动 ready D1 或 ready guided 任务。只有 scheduled、无任务、全部完成或只有 ready D7 时为 `null`。多个候选按 `dueAt ASC NULLS LAST → taskType（d1_retest 优先于 guided_intervention）→ createdAt → taskId` 稳定选择；前端不得猜测替代任务。D7 只有在 attempts 路由与状态迁移原子上线后才能加入 actionable 集合。
 - `LearningTaskView` 是 `guided_intervention | d1_retest | d7_retest` 的 TypeBox 判别联合。三类共享 `id`、`caseId`、`studentId`、`status`、`title`、`rationale`、`estimatedMinutes`、`scheduledFor`、`dueAt`、`completedAt`；guided 独有 `steps`，D1/D7 独有公开 `item { id, prompt, choices[] }`。公开题目不得包含答案键或内部评分映射。
 - `GET /v1/tasks/{taskId}` 返回同一公开 `LearningTaskView` 判别联合；资源缺失返回 `RESOURCE_NOT_FOUND`。
@@ -1196,7 +1198,7 @@ Serverless 很适合短 API 和自动扩容，但 OCR、多轮模型、报告、
 - 已实现 `GET /v1/students/{studentId}/today` 与 `POST /v1/tasks/{taskId}/submit`；完成干预后在同一事务写入 `intervention_completed { taskId, d1TaskId, d1ScheduledFor }`、完成原任务、创建 `scheduled` 的 D+1 任务并推进到 `d1_scheduled`。`scheduledFor = completedAt + 24h`，`dueAt = scheduledFor + 12h`，mastery 仅为 `pending_retest`。
 - 完成干预的同一 PostgreSQL 事务现通过 pg-boss `fromDrizzle(transaction, sql)` 写入延迟 `retest.due` Job，Job ID 与 D+1 task ID 相同；独立 `RetestDueWorker` 只把指定 Case、指定 `d1_retest` 的 `scheduled → ready`，重复/并发执行只生效一次。
 - 新增 `Clock/SystemClock/FixedClock`、`RetestDueJobData { caseId, taskId }`、`app.demo_clocks`、`demo_clock_advanced` 与迁移 `packages/db/drizzle/0004_goofy_vindicator.sql`；虚拟时钟按 Case 隔离、带版本并受环境开关保护。
-- 已实现任务详情、Today `timeZone/currentTaskId` 与 guided/D1/D7 判别联合；`currentTaskId` 仅选择 ready D1/guided，D7 在 attempts 未实现前保持只读。
+- 已实现任务详情、Today `timeZone/currentTaskId/overview` 与 guided/D1/D7 判别联合；`currentTaskId` 仅选择 ready D1/guided，overview 为真实只读投影，D7 在 attempts 未实现前保持只读。
 - 已实现 D1 `POST /v1/tasks/{taskId}/attempts`：私有 `exact-choice-v1` 评分、`retest_evaluated(kind=d1)`、D7 144h + 12h 调度、失败事务内 `case.replan` Job、Worker 异步合成干预骨架，以及迁移 `0005_flawless_omega_flight.sql`。幂等重放、并发去重、乐观锁、事务回滚与公开响应脱敏均有测试。
 - F0 Mock、F1b 显式只读 API 与 F1c ready D1 客户端作答已完成对应技术门禁并合并 `main`；F1c 消费共享 contracts、权威 Case 版本和 UUIDv7 幂等意图，受控 HTTP 浏览器 Fixture 已验证同源 POST、成功脱敏回显、冲突重新确认和网络未知锁定。
 - 当前证据为 78 条快速测试通过、41 条真实 PostgreSQL/API/Worker 集成测试通过、48 条 apps/web 测试通过、D1 浏览器 Fixture、TypeScript 严格类型检查、Next.js production build、API 视觉/滚动回归通过。
@@ -1526,7 +1528,7 @@ MVP 工具 Schema 最小字段：
 | TECH-022 | MVP Agent 固定为六节点 LangGraph.js 图 | accepted | 业务闭环增加新节点时更新图版本和 Golden Cases |
 | TECH-023 | 所有工具先完成接口、Schema、Mock 和错误处理；verify_item/schedule_retest 做 MVP 最小实现 | accepted | 工具边界或真实 Provider 能力发生变化 |
 | TECH-024 | escalate_human 先创建待处理记录；analyze_speech/score_writing 暂缓真实能力 | accepted | 真实人工流程、语音或写作试点启动 |
-| TECH-025 | UUIDv7 + PostgreSQL 16+；核心表字段/索引/枚举/删除策略按 TDD v0.3.19 | accepted | 数据规模、托管扩展或合规要求变化 |
+| TECH-025 | UUIDv7 + PostgreSQL 16+；核心表字段/索引/枚举/删除策略按 TDD v0.3.20 | accepted | 数据规模、托管扩展或合规要求变化 |
 | TECH-026 | 采用 TDD 详细 API 路由作为唯一正式接口 | accepted | API 版本升级或新客户端边界产生 |
 | TECH-027 | 杭州阿里云单区域联网 Docker Compose；真实 Provider 演示，Mock 仅测试/故障注入 | accepted | 比赛网络、并发、合规或可用性要求变化 |
 | TECH-028 | DeepSeek `deepseek-v4-flash` 主分析，MiniMax `minimax-m3` 教学/降级，腾讯混元 Embedding 1024 维 | accepted | 账号权限、供应商模型版本或评测结果变化 |
@@ -1593,8 +1595,15 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-009 | 2026-08-15 | `main` | `pushed` | `feat: evaluate D1 retests and render live today state` | 合并 D1 客观复测 attempts、D7 精确调度、失败事务内重排 Job/异步 Worker 骨架、Today 学生时区/currentTaskId/任务判别联合，以及 F1a/F1b 显式只读 API 模式和合成 Fixture 双视口截图；同步四主文档，保持默认入口为 Mock、D7 与报告为未完成 | 69 条快速测试、41 条真实 PostgreSQL/API/Worker 集成测试、39 条 apps/web 测试、全仓 TypeScript、Next.js production build、API/Mock 双视口视觉与滚动回归、`git diff --check` 和敏感范围审计通过；用户既有授权覆盖本轮最终联检后推送，须在同轮核对本地/远端 SHA 一致 |
 | PUSH-010 | 2026-08-15 | `main` | `pushed` | `feat: submit D1 retests safely from Today` | 合并 F1c ready D1 客户端作答、权威 Case `stateVersion`、共享 attempts contracts、UUIDv7 幂等意图、同 key/body 单次未知结果重试、冲突刷新后重新确认与 NETWORK_UNKNOWN 锁定；同步四主文档与选择性任务迁移治理，保持默认入口为 Mock、D7/首页投影/报告/浏览器 POST Fixture未完成 | 78 条快速测试、41 条真实 PostgreSQL/API/Worker 集成测试、48 条 apps/web 测试、全仓 TypeScript、Next.js production build、API 视觉/滚动回归、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；须在同轮推送并核对本地/远端 SHA 一致 |
 | PUSH-011 | 2026-08-15 | `main` | `pushed` | `test: prove D1 browser submission safety` | 合并受控 HTTP D1 浏览器 Fixture，覆盖真实点击同源 POST、UUIDv7、权威请求体、成功脱敏回显、冲突重新确认与网络未知锁定；同步四主文档、长期任务模型默认和“项目本身初赛验收”边界，保持默认入口为 Mock、D7/首页投影/报告/完整业务闭环未完成 | 78 条快速测试、41 条真实 PostgreSQL/API/Worker 集成测试、48 条 apps/web 测试、D1 浏览器 Fixture、全仓 TypeScript、Next.js production build、API 视觉/滚动回归、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；须在同轮推送并核对本地/远端 SHA 一致 |
+| PUSH-012 | 2026-08-15 | `main` | `pushed` | `feat: project factual Today overview` | 合并 Today overview 共享 contracts、PostgreSQL 只读投影、API 必返字段和显式 API 页面；展示连续 7 个学生本地日、`weeklyGoal:null`、真实待确认数、最多两条脱敏进展与最早 scheduled D1/D7 检查；缺失 overview 不回退 Mock，默认入口仍为 Mock，D7/报告/完整闭环仍未完成 | 82 条快速测试、42 条真实 PostgreSQL/API/Worker 集成测试、53 条 apps/web 测试、D1 浏览器 Fixture、API 双视口视觉回归、全仓 TypeScript、Next.js production build、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；须在同轮推送并核对本地/远端 SHA 一致 |
 
 ## 27. 变更日志
+
+### v0.3.20 — 2026-08-15
+
+- 冻结并实现 `TodayOverview`：7 日本地完成数、nullable 周目标、待确认数、最多两条脱敏进展与 scheduled D1/D7 下次检查；API 每次成功响应必返。
+- 显式 API 前端缺失 overview 时使用 `TODAY_OVERVIEW_MISSING` 且不回退 Mock；当前无权威周目标存储，`weeklyGoal` 固定 `null`，不得宣称真实个性化或学习效果。
+- 同步 PROJECT_MASTER v0.1.27、PRD v0.1.19、DESIGN v0.2.17 与 PUSH-012；门禁为 82 fast、42 integration、53 apps/web、D1 浏览器 Fixture、API 视觉、全仓 TypeScript 与 Next build。
 
 ### v0.3.19 — 2026-08-15
 
