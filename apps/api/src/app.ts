@@ -59,6 +59,7 @@ import {
   findLatestCaseEvidenceEventByType,
   findStudentById,
   findTaskById,
+  findTodayOverview,
   findTasksByStudentId,
   InvalidTaskStateError,
   persistD1RetestEvaluation,
@@ -1037,11 +1038,17 @@ export async function buildApi(options: BuildApiOptions) {
         options.database,
         student.id,
       );
+      const timeZone = requireValidStudentTimeZone(student.timezone);
       return success(request, {
         studentId: student.id,
-        timeZone: requireValidStudentTimeZone(student.timezone),
+        timeZone,
         currentTaskId,
         tasks: taskRows.map(toLearningTaskView),
+        overview: await findTodayOverview(options.database, {
+          studentId: student.id,
+          timeZone,
+          now: clock.now(),
+        }),
       });
     },
   );

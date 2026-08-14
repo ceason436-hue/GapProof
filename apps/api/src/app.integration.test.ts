@@ -902,6 +902,77 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     );
   }, 15_000);
 
+  it("returns a factual Today overview with local activity, progress, and next check", async () => {
+    const prepared = await createD1ScheduledCase(api, "today-overview-v1");
+    const today = await api.inject({
+      method: "GET",
+      url: `/v1/students/${prepared.studentId}/today`,
+    });
+    const todayBody = today.json<ApiResponse<TodayTasksView>>();
+    const overview = todayBody.data.overview;
+
+    expect(today.statusCode).toBe(200);
+    expect(overview).toBeDefined();
+    expect(overview?.activityDays).toHaveLength(7);
+    expect(overview?.activityDays.at(-1)).toMatchObject({
+      localDate: "2026-08-15",
+      completedTaskCount: 1,
+    });
+    expect(overview?.weeklyGoal).toBeNull();
+    expect(overview?.pendingConfirmationCount).toBe(0);
+    expect(overview?.recentProgress).toHaveLength(2);
+    expect(overview?.recentProgress.map(({ kind }) => kind)).toEqual([
+      "practice_completed",
+      "diagnosis_checked",
+    ]);
+    expect(overview?.nextCheck).toMatchObject({
+      taskType: "d1_retest",
+      scheduledFor: "2026-08-16T00:00:00.000Z",
+    });
+    expect(JSON.stringify(overview)).not.toContain("expectedChoiceId");
+    expect(JSON.stringify(overview)).not.toContain("selectedChoiceId");
+
+    await database.db
+      .update(students)
+      .set({ timezone: "America/Los_Angeles" })
+      .where(eq(students.id, prepared.studentId));
+    const localToday = await api.inject({
+      method: "GET",
+      url: `/v1/students/${prepared.studentId}/today`,
+    });
+    const localOverview = localToday.json<ApiResponse<TodayTasksView>>().data.overview;
+    expect(localOverview?.activityDays.at(-1)).toMatchObject({
+      localDate: "2026-08-14",
+      completedTaskCount: 1,
+    });
+
+    const pendingCase = await api.inject({
+      method: "POST",
+      url: "/v1/cases",
+      headers: { "idempotency-key": "today-overview-pending-v1" },
+      payload: { entry: "synthetic_demo" },
+    });
+    const pendingCaseView = pendingCase.json<ApiResponse<CaseView>>().data;
+    await api.inject({
+      method: "POST",
+      url: `/v1/cases/${pendingCaseView.id}/commands/run-next`,
+      headers: { "idempotency-key": "today-overview-pending-ocr-v1" },
+      payload: { expectedVersion: 0 },
+    });
+    await waitForState(api, pendingCaseView.id, "awaiting_confirmation");
+    const pendingToday = await api.inject({
+      method: "GET",
+      url: `/v1/students/${pendingCaseView.studentId}/today`,
+    });
+    expect(
+      pendingToday.json<ApiResponse<TodayTasksView>>().data.overview
+        ?.pendingConfirmationCount,
+    ).toBe(1);
+    expect(
+      todayBody.data.overview?.pendingConfirmationCount,
+    ).toBe(0);
+  }, 20_000);
+
   it("rejects incomplete, stale, and concurrent duplicate completions safely", async () => {
     const { caseId, studentId } = await createInterventionReadyCase(
       api,
