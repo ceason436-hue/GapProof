@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { Icon } from "@/components/icons";
 import { getMockTodayView } from "@/lib/mock-adapter";
+import { resolveTodaySource } from "@/lib/today-source";
 import { LiveToday } from "@/components/live-today";
 
 type PageProps = { searchParams: Promise<{ state?: string; source?: string }> };
@@ -29,7 +30,7 @@ function RegularToday() {
 
 export default async function TodayPage({ searchParams }: PageProps) {
   const { state, source } = await searchParams;
-  if (source === "api") return <LiveToday/>;
+  if (resolveTodaySource(source) === "api") return <LiveToday/>;
   const view = getMockTodayView(state);
   if (view.mode === "loading") return <Skeleton/>;
   if (view.mode === "new") return <NewUser/>;

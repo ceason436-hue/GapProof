@@ -190,7 +190,8 @@ const uuidV7Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[
 try {
   for (let attempt = 0; attempt < 40; attempt += 1) {
     try {
-      if ((await fetch(`${webOrigin}/student/today?source=api`)).ok) break;
+      if ((await fetch(`${webOrigin}/student/today`)).ok &&
+          (await fetch(`${webOrigin}/student/today?source=api`)).ok) break;
     } catch {}
     if (attempt === 39) throw new Error(`Production server did not start.\n${serverOutput}`);
     await new Promise(resolveWait => setTimeout(resolveWait, 500));
@@ -207,7 +208,8 @@ try {
       page.on("request", request => {
         if (request.method() === "POST") browserPostPaths.push(new URL(request.url()).pathname);
       });
-      await page.goto(`${webOrigin}/student/today?source=api&fixture=${currentScenario}`, { waitUntil: "networkidle" });
+      await page.goto(`${webOrigin}/student/today?fixture=${currentScenario}`, { waitUntil: "networkidle" });
+      assert(await page.locator('[data-today-overview]').count() === 1, "Default Today entry did not render the API overview.");
       await page.waitForTimeout(2_000);
       const initialAttemptState = await page.locator("[data-d1-attempt-state]").getAttribute("data-d1-attempt-state");
       if (initialAttemptState !== "idle") {

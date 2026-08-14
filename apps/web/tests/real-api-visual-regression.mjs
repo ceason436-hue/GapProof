@@ -148,7 +148,8 @@ webServer.stderr.on("data", chunk => { serverOutput += chunk; });
 try {
   for (let attempt = 0; attempt < 40; attempt += 1) {
     try {
-      if ((await fetch(`${webOrigin}/student/today?source=api`)).ok) break;
+      if ((await fetch(`${webOrigin}/student/today`)).ok &&
+          (await fetch(`${webOrigin}/student/today?source=api`)).ok) break;
     } catch {}
     if (attempt === 39) throw new Error(`Production server did not start.\n${serverOutput}`);
     await new Promise(resolveWait => setTimeout(resolveWait, 500));
@@ -161,7 +162,7 @@ try {
       fixtureName = state;
       for (const [width, height] of [[1440, 900], [1366, 768]]) {
         const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
-        await page.goto(`${webOrigin}/student/today?source=api`, { waitUntil: "networkidle" });
+        await page.goto(`${webOrigin}/student/today`, { waitUntil: "networkidle" });
 
         const expectedSelector = state === "current-guided"
           ? '[data-current-task-type="guided_intervention"]'
@@ -169,6 +170,9 @@ try {
             ? '[data-current-task="none"]'
             : ".state-card";
         await page.locator(expectedSelector).waitFor();
+        if (state !== "empty" && await page.locator("[data-today-overview]").count() !== 1) {
+          throw new Error(`Default Today entry did not render the API overview for ${state}.`);
+        }
         if (state === "scheduled-null" && await page.locator('[data-task-status="scheduled"]').count() !== 2) {
           throw new Error("Scheduled-only fixture did not render both D1 and D7 tasks.");
         }

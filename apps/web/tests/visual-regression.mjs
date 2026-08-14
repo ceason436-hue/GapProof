@@ -21,7 +21,7 @@ server.stderr.on("data", chunk => { serverOutput += chunk; });
 
 for (let attempt = 0; attempt < 40; attempt += 1) {
   try {
-    if ((await fetch(`${origin}/student/today`)).ok) break;
+    if ((await fetch(`${origin}/student/today?source=mock`)).ok) break;
   } catch {}
   if (attempt === 39) throw new Error(`Production server did not start.\n${serverOutput}`);
   await new Promise(resolveWait => setTimeout(resolveWait, 500));
@@ -32,7 +32,10 @@ const browser = await chromium.launch({ channel: "msedge", headless: true });
 try {
   for (const [width, height] of [[1440, 900], [1366, 768]]) {
     const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
-    await page.goto(`${origin}/student/today`, { waitUntil: "networkidle" });
+    await page.goto(`${origin}/student/today?source=mock`, { waitUntil: "networkidle" });
+    if (await page.getByText("合成演示：用一个短任务", { exact: false }).count() !== 1) {
+      throw new Error("Explicit Mock fixture did not render the synthetic Today view.");
+    }
 
     const before = await page.evaluate(() => {
       const rect = selector => {
