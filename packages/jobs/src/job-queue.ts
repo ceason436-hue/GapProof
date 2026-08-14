@@ -1,4 +1,5 @@
 import type {
+  ReplanJobData,
   RetestDueJobData,
   RunNextJobData,
 } from "@gapproof/contracts";
@@ -18,6 +19,7 @@ import { v7 as uuidv7 } from "uuid";
 
 export const RUN_NEXT_QUEUE = "case-run-next";
 export const RETEST_DUE_QUEUE = "retest.due";
+export const REPLAN_QUEUE = "case.replan";
 
 export interface EnqueueRunNextInput extends RunNextJobData {
   readonly idempotencyKey: string;
@@ -41,6 +43,7 @@ export class JobQueue {
     await this.boss.start();
     await this.boss.createQueue(RUN_NEXT_QUEUE);
     await this.boss.createQueue(RETEST_DUE_QUEUE);
+    await this.boss.createQueue(REPLAN_QUEUE);
   }
 
   async stop(): Promise<void> {
@@ -84,6 +87,25 @@ export class JobQueue {
   async stopRetestDueWorker(workerId: string): Promise<void> {
     await this.boss.offWork(RETEST_DUE_QUEUE, { id: workerId, wait: true });
   }
+
+  async workReplan(
+    handler: (job: Job<ReplanJobData>) => Promise<object>,
+  ): Promise<string> {
+    return this.boss.work<ReplanJobData, object>(
+      REPLAN_QUEUE,
+      { batchSize: 1, pollingIntervalSeconds: 1 },
+      async ([job]) => {
+        if (job === undefined) {
+          throw new Error("pg-boss delivered an empty case.replan batch.");
+        }
+        return handler(job);
+      },
+    );
+  }
+
+  async stopReplanWorker(workerId: string): Promise<void> {
+    await this.boss.offWork(REPLAN_QUEUE, { id: workerId, wait: true });
+  }
 }
 
 export function createJobQueue(databaseUrl: string): JobQueue {
@@ -114,6 +136,70 @@ export async function enqueueRetestDueTransactional(
   );
   if (jobId === null) {
     throw new Error("pg-boss did not enqueue the retest.due job transactionally.");
+  }
+  return jobId;
+}
+
+export interface EnqueueReplanInput extends ReplanJobData {
+  readonly jobId: string;
+}
+
+export async function enqueueReplanTransactional(
+  database: Parameters<Parameters<Database["transaction"]>[0]>[0],
+  queue: JobQueue,
+  input: EnqueueReplanInput,
+) {
+  const jobId = await queue.boss.send(
+    REPLAN_QUEUE,
+    {
+      caseId: input.caseId,
+      triggerEventId: input.triggerEventId,
+      expectedVersion: input.expectedVersion,
+      traceId: input.traceId,
+      interventionJobId: input.interventionJobId,
+    } satisfies ReplanJobData,
+    {
+      id: input.jobId,
+      retryLimit: 5,
+      retryDelay: 1,
+      retryBackoff: true,
+      retryDelayMax: 30,
+      db: fromDrizzle(database, sql),
+    },
+  );
+  if (jobId === null) {
+    throw new Error("pg-boss did not enqueue the case.replan job transactionally.");
+  }
+  return jobId;
+}
+
+export interface EnqueueRunNextTransactionalInput extends RunNextJobData {
+  readonly jobId: string;
+}
+
+export async function enqueueRunNextTransactional(
+  database: Parameters<Parameters<Database["transaction"]>[0]>[0],
+  queue: JobQueue,
+  input: EnqueueRunNextTransactionalInput,
+) {
+  const jobId = await queue.boss.send(
+    RUN_NEXT_QUEUE,
+    {
+      caseId: input.caseId,
+      expectedVersion: input.expectedVersion,
+      assetId: input.assetId,
+      traceId: input.traceId,
+    } satisfies RunNextJobData,
+    {
+      id: input.jobId,
+      retryLimit: 2,
+      retryDelay: 1,
+      retryBackoff: true,
+      db: fromDrizzle(database, sql),
+    },
+  );
+  if (jobId === null) {
+    throw new Error("pg-boss did not enqueue the run-next job transactionally.");
   }
   return jobId;
 }

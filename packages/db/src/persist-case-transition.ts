@@ -22,6 +22,9 @@ export interface PersistCaseTransitionInput {
   readonly expectedVersion: number;
   readonly nextState: CaseStatus;
   readonly event: NewLearningEvidenceEventRow;
+  readonly afterPersist?: (
+    transaction: Parameters<Parameters<Database["transaction"]>[0]>[0],
+  ) => Promise<void>;
 }
 
 export interface PersistCaseTransitionResult {
@@ -81,7 +84,7 @@ export async function persistCaseTransition(
       .set({
         state: input.nextState,
         stateVersion: input.expectedVersion + 1,
-        updatedAt: new Date(),
+        updatedAt: input.event.occurredAt,
       })
       .where(
         and(
@@ -99,6 +102,7 @@ export async function persistCaseTransition(
     }
 
     await transaction.insert(learningEvidenceEvents).values(input.event);
+    await input.afterPersist?.(transaction);
 
     return { applied: true, ...updatedCase };
   });

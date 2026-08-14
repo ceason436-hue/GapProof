@@ -30,8 +30,11 @@ export async function activateDueRetestTask(
     if (task === undefined) {
       throw new ResourceNotFoundError("Task", input.taskId);
     }
-    if (task.caseId !== input.caseId || task.taskType !== "d1_retest") {
-      throw new Error("The retest.due job does not match a D+1 task.");
+    if (
+      task.caseId !== input.caseId ||
+      !["d1_retest", "d7_retest"].includes(task.taskType)
+    ) {
+      throw new Error("The retest.due job does not match a retest task.");
     }
     if (task.status !== "scheduled") {
       return {

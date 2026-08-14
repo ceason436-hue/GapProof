@@ -140,6 +140,7 @@ export type TaskIdParams = Static<typeof TaskIdParamsSchema>;
 export const TaskTypeSchema = Type.Union([
   Type.Literal("guided_intervention"),
   Type.Literal("d1_retest"),
+  Type.Literal("d7_retest"),
 ]);
 
 export const TaskStatusSchema = Type.Union([
@@ -148,11 +149,10 @@ export const TaskStatusSchema = Type.Union([
   Type.Literal("completed"),
 ]);
 
-export const LearningTaskViewSchema = Type.Object({
+const LearningTaskBaseSchema = Type.Object({
   id: Type.String({ format: "uuid" }),
   caseId: Type.String({ format: "uuid" }),
   studentId: Type.String({ format: "uuid" }),
-  taskType: TaskTypeSchema,
   status: TaskStatusSchema,
   title: Type.String({ minLength: 1 }),
   rationale: Type.String({ minLength: 1 }),
@@ -163,13 +163,63 @@ export const LearningTaskViewSchema = Type.Object({
     Type.String({ format: "date-time" }),
     Type.Null(),
   ]),
-  steps: Type.Array(InterventionStepSchema, { minItems: 1 }),
 });
 
+export const RetestChoiceViewSchema = Type.Object({
+  id: Type.String({ minLength: 1 }),
+  label: Type.String({ minLength: 1 }),
+});
+
+export const RetestItemViewSchema = Type.Object({
+  id: Type.String({ minLength: 1 }),
+  prompt: Type.String({ minLength: 1 }),
+  choices: Type.Array(RetestChoiceViewSchema, { minItems: 2 }),
+}, { additionalProperties: false });
+
+export const GuidedInterventionTaskViewSchema = Type.Object({
+  ...LearningTaskBaseSchema.properties,
+  taskType: Type.Literal("guided_intervention"),
+  steps: Type.Array(InterventionStepSchema, { minItems: 1 }),
+}, { additionalProperties: false });
+
+export const D1RetestTaskViewSchema = Type.Object({
+  ...LearningTaskBaseSchema.properties,
+  taskType: Type.Literal("d1_retest"),
+  item: RetestItemViewSchema,
+}, { additionalProperties: false });
+
+export const D7RetestTaskViewSchema = Type.Object({
+  ...LearningTaskBaseSchema.properties,
+  taskType: Type.Literal("d7_retest"),
+  item: RetestItemViewSchema,
+}, { additionalProperties: false });
+
+export const LearningTaskViewSchema = Type.Union([
+  GuidedInterventionTaskViewSchema,
+  D1RetestTaskViewSchema,
+  D7RetestTaskViewSchema,
+]);
+
+/** Stable server-side tie-break order after dueAt ASC NULLS LAST. */
+export const CURRENT_TASK_TYPE_PRIORITY = [
+  "d1_retest",
+  "d7_retest",
+  "guided_intervention",
+] as const;
+
 export type LearningTaskView = Static<typeof LearningTaskViewSchema>;
+export type GuidedInterventionTaskView = Static<
+  typeof GuidedInterventionTaskViewSchema
+>;
+export type D1RetestTaskView = Static<typeof D1RetestTaskViewSchema>;
+export type D7RetestTaskView = Static<typeof D7RetestTaskViewSchema>;
 
 export const TodayTasksViewSchema = Type.Object({
   studentId: Type.String({ format: "uuid" }),
+  currentTaskId: Type.Union([
+    Type.String({ format: "uuid" }),
+    Type.Null(),
+  ]),
   tasks: Type.Array(LearningTaskViewSchema),
 });
 
@@ -189,11 +239,45 @@ export const TaskCompletionViewSchema = Type.Object({
   caseId: Type.String({ format: "uuid" }),
   state: Type.Literal("d1_scheduled"),
   stateVersion: Type.Integer({ minimum: 0 }),
-  completedTask: LearningTaskViewSchema,
-  scheduledRetest: LearningTaskViewSchema,
+  completedTask: GuidedInterventionTaskViewSchema,
+  scheduledRetest: D1RetestTaskViewSchema,
 });
 
 export type TaskCompletionView = Static<typeof TaskCompletionViewSchema>;
+
+/**
+ * Retry contract: reuse the identical key/body only after an unknown network
+ * outcome or an explicitly retryable response. Refresh after VERSION_CONFLICT;
+ * do not automatically resubmit schema, state, or key-reuse failures.
+ */
+export const SubmitD1RetestAttemptRequestSchema = Type.Object({
+  expectedVersion: Type.Integer({ minimum: 0 }),
+  itemId: Type.String({ minLength: 1 }),
+  selectedChoiceId: Type.String({ minLength: 1 }),
+});
+
+export type SubmitD1RetestAttemptRequest = Static<
+  typeof SubmitD1RetestAttemptRequestSchema
+>;
+
+export const D1RetestAttemptViewSchema = Type.Object({
+  attemptId: Type.String({ format: "uuid" }),
+  caseId: Type.String({ format: "uuid" }),
+  taskId: Type.String({ format: "uuid" }),
+  itemId: Type.String({ minLength: 1 }),
+  selectedChoiceId: Type.String({ minLength: 1 }),
+  passed: Type.Boolean(),
+  scoringMethod: Type.Literal("exact-choice-v1"),
+  state: Type.Union([
+    Type.Literal("d7_scheduled"),
+    Type.Literal("replan_required"),
+  ]),
+  stateVersion: Type.Integer({ minimum: 0 }),
+  completedTask: D1RetestTaskViewSchema,
+  scheduledRetest: Type.Union([D7RetestTaskViewSchema, Type.Null()]),
+});
+
+export type D1RetestAttemptView = Static<typeof D1RetestAttemptViewSchema>;
 
 export const DemoClockAdvanceRequestSchema = Type.Object({
   caseId: Type.String({ format: "uuid" }),
@@ -228,6 +312,40 @@ export const RetestDueJobDataSchema = Type.Object({
 });
 
 export type RetestDueJobData = Static<typeof RetestDueJobDataSchema>;
+
+export const ReplanJobDataSchema = Type.Object({
+  caseId: Type.String({ format: "uuid" }),
+  triggerEventId: Type.String({ format: "uuid" }),
+  expectedVersion: Type.Integer({ minimum: 0 }),
+  traceId: Type.String({ minLength: 1 }),
+  interventionJobId: Type.String({ format: "uuid" }),
+});
+
+export type ReplanJobData = Static<typeof ReplanJobDataSchema>;
+
+export function isReplanJobData(value: unknown): value is ReplanJobData {
+  const uuidPattern =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "caseId" in value &&
+    typeof value.caseId === "string" &&
+    uuidPattern.test(value.caseId) &&
+    "triggerEventId" in value &&
+    typeof value.triggerEventId === "string" &&
+    uuidPattern.test(value.triggerEventId) &&
+    "expectedVersion" in value &&
+    Number.isInteger(value.expectedVersion) &&
+    Number(value.expectedVersion) >= 0 &&
+    "traceId" in value &&
+    typeof value.traceId === "string" &&
+    value.traceId.length > 0 &&
+    "interventionJobId" in value &&
+    typeof value.interventionJobId === "string" &&
+    uuidPattern.test(value.interventionJobId)
+  );
+}
 
 export function isRetestDueJobData(value: unknown): value is RetestDueJobData {
   const uuidPattern =

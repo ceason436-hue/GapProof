@@ -1,12 +1,15 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { v7 as uuidv7 } from "uuid";
 
 import type {
   ApiErrorResponse,
   ApiResponse,
   AttemptView,
   CaseView,
+  D1RetestAttemptView,
   DemoClockAdvanceView,
   HypothesesView,
+  LearningTaskView,
   TaskCompletionView,
   TodayTasksView,
 } from "@gapproof/contracts";
@@ -17,14 +20,22 @@ import {
   createDatabase,
   demoClocks,
   eq,
+  findCurrentActionableTaskId,
   learningEvidenceEvents,
+  persistD1RetestEvaluation,
   runMigrations,
   students,
   tasks,
 } from "@gapproof/db";
 import { FixedClock } from "@gapproof/domain";
-import { createJobQueue, RETEST_DUE_QUEUE } from "@gapproof/jobs";
 import {
+  createJobQueue,
+  REPLAN_QUEUE,
+  RETEST_DUE_QUEUE,
+  RUN_NEXT_QUEUE,
+} from "@gapproof/jobs";
+import {
+  createReplanWorker,
   createRetestDueWorker,
   createRunNextWorker,
 } from "@gapproof/worker";
@@ -34,6 +45,15 @@ import { buildApi } from "./app.ts";
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const describeWithDatabase = databaseUrl === undefined ? describe.skip : describe;
 const fixedNow = "2026-08-15T00:00:00.000Z";
+
+function requireGuidedTask(task: LearningTaskView | undefined) {
+  expect(task).toBeDefined();
+  expect(task?.taskType).toBe("guided_intervention");
+  if (task?.taskType !== "guided_intervention") {
+    throw new Error("Expected a guided intervention task.");
+  }
+  return task;
+}
 
 async function waitForState(
   api: Awaited<ReturnType<typeof buildApi>>,
@@ -142,20 +162,36 @@ async function createD1ScheduledCase(
     method: "GET",
     url: `/v1/students/${prepared.studentId}/today`,
   });
-  const intervention = today.json<ApiResponse<TodayTasksView>>().data.tasks[0];
-  expect(intervention).toBeDefined();
+  const intervention = requireGuidedTask(
+    today.json<ApiResponse<TodayTasksView>>().data.tasks[0],
+  );
   const completed = await api.inject({
     method: "POST",
     url: `/v1/tasks/${intervention?.id}/submit`,
     headers: { "idempotency-key": `${keyPrefix}-complete` },
     payload: {
       expectedVersion: 5,
-      completedStepIds: intervention?.steps.map(({ id }) => id),
+      completedStepIds: intervention.steps.map(({ id }) => id),
     },
   });
   expect(completed.statusCode).toBe(200);
   const completion = completed.json<ApiResponse<TaskCompletionView>>().data;
   return { ...prepared, completion };
+}
+
+async function activatePreparedD1(
+  api: Awaited<ReturnType<typeof buildApi>>,
+  database: ReturnType<typeof createDatabase>["db"],
+  keyPrefix: string,
+) {
+  const prepared = await createD1ScheduledCase(api, keyPrefix);
+  const task = prepared.completion.scheduledRetest;
+  await activateDueRetestTask(database, {
+    caseId: prepared.caseId,
+    taskId: task.id,
+    effectiveNow: new Date(task.scheduledFor),
+  });
+  return { ...prepared, task: { ...task, status: "ready" as const } };
 }
 
 describeWithDatabase("Fastify API and run-next worker", () => {
@@ -176,6 +212,8 @@ describeWithDatabase("Fastify API and run-next worker", () => {
 
     await queue.start();
     await queue.boss.deleteAllJobs(RETEST_DUE_QUEUE);
+    await queue.boss.deleteAllJobs(REPLAN_QUEUE);
+    await queue.boss.deleteAllJobs(RUN_NEXT_QUEUE);
     worker = createRunNextWorker({ database: database.db, queue });
     await worker.start();
     retestDueWorker = createRetestDueWorker({
@@ -763,7 +801,7 @@ describeWithDatabase("Fastify API and run-next worker", () => {
       status: "ready",
       estimatedMinutes: 8,
     });
-    expect(body.data.tasks[0]?.steps).toHaveLength(3);
+    expect(requireGuidedTask(body.data.tasks[0]).steps).toHaveLength(3);
     expect(body.data.tasks[0]).not.toHaveProperty("answerKey");
     expect(body.data.tasks[0]).not.toHaveProperty("selectedHypothesisId");
 
@@ -799,15 +837,16 @@ describeWithDatabase("Fastify API and run-next worker", () => {
       method: "GET",
       url: `/v1/students/${studentId}/today`,
     });
-    const task = today.json<ApiResponse<TodayTasksView>>().data.tasks[0];
-    expect(task).toBeDefined();
+    const task = requireGuidedTask(
+      today.json<ApiResponse<TodayTasksView>>().data.tasks[0],
+    );
     const request = {
       method: "POST" as const,
-      url: `/v1/tasks/${task?.id}/submit`,
+      url: `/v1/tasks/${task.id}/submit`,
       headers: { "idempotency-key": "complete-intervention-v1" },
       payload: {
         expectedVersion: 5,
-        completedStepIds: task?.steps.map(({ id }) => id),
+        completedStepIds: task.steps.map(({ id }) => id),
       },
     };
     const completed = await api.inject(request);
@@ -879,16 +918,17 @@ describeWithDatabase("Fastify API and run-next worker", () => {
       method: "GET",
       url: `/v1/students/${studentId}/today`,
     });
-    const task = today.json<ApiResponse<TodayTasksView>>().data.tasks[0];
-    expect(task).toBeDefined();
+    const task = requireGuidedTask(
+      today.json<ApiResponse<TodayTasksView>>().data.tasks[0],
+    );
 
     const stale = await api.inject({
       method: "POST",
-      url: `/v1/tasks/${task?.id}/submit`,
+      url: `/v1/tasks/${task.id}/submit`,
       headers: { "idempotency-key": "complete-intervention-stale-v1" },
       payload: {
         expectedVersion: 4,
-        completedStepIds: task?.steps.map(({ id }) => id),
+        completedStepIds: task.steps.map(({ id }) => id),
       },
     });
     expect(stale.statusCode).toBe(409);
@@ -896,20 +936,20 @@ describeWithDatabase("Fastify API and run-next worker", () => {
 
     const incomplete = await api.inject({
       method: "POST",
-      url: `/v1/tasks/${task?.id}/submit`,
+      url: `/v1/tasks/${task.id}/submit`,
       headers: { "idempotency-key": "complete-intervention-incomplete-v1" },
-      payload: { expectedVersion: 5, completedStepIds: [task?.steps[0]?.id] },
+      payload: { expectedVersion: 5, completedStepIds: [task.steps[0]?.id] },
     });
     expect(incomplete.statusCode).toBe(400);
     expect(incomplete.json<ApiErrorResponse>().error.code).toBe("INVALID_INPUT");
 
     const request = {
       method: "POST" as const,
-      url: `/v1/tasks/${task?.id}/submit`,
+      url: `/v1/tasks/${task.id}/submit`,
       headers: { "idempotency-key": "complete-intervention-concurrent-v1" },
       payload: {
         expectedVersion: 5,
-        completedStepIds: task?.steps.map(({ id }) => id),
+        completedStepIds: task.steps.map(({ id }) => id),
       },
     };
     const [left, right] = await Promise.all([
@@ -1359,5 +1399,450 @@ describeWithDatabase("Fastify API and run-next worker", () => {
       state: "d1_scheduled",
       stateVersion: 6,
     });
+  }, 20_000);
+
+  it("evaluates a ready D1 exactly once, redacts the answer, and schedules D7 at 144h + 12h", async () => {
+    const prepared = await activatePreparedD1(api, database.db, "d1-pass-v1");
+    const evaluatedAt = prepared.task.scheduledFor;
+    const evaluationApi = await buildApi({
+      database: database.db,
+      queue,
+      clock: new FixedClock(evaluatedAt),
+    });
+    const request = {
+      method: "POST" as const,
+      url: `/v1/tasks/${prepared.task.id}/attempts`,
+      headers: { "idempotency-key": "d1-pass-attempt-v1" },
+      payload: {
+        expectedVersion: 6,
+        itemId: prepared.task.item.id,
+        selectedChoiceId: "choice-written",
+      },
+    };
+    const [left, right] = await Promise.all([
+      evaluationApi.inject(request),
+      evaluationApi.inject(request),
+    ]);
+    const body = left.json<ApiResponse<D1RetestAttemptView>>();
+
+    expect(left.statusCode).toBe(200);
+    expect(right.statusCode).toBe(200);
+    expect(right.json<ApiResponse<D1RetestAttemptView>>().data).toEqual(body.data);
+    expect(body.data).toMatchObject({
+      caseId: prepared.caseId,
+      taskId: prepared.task.id,
+      itemId: prepared.task.item.id,
+      selectedChoiceId: "choice-written",
+      passed: true,
+      scoringMethod: "exact-choice-v1",
+      state: "d7_scheduled",
+      stateVersion: 7,
+    });
+    expect(body.data.completedTask.status).toBe("completed");
+    expect(body.data.scheduledRetest?.status).toBe("scheduled");
+    expect(
+      Date.parse(body.data.scheduledRetest?.scheduledFor ?? "") -
+        Date.parse(evaluatedAt),
+    ).toBe(144 * 60 * 60 * 1_000);
+    expect(
+      Date.parse(body.data.scheduledRetest?.dueAt ?? "") -
+        Date.parse(body.data.scheduledRetest?.scheduledFor ?? ""),
+    ).toBe(12 * 60 * 60 * 1_000);
+    expect(JSON.stringify(body)).not.toContain("expectedChoiceId");
+
+    const today = await evaluationApi.inject({
+      method: "GET",
+      url: `/v1/students/${prepared.studentId}/today`,
+    });
+    const todayBody = today.json<ApiResponse<TodayTasksView>>();
+    expect(todayBody.data.currentTaskId).toBeNull();
+    expect(JSON.stringify(todayBody)).not.toContain("expectedChoiceId");
+
+    const changedReplay = await evaluationApi.inject({
+      ...request,
+      payload: { ...request.payload, selectedChoiceId: "choice-wrote" },
+    });
+    expect(changedReplay.statusCode).toBe(409);
+    expect(changedReplay.json<ApiErrorResponse>().error.code).toBe(
+      "IDEMPOTENCY_KEY_REUSED",
+    );
+
+    const eventRows = await database.db
+      .select()
+      .from(learningEvidenceEvents)
+      .where(eq(learningEvidenceEvents.caseId, prepared.caseId));
+    expect(eventRows.filter(({ eventType }) => eventType === "retest_evaluated")).toHaveLength(1);
+    expect(
+      eventRows.find(({ eventType }) => eventType === "retest_evaluated")?.payload,
+    ).toMatchObject({ kind: "d1", passed: true });
+    const taskRows = await database.db
+      .select()
+      .from(tasks)
+      .where(eq(tasks.caseId, prepared.caseId));
+    expect(taskRows.filter(({ taskType }) => taskType === "d7_retest")).toHaveLength(1);
+    const d7 = body.data.scheduledRetest;
+    expect(d7).not.toBeNull();
+    if (d7 !== null) {
+      const dueJob = await queue.boss.getJobById(RETEST_DUE_QUEUE, d7.id);
+      expect(dueJob?.startAfter.toISOString()).toBe(d7.scheduledFor);
+      await activateDueRetestTask(database.db, {
+        caseId: prepared.caseId,
+        taskId: d7.id,
+        effectiveNow: new Date(d7.scheduledFor),
+      });
+      const replayAfterActivation = await evaluationApi.inject(request);
+      expect(
+        replayAfterActivation.json<ApiResponse<D1RetestAttemptView>>().data,
+      ).toEqual(body.data);
+      expect(
+        replayAfterActivation.json<ApiResponse<D1RetestAttemptView>>().data
+          .scheduledRetest?.status,
+      ).toBe("scheduled");
+    }
+    await evaluationApi.close();
+  }, 25_000);
+
+  it("rejects invalid D1 requests without partial writes", async () => {
+    const scheduled = await createD1ScheduledCase(api, "d1-validation-v1");
+    const scheduledTask = scheduled.completion.scheduledRetest;
+    const scheduledResponse = await api.inject({
+      method: "POST",
+      url: `/v1/tasks/${scheduledTask.id}/attempts`,
+      headers: { "idempotency-key": "d1-still-scheduled-v1" },
+      payload: {
+        expectedVersion: 6,
+        itemId: scheduledTask.item.id,
+        selectedChoiceId: "choice-written",
+      },
+    });
+    expect(scheduledResponse.statusCode).toBe(409);
+    expect(scheduledResponse.json<ApiErrorResponse>().error.code).toBe("INVALID_TASK_STATE");
+    const scheduledToday = await api.inject({
+      method: "GET",
+      url: `/v1/students/${scheduled.studentId}/today`,
+    });
+    expect(
+      scheduledToday.json<ApiResponse<TodayTasksView>>().data.currentTaskId,
+    ).toBeNull();
+
+    await activateDueRetestTask(database.db, {
+      caseId: scheduled.caseId,
+      taskId: scheduledTask.id,
+      effectiveNow: new Date(scheduledTask.scheduledFor),
+    });
+    const readyToday = await api.inject({
+      method: "GET",
+      url: `/v1/students/${scheduled.studentId}/today`,
+    });
+    expect(
+      readyToday.json<ApiResponse<TodayTasksView>>().data.currentTaskId,
+    ).toBe(scheduledTask.id);
+    const detail = await api.inject({
+      method: "GET",
+      url: `/v1/tasks/${scheduledTask.id}`,
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json<ApiResponse<LearningTaskView>>().data).not.toHaveProperty("steps");
+    expect(JSON.stringify(detail.json())).not.toContain("expectedChoiceId");
+    const baseRequest = {
+      method: "POST" as const,
+      url: `/v1/tasks/${scheduledTask.id}/attempts`,
+      headers: { "idempotency-key": "d1-validation-base-v1" },
+      payload: {
+        expectedVersion: 6,
+        itemId: scheduledTask.item.id,
+        selectedChoiceId: "choice-written",
+      },
+    };
+    const casesToReject = [
+      {
+        request: { ...baseRequest, headers: {}, payload: baseRequest.payload },
+        code: "INVALID_INPUT",
+      },
+      {
+        request: {
+          ...baseRequest,
+          headers: { "idempotency-key": "d1-stale-v1" },
+          payload: { ...baseRequest.payload, expectedVersion: 5 },
+        },
+        code: "VERSION_CONFLICT",
+      },
+      {
+        request: {
+          ...baseRequest,
+          headers: { "idempotency-key": "d1-wrong-item-v1" },
+          payload: { ...baseRequest.payload, itemId: "synthetic-wrong-item" },
+        },
+        code: "INVALID_INPUT",
+      },
+      {
+        request: {
+          ...baseRequest,
+          headers: { "idempotency-key": "d1-wrong-choice-v1" },
+          payload: { ...baseRequest.payload, selectedChoiceId: "choice-injected" },
+        },
+        code: "INVALID_INPUT",
+      },
+      {
+        request: {
+          ...baseRequest,
+          headers: { "idempotency-key": "d1-schema-v1" },
+          payload: { expectedVersion: 6, itemId: scheduledTask.item.id },
+        },
+        code: "SCHEMA_INVALID",
+      },
+    ];
+    for (const { request, code } of casesToReject) {
+      const response = await api.inject(request);
+      expect(response.statusCode).toBe(code === "VERSION_CONFLICT" ? 409 : 400);
+      expect(response.json<ApiErrorResponse>().error.code).toBe(code);
+    }
+
+    const missing = await api.inject({
+      ...baseRequest,
+      url: "/v1/tasks/0198a111-1111-7000-8000-999999999999/attempts",
+      headers: { "idempotency-key": "d1-missing-task-v1" },
+    });
+    expect(missing.statusCode).toBe(404);
+    expect(missing.json<ApiErrorResponse>().error.code).toBe("RESOURCE_NOT_FOUND");
+
+    const guidedPrepared = await createInterventionReadyCase(api, "d1-guided-reject-v1");
+    await api.inject({
+      method: "POST",
+      url: `/v1/cases/${guidedPrepared.caseId}/commands/run-next`,
+      headers: { "idempotency-key": "d1-guided-generate-v1" },
+      payload: { expectedVersion: 4 },
+    });
+    await waitForState(api, guidedPrepared.caseId, "intervention_active");
+    const guidedToday = await api.inject({
+      method: "GET",
+      url: `/v1/students/${guidedPrepared.studentId}/today`,
+    });
+    const guided = requireGuidedTask(
+      guidedToday.json<ApiResponse<TodayTasksView>>().data.tasks[0],
+    );
+    const nonD1 = await api.inject({
+      ...baseRequest,
+      url: `/v1/tasks/${guided.id}/attempts`,
+      headers: { "idempotency-key": "d1-guided-reject-v1" },
+      payload: { ...baseRequest.payload, expectedVersion: 5 },
+    });
+    expect(nonD1.statusCode).toBe(409);
+    expect(nonD1.json<ApiErrorResponse>().error.code).toBe("INVALID_TASK_STATE");
+
+    const caseAfter = await api.inject({
+      method: "GET",
+      url: `/v1/cases/${scheduled.caseId}`,
+    });
+    expect(caseAfter.json<ApiResponse<CaseView>>().data).toMatchObject({
+      state: "d1_scheduled",
+      stateVersion: 6,
+    });
+    const events = await database.db
+      .select()
+      .from(learningEvidenceEvents)
+      .where(eq(learningEvidenceEvents.caseId, scheduled.caseId));
+    expect(events.filter(({ eventType }) => eventType === "retest_evaluated")).toHaveLength(0);
+  }, 30_000);
+
+  it("queues failed D1 replan transactionally and the workers create one new intervention", async () => {
+    const prepared = await activatePreparedD1(api, database.db, "d1-fail-v1");
+    const evaluationApi = await buildApi({
+      database: database.db,
+      queue,
+      clock: new FixedClock(prepared.task.scheduledFor),
+    });
+    const request = {
+      method: "POST" as const,
+      url: `/v1/tasks/${prepared.task.id}/attempts`,
+      headers: { "idempotency-key": "d1-fail-attempt-v1" },
+      payload: {
+        expectedVersion: 6,
+        itemId: prepared.task.item.id,
+        selectedChoiceId: "choice-wrote",
+      },
+    };
+    const failed = await evaluationApi.inject(request);
+    const replay = await evaluationApi.inject(request);
+    const body = failed.json<ApiResponse<D1RetestAttemptView>>();
+    expect(failed.statusCode).toBe(200);
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json<ApiResponse<D1RetestAttemptView>>().data).toEqual(body.data);
+    expect(body.data).toMatchObject({
+      passed: false,
+      state: "replan_required",
+      stateVersion: 7,
+      scheduledRetest: null,
+    });
+    expect(body.jobId).toBeTruthy();
+
+    const beforeWorker = await database.db
+      .select()
+      .from(tasks)
+      .where(eq(tasks.caseId, prepared.caseId));
+    expect(beforeWorker.filter(({ taskType }) => taskType === "guided_intervention")).toHaveLength(1);
+    expect(beforeWorker.filter(({ taskType }) => taskType === "d7_retest")).toHaveLength(0);
+    const replanJob = await queue.boss.getJobById(REPLAN_QUEUE, body.jobId ?? "");
+    expect(replanJob?.data).toMatchObject({ caseId: prepared.caseId, expectedVersion: 7 });
+
+    const replanWorker = createReplanWorker({
+      database: database.db,
+      queue,
+      clock: new FixedClock(prepared.task.scheduledFor),
+    });
+    await replanWorker.start();
+    const active = await waitForState(evaluationApi, prepared.caseId, "intervention_active");
+    expect(active.stateVersion).toBe(9);
+    await replanWorker.stop();
+
+    const afterWorker = await database.db
+      .select()
+      .from(tasks)
+      .where(eq(tasks.caseId, prepared.caseId));
+    expect(afterWorker.filter(({ taskType }) => taskType === "guided_intervention")).toHaveLength(2);
+    const events = await database.db
+      .select()
+      .from(learningEvidenceEvents)
+      .where(eq(learningEvidenceEvents.caseId, prepared.caseId));
+    expect(events.filter(({ eventType }) => eventType === "retest_evaluated")).toHaveLength(1);
+    expect(events.filter(({ eventType }) => eventType === "plan_replanned")).toHaveLength(1);
+    expect(events.filter(({ eventType }) => eventType === "intervention_generated")).toHaveLength(2);
+    await evaluationApi.close();
+  }, 35_000);
+
+  it("rolls back D1 state, event, task completion, and follow-up when enqueue fails", async () => {
+    const prepared = await activatePreparedD1(api, database.db, "d1-rollback-v1");
+    const [caseRow] = await database.db
+      .select()
+      .from(cases)
+      .where(eq(cases.id, prepared.caseId));
+    expect(caseRow).toBeDefined();
+    const eventId = uuidv7();
+    await expect(
+      persistD1RetestEvaluation(database.db, {
+        caseId: prepared.caseId,
+        taskId: prepared.task.id,
+        expectedVersion: 6,
+        nextState: "replan_required",
+        evaluatedAt: new Date(prepared.task.scheduledFor),
+        event: {
+          id: eventId,
+          tenantId: caseRow?.tenantId ?? "",
+          studentId: prepared.studentId,
+          caseId: prepared.caseId,
+          eventType: "retest_evaluated",
+          sourceType: "synthetic_rollback_fixture",
+          sourceRef: prepared.task.id,
+          payload: { synthetic: true },
+          occurredAt: new Date(prepared.task.scheduledFor),
+          idempotencyKey: "d1-rollback-event-v1",
+        },
+        enqueueFollowUp: async () => {
+          throw new Error("SYNTHETIC_ENQUEUE_FAILURE");
+        },
+      }),
+    ).rejects.toThrow("SYNTHETIC_ENQUEUE_FAILURE");
+
+    const [caseAfter] = await database.db
+      .select()
+      .from(cases)
+      .where(eq(cases.id, prepared.caseId));
+    const [taskAfter] = await database.db
+      .select()
+      .from(tasks)
+      .where(eq(tasks.id, prepared.task.id));
+    const rolledBackEvents = await database.db
+      .select()
+      .from(learningEvidenceEvents)
+      .where(eq(learningEvidenceEvents.id, eventId));
+    expect(caseAfter).toMatchObject({ state: "d1_scheduled", stateVersion: 6 });
+    expect(taskAfter).toMatchObject({ status: "ready", completedAt: null });
+    expect(rolledBackEvents).toHaveLength(0);
+  }, 20_000);
+
+  it("selects currentTaskId with the frozen due/type/created/id ordering", async () => {
+    const prepared = await createProbeRequiredCase(api, "current-task-order-v1");
+    const sourceEvents = await database.db
+      .select({ id: learningEvidenceEvents.id })
+      .from(learningEvidenceEvents)
+      .where(eq(learningEvidenceEvents.caseId, prepared.caseId));
+    expect(sourceEvents.length).toBeGreaterThanOrEqual(3);
+    const [caseRow] = await database.db
+      .select({ tenantId: cases.tenantId })
+      .from(cases)
+      .where(eq(cases.id, prepared.caseId));
+    expect(caseRow).toBeDefined();
+    const common = {
+      tenantId: caseRow?.tenantId ?? "",
+      studentId: prepared.studentId,
+      caseId: prepared.caseId,
+      status: "ready" as const,
+      title: "Synthetic actionable ordering fixture",
+      estimatedMinutes: 5,
+      scheduledFor: new Date("2026-08-15T00:00:00.000Z"),
+      dueAt: new Date("2026-08-16T12:00:00.000Z"),
+      createdAt: new Date("2026-08-15T00:00:00.000Z"),
+    };
+    const privateItem = {
+      rationale: "Synthetic ordering fixture.",
+      item: {
+        id: "synthetic-ordering-item",
+        prompt: "Choose the synthetic answer.",
+        choices: [
+          { id: "choice-a", label: "A" },
+          { id: "choice-b", label: "B" },
+        ],
+        expectedChoiceId: "choice-b",
+        scoringMethod: "exact-choice-v1",
+      },
+    };
+    const d1LowId = "0198b111-1111-7000-8000-000000000101";
+    const d1HighId = "0198b111-1111-7000-8000-000000000102";
+    const d7Id = "0198b111-1111-7000-8000-000000000103";
+    const guidedId = "0198b111-1111-7000-8000-000000000104";
+    await database.db.insert(tasks).values([
+      {
+        ...common,
+        id: d1HighId,
+        taskType: "d1_retest",
+        payload: privateItem,
+        sourceEventId: sourceEvents[1]?.id ?? "",
+      },
+      {
+        ...common,
+        id: d1LowId,
+        taskType: "d1_retest",
+        payload: privateItem,
+        sourceEventId: sourceEvents[0]?.id ?? "",
+      },
+      {
+        ...common,
+        id: d7Id,
+        taskType: "d7_retest",
+        payload: privateItem,
+        sourceEventId: sourceEvents[0]?.id ?? "",
+      },
+      {
+        ...common,
+        id: guidedId,
+        taskType: "guided_intervention",
+        payload: {
+          rationale: "Synthetic ordering fixture.",
+          steps: [{ id: "step-1", kind: "explain", title: "Explain", content: "Synthetic." }],
+        },
+        sourceEventId: sourceEvents[0]?.id ?? "",
+      },
+    ]);
+    expect(
+      await findCurrentActionableTaskId(database.db, prepared.studentId),
+    ).toBe(d1LowId);
+
+    await database.db
+      .update(tasks)
+      .set({ dueAt: new Date("2026-08-16T11:59:59.000Z") })
+      .where(eq(tasks.id, guidedId));
+    expect(
+      await findCurrentActionableTaskId(database.db, prepared.studentId),
+    ).toBe(guidedId);
   }, 20_000);
 });

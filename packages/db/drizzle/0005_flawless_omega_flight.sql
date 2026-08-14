@@ -1,0 +1,1 @@
+ALTER TYPE "app"."task_type" ADD VALUE 'd7_retest';

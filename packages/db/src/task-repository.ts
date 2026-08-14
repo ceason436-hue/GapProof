@@ -1,5 +1,5 @@
 import type { CaseStatus } from "@gapproof/contracts";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 
 import type { Database } from "./client.ts";
 import { ResourceNotFoundError } from "./case-repository.ts";
@@ -35,7 +35,40 @@ export async function findTasksByStudentId(
     .select()
     .from(tasks)
     .where(eq(tasks.studentId, studentId))
-    .orderBy(asc(tasks.scheduledFor), asc(tasks.createdAt));
+    .orderBy(
+      sql`${tasks.dueAt} asc nulls last`,
+      sql`case ${tasks.taskType}
+        when 'd1_retest' then 1
+        when 'd7_retest' then 2
+        when 'guided_intervention' then 3
+        else 4
+      end`,
+      asc(tasks.createdAt),
+      asc(tasks.id),
+    );
+}
+
+export async function findCurrentActionableTaskId(
+  database: TaskQueryDatabase,
+  studentId: string,
+) {
+  const [row] = await database
+    .select({ id: tasks.id })
+    .from(tasks)
+    .where(and(eq(tasks.studentId, studentId), eq(tasks.status, "ready")))
+    .orderBy(
+      sql`${tasks.dueAt} asc nulls last`,
+      sql`case ${tasks.taskType}
+        when 'd1_retest' then 1
+        when 'd7_retest' then 2
+        when 'guided_intervention' then 3
+        else 4
+      end`,
+      asc(tasks.createdAt),
+      asc(tasks.id),
+    )
+    .limit(1);
+  return row?.id ?? null;
 }
 
 export async function findStudentById(

@@ -49,6 +49,7 @@ export const evidenceEventType = evidenceSchema.enum("evidence_event_type", [
 export const taskType = appSchema.enum("task_type", [
   "guided_intervention",
   "d1_retest",
+  "d7_retest",
 ]);
 
 export const taskStatus = appSchema.enum("task_status", [

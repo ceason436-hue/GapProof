@@ -24,16 +24,23 @@ import {
   DemoClockAdvanceRequestSchema,
   type DemoClockAdvanceRequest,
   DemoClockAdvanceViewSchema,
+  D1RetestAttemptViewSchema,
+  type D1RetestAttemptView,
+  type D1RetestTaskView,
+  type D7RetestTaskView,
   type FormHypothesesOutput,
   HypothesesViewSchema,
   type HypothesesView,
   type InterventionStep,
   type LearningTaskView,
+  LearningTaskViewSchema,
   RunNextQueuedSchema,
   RunNextRequestSchema,
   type RunNextRequest,
   SubmitAttemptRequestSchema,
   type SubmitAttemptRequest,
+  SubmitD1RetestAttemptRequestSchema,
+  type SubmitD1RetestAttemptRequest,
   StudentIdParamsSchema,
   type StudentIdParams,
   TaskCompletionViewSchema,
@@ -46,12 +53,15 @@ import {
   advanceDemoClock,
   completeInterventionTask,
   createSyntheticCaseIdempotent,
+  findCurrentActionableTaskId,
   findEvidenceEventByIdempotencyKey,
   findCaseById,
   findLatestCaseEvidenceEventByType,
   findStudentById,
   findTaskById,
   findTasksByStudentId,
+  InvalidTaskStateError,
+  persistD1RetestEvaluation,
   persistCaseTransition,
   type CaseRow,
   type Database,
@@ -69,11 +79,14 @@ import {
   CaseTransitionError,
   SystemClock,
   ProbeScoringError,
+  RetestScoringError,
+  scoreSingleChoiceRetest,
   scoreProbeAttempt,
   transitionCase,
 } from "@gapproof/domain";
 import {
   enqueueRetestDueTransactional,
+  enqueueReplanTransactional,
   enqueueRunNextIdempotent,
   type JobQueue,
 } from "@gapproof/jobs";
@@ -152,6 +165,16 @@ function completionRequestPayload(
   };
 }
 
+function d1AttemptRequestPayload(
+  body: SubmitD1RetestAttemptRequest,
+): Record<string, unknown> {
+  return {
+    expectedVersion: body.expectedVersion,
+    itemId: body.itemId,
+    selectedChoiceId: body.selectedChoiceId,
+  };
+}
+
 function isMatchingCompletionEvent(
   event: LearningEvidenceEventRow,
   taskId: string,
@@ -159,6 +182,19 @@ function isMatchingCompletionEvent(
 ): boolean {
   return (
     event.eventType === "intervention_completed" &&
+    event.sourceRef === taskId &&
+    isRecord(event.payload.request) &&
+    isSamePayload(event.payload.request, requestPayload)
+  );
+}
+
+function isMatchingD1EvaluationEvent(
+  event: LearningEvidenceEventRow,
+  taskId: string,
+  requestPayload: Record<string, unknown>,
+): boolean {
+  return (
+    event.eventType === "retest_evaluated" &&
     event.sourceRef === taskId &&
     isRecord(event.payload.request) &&
     isSamePayload(event.payload.request, requestPayload)
@@ -207,9 +243,29 @@ function attemptViewFromEvent(
 
 function toLearningTaskView(row: TaskRow): LearningTaskView {
   const rationale = row.payload.rationale;
-  const steps = row.payload.steps;
-  if (
-    typeof rationale !== "string" ||
+  if (typeof rationale !== "string") {
+    throw new ApiHttpError(
+      500,
+      "STORED_TASK_INVALID",
+      `Stored task ${row.id} is invalid.`,
+    );
+  }
+  const base = {
+    id: row.id,
+    caseId: row.caseId,
+    studentId: row.studentId,
+    status: row.status,
+    title: row.title,
+    rationale,
+    estimatedMinutes: row.estimatedMinutes,
+    scheduledFor: row.scheduledFor.toISOString(),
+    dueAt: row.dueAt?.toISOString() ?? null,
+    completedAt: row.completedAt?.toISOString() ?? null,
+  } as const;
+
+  if (row.taskType === "guided_intervention") {
+    const steps = row.payload.steps;
+    if (
     !Array.isArray(steps) ||
     steps.length === 0 ||
     steps.some(
@@ -222,28 +278,67 @@ function toLearningTaskView(row: TaskRow): LearningTaskView {
         typeof step.title !== "string" ||
         typeof step.content !== "string",
     )
+    ) {
+      throw new ApiHttpError(
+        500,
+        "STORED_TASK_INVALID",
+        `Stored task ${row.id} is invalid.`,
+      );
+    }
+    return {
+      ...base,
+      taskType: "guided_intervention",
+      steps: steps as InterventionStep[],
+    };
+  }
+
+  const item = privateRetestItemFromTask(row);
+  return {
+    ...base,
+    taskType: row.taskType,
+    item: {
+      id: item.id,
+      prompt: item.prompt,
+      choices: item.choices.map((choice) => ({ ...choice })),
+    },
+  };
+}
+
+interface PrivateRetestItem {
+  readonly id: string;
+  readonly prompt: string;
+  readonly choices: readonly { readonly id: string; readonly label: string }[];
+  readonly expectedChoiceId: string;
+  readonly scoringMethod: "exact-choice-v1";
+}
+
+function privateRetestItemFromTask(row: TaskRow): PrivateRetestItem {
+  const item = row.payload.item;
+  if (
+    !isRecord(item) ||
+    typeof item.id !== "string" ||
+    typeof item.prompt !== "string" ||
+    !Array.isArray(item.choices) ||
+    item.choices.length < 2 ||
+    item.choices.some(
+      (choice) =>
+        !isRecord(choice) ||
+        typeof choice.id !== "string" ||
+        typeof choice.label !== "string",
+    ) ||
+    typeof item.expectedChoiceId !== "string" ||
+    item.scoringMethod !== "exact-choice-v1" ||
+    !item.choices.some(
+      (choice) => isRecord(choice) && choice.id === item.expectedChoiceId,
+    )
   ) {
     throw new ApiHttpError(
       500,
       "STORED_TASK_INVALID",
-      `Stored task ${row.id} is invalid.`,
+      `Stored retest task ${row.id} is invalid.`,
     );
   }
-
-  return {
-    id: row.id,
-    caseId: row.caseId,
-    studentId: row.studentId,
-    taskType: row.taskType,
-    status: row.status,
-    title: row.title,
-    rationale,
-    estimatedMinutes: row.estimatedMinutes,
-    scheduledFor: row.scheduledFor.toISOString(),
-    dueAt: row.dueAt?.toISOString() ?? null,
-    completedAt: row.completedAt?.toISOString() ?? null,
-    steps: steps as InterventionStep[],
-  };
+  return item as unknown as PrivateRetestItem;
 }
 
 async function taskCompletionViewFromEvent(
@@ -274,13 +369,72 @@ async function taskCompletionViewFromEvent(
       "The intervention completion tasks are missing.",
     );
   }
+  if (
+    completedTask.taskType !== "guided_intervention" ||
+    scheduledRetest.taskType !== "d1_retest"
+  ) {
+    throw new ApiHttpError(500, "STORED_TASK_INVALID", "The completion task types are invalid.");
+  }
 
   return {
     caseId: event.caseId,
     state: "d1_scheduled",
     stateVersion: result.stateVersion as number,
-    completedTask: toLearningTaskView(completedTask),
-    scheduledRetest: toLearningTaskView(scheduledRetest),
+    completedTask: toLearningTaskView(completedTask) as Extract<LearningTaskView, { taskType: "guided_intervention" }>,
+    scheduledRetest: toLearningTaskView(scheduledRetest) as D1RetestTaskView,
+  };
+}
+
+async function d1RetestAttemptViewFromEvent(
+  _database: Database,
+  event: LearningEvidenceEventRow,
+): Promise<{ view: D1RetestAttemptView; jobId?: string }> {
+  const result = event.payload.result;
+  if (
+    !isRecord(result) ||
+    typeof result.taskId !== "string" ||
+    typeof result.itemId !== "string" ||
+    typeof result.selectedChoiceId !== "string" ||
+    typeof result.passed !== "boolean" ||
+    result.scoringMethod !== "exact-choice-v1" ||
+    !["d7_scheduled", "replan_required"].includes(String(result.state)) ||
+    !Number.isInteger(result.stateVersion) ||
+    !(typeof result.d7TaskId === "string" || result.d7TaskId === null) ||
+    !(typeof result.replanJobId === "string" || result.replanJobId === null) ||
+    !isRecord(result.completedTask) ||
+    result.completedTask.taskType !== "d1_retest" ||
+    result.completedTask.status !== "completed" ||
+    !isRecord(result.completedTask.item) ||
+    "expectedChoiceId" in result.completedTask.item ||
+    !(
+      (result.scheduledRetest === null && result.d7TaskId === null) ||
+      (isRecord(result.scheduledRetest) &&
+        result.scheduledRetest.taskType === "d7_retest" &&
+        result.scheduledRetest.status === "scheduled" &&
+        result.scheduledRetest.id === result.d7TaskId &&
+        isRecord(result.scheduledRetest.item) &&
+        !("expectedChoiceId" in result.scheduledRetest.item))
+    )
+  ) {
+    throw new ApiHttpError(500, "STORED_EVENT_INVALID", "The stored D1 evaluation event is invalid.");
+  }
+  return {
+    view: {
+      attemptId: event.id,
+      caseId: event.caseId,
+      taskId: result.taskId,
+      itemId: result.itemId,
+      selectedChoiceId: result.selectedChoiceId,
+      passed: result.passed,
+      scoringMethod: "exact-choice-v1",
+      state: result.state as "d7_scheduled" | "replan_required",
+      stateVersion: result.stateVersion as number,
+      completedTask: result.completedTask as D1RetestTaskView,
+      scheduledRetest: result.scheduledRetest as D7RetestTaskView | null,
+    },
+    ...(typeof result.replanJobId === "string"
+      ? { jobId: result.replanJobId }
+      : {}),
   };
 }
 
@@ -348,6 +502,14 @@ export async function buildApi(options: BuildApiOptions) {
     } else if (error instanceof VersionConflictError) {
       statusCode = 409;
       code = error.code;
+      message = error.message;
+    } else if (error instanceof InvalidTaskStateError) {
+      statusCode = 409;
+      code = error.code;
+      message = error.message;
+    } else if (error instanceof RetestScoringError) {
+      statusCode = 400;
+      code = "INVALID_INPUT";
       message = error.message;
     } else if (error instanceof CaseTransitionError) {
       statusCode = error.code === "invalid_transition" ? 409 : 422;
@@ -855,10 +1017,261 @@ export async function buildApi(options: BuildApiOptions) {
         options.database,
         student.id,
       );
+      const currentTaskId = await findCurrentActionableTaskId(
+        options.database,
+        student.id,
+      );
       return success(request, {
         studentId: student.id,
+        currentTaskId,
         tasks: taskRows.map(toLearningTaskView),
       });
+    },
+  );
+
+  api.get<{ Params: TaskIdParams }>(
+    "/v1/tasks/:taskId",
+    {
+      schema: {
+        params: TaskIdParamsSchema,
+        response: {
+          200: apiResponseSchema(LearningTaskViewSchema),
+          "4xx": ApiErrorResponseSchema,
+          500: ApiErrorResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      const task = await findTaskById(options.database, request.params.taskId);
+      if (task === undefined) {
+        throw new ResourceNotFoundError("Task", request.params.taskId);
+      }
+      return success(request, toLearningTaskView(task));
+    },
+  );
+
+  api.post<{ Params: TaskIdParams; Body: SubmitD1RetestAttemptRequest }>(
+    "/v1/tasks/:taskId/attempts",
+    {
+      schema: {
+        params: TaskIdParamsSchema,
+        body: SubmitD1RetestAttemptRequestSchema,
+        response: {
+          200: apiResponseSchema(D1RetestAttemptViewSchema),
+          "4xx": ApiErrorResponseSchema,
+          500: ApiErrorResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      const idempotencyKey = `d1-retest-attempt:${getIdempotencyKey(request)}`;
+      const requestPayload = d1AttemptRequestPayload(request.body);
+      const existing = await findEvidenceEventByIdempotencyKey(options.database, idempotencyKey);
+      if (existing !== undefined) {
+        if (!isMatchingD1EvaluationEvent(existing, request.params.taskId, requestPayload)) {
+          throw new ApiHttpError(409, "IDEMPOTENCY_KEY_REUSED", "The idempotency key belongs to another write request.");
+        }
+        const replay = await d1RetestAttemptViewFromEvent(options.database, existing);
+        return success(request, replay.view, replay.jobId);
+      }
+
+      const taskRow = await findTaskById(options.database, request.params.taskId);
+      if (taskRow === undefined) {
+        throw new ResourceNotFoundError("Task", request.params.taskId);
+      }
+      const caseRow = await findCaseById(options.database, taskRow.caseId);
+      if (caseRow === undefined) {
+        throw new ResourceNotFoundError("Case", taskRow.caseId);
+      }
+      if (caseRow.stateVersion !== request.body.expectedVersion) {
+        const racedEvent = await findEvidenceEventByIdempotencyKey(
+          options.database,
+          idempotencyKey,
+        );
+        if (racedEvent !== undefined) {
+          if (!isMatchingD1EvaluationEvent(racedEvent, taskRow.id, requestPayload)) {
+            throw new ApiHttpError(
+              409,
+              "IDEMPOTENCY_KEY_REUSED",
+              "The idempotency key belongs to another write request.",
+            );
+          }
+          const replay = await d1RetestAttemptViewFromEvent(options.database, racedEvent);
+          return success(request, replay.view, replay.jobId);
+        }
+        throw new VersionConflictError(caseRow.id, request.body.expectedVersion);
+      }
+      if (
+        taskRow.taskType !== "d1_retest" ||
+        taskRow.status !== "ready" ||
+        caseRow.state !== "d1_scheduled"
+      ) {
+        throw new InvalidTaskStateError("Only a ready D1 retest in d1_scheduled can be submitted.");
+      }
+      const item = privateRetestItemFromTask(taskRow);
+      if (item.id !== request.body.itemId) {
+        throw new ApiHttpError(400, "INVALID_INPUT", "The submitted item does not belong to this D1 task.");
+      }
+      const score = scoreSingleChoiceRetest({
+        itemId: item.id,
+        selectedChoiceId: request.body.selectedChoiceId,
+        expectedChoiceId: item.expectedChoiceId,
+        availableChoiceIds: item.choices.map(({ id }) => id),
+      });
+      const evaluatedAt = clock.now();
+      const eventId = uuidv7();
+      const d7TaskId = score.passed ? uuidv7() : null;
+      const replanJobId = score.passed ? null : uuidv7();
+      const interventionJobId = score.passed ? null : uuidv7();
+      const d7ScheduledFor = new Date(evaluatedAt.getTime() + 144 * 60 * 60 * 1_000);
+      const d7DueAt = new Date(d7ScheduledFor.getTime() + 12 * 60 * 60 * 1_000);
+      const domainEvent = {
+        eventId,
+        occurredAt: evaluatedAt.toISOString(),
+        type: "retest_evaluated" as const,
+        kind: "d1" as const,
+        passed: score.passed,
+      };
+      const next = transitionCase(
+        {
+          id: caseRow.id,
+          status: caseRow.state,
+          mastery: "pending_retest",
+          version: caseRow.stateVersion,
+          replanCount: 0,
+          appliedEventIds: [],
+        },
+        domainEvent,
+      );
+      const d7Task = d7TaskId === null ? undefined : {
+        id: d7TaskId,
+        tenantId: caseRow.tenantId,
+        studentId: caseRow.studentId,
+        caseId: caseRow.id,
+        taskType: "d7_retest" as const,
+        status: "scheduled" as const,
+        title: "六天后换一道新题检查",
+        estimatedMinutes: 5,
+        scheduledFor: d7ScheduledFor,
+        dueAt: d7DueAt,
+        payload: {
+          rationale: "D1 已完成；在精确 144 小时后使用新的合成题检查迁移。",
+          item: {
+            id: "synthetic-d7-transfer-item-v1",
+            prompt: "The volunteers have ___ three notes about saving water.",
+            choices: [
+              { id: "choice-wrote", label: "wrote" },
+              { id: "choice-written", label: "written" },
+              { id: "choice-writing", label: "writing" },
+            ],
+            expectedChoiceId: "choice-written",
+            scoringMethod: "exact-choice-v1",
+          },
+        },
+        sourceEventId: eventId,
+      };
+      const completedTaskSnapshot: D1RetestTaskView = {
+        ...(toLearningTaskView(taskRow) as D1RetestTaskView),
+        status: "completed",
+        completedAt: evaluatedAt.toISOString(),
+      };
+      const scheduledRetestSnapshot: D7RetestTaskView | null = d7Task === undefined
+        ? null
+        : {
+            id: d7Task.id,
+            caseId: d7Task.caseId,
+            studentId: d7Task.studentId,
+            taskType: "d7_retest",
+            status: "scheduled",
+            title: d7Task.title,
+            rationale: String(d7Task.payload.rationale),
+            estimatedMinutes: d7Task.estimatedMinutes,
+            scheduledFor: d7Task.scheduledFor.toISOString(),
+            dueAt: d7Task.dueAt?.toISOString() ?? null,
+            completedAt: null,
+            item: {
+              id: String((d7Task.payload.item as Record<string, unknown>).id),
+              prompt: String((d7Task.payload.item as Record<string, unknown>).prompt),
+              choices: ((d7Task.payload.item as Record<string, unknown>).choices as Array<{ id: string; label: string }>).map(
+                (choice) => ({ ...choice }),
+              ),
+            },
+          };
+      const eventPayload = {
+        kind: "d1" as const,
+        passed: score.passed,
+        request: requestPayload,
+        result: {
+          taskId: taskRow.id,
+          itemId: item.id,
+          selectedChoiceId: request.body.selectedChoiceId,
+          passed: score.passed,
+          scoringMethod: score.scoringMethod,
+          state: next.status,
+          stateVersion: next.version,
+          d7TaskId,
+          replanJobId,
+          completedTask: completedTaskSnapshot,
+          scheduledRetest: scheduledRetestSnapshot,
+        },
+        privateEvidence: {
+          scoringRule: score.scoringMethod,
+          itemSource: "synthetic_fixture",
+        },
+      };
+      const persisted = await persistD1RetestEvaluation(options.database, {
+        caseId: caseRow.id,
+        taskId: taskRow.id,
+        expectedVersion: request.body.expectedVersion,
+        nextState: next.status,
+        evaluatedAt,
+        event: {
+          id: eventId,
+          tenantId: caseRow.tenantId,
+          studentId: caseRow.studentId,
+          caseId: caseRow.id,
+          eventType: domainEvent.type,
+          sourceType: "student_d1_retest_attempt",
+          sourceRef: taskRow.id,
+          payload: eventPayload,
+          occurredAt: evaluatedAt,
+          idempotencyKey,
+        },
+        ...(d7Task === undefined ? {} : { d7Task }),
+        enqueueFollowUp: async (transaction) => {
+          if (d7Task !== undefined) {
+            await enqueueRetestDueTransactional(transaction, options.queue, {
+              caseId: d7Task.caseId,
+              taskId: d7Task.id,
+              startAfter: d7Task.scheduledFor,
+            });
+            return;
+          }
+          if (replanJobId === null || interventionJobId === null) {
+            throw new Error("A failed D1 evaluation requires replan job ids.");
+          }
+          await enqueueReplanTransactional(transaction, options.queue, {
+            jobId: replanJobId,
+            caseId: caseRow.id,
+            triggerEventId: eventId,
+            expectedVersion: next.version,
+            traceId: traceId(request),
+            interventionJobId,
+          });
+        },
+      });
+      const persistedEvent = await findEvidenceEventByIdempotencyKey(options.database, idempotencyKey);
+      if (persistedEvent === undefined || !isMatchingD1EvaluationEvent(persistedEvent, taskRow.id, requestPayload)) {
+        throw new ApiHttpError(
+          persisted.applied ? 500 : 409,
+          persisted.applied ? "STORED_EVENT_INVALID" : "IDEMPOTENCY_KEY_REUSED",
+          persisted.applied
+            ? "The D1 evaluation event could not be reconstructed."
+            : "The idempotency key belongs to another write request.",
+        );
+      }
+      const response = await d1RetestAttemptViewFromEvent(options.database, persistedEvent);
+      return success(request, response.view, response.jobId);
     },
   );
 
@@ -953,6 +1366,13 @@ export async function buildApi(options: BuildApiOptions) {
       }
 
       const taskView = toLearningTaskView(taskRow);
+      if (taskView.taskType !== "guided_intervention") {
+        throw new ApiHttpError(
+          409,
+          "INVALID_TASK_STATE",
+          "The task is not a ready guided intervention.",
+        );
+      }
       const requiredStepIds = [...taskView.steps.map(({ id }) => id)].sort();
       const completedStepIds = [...request.body.completedStepIds].sort();
       if (!isDeepStrictEqual(requiredStepIds, completedStepIds)) {
@@ -1031,14 +1451,17 @@ export async function buildApi(options: BuildApiOptions) {
           dueAt: d1DueAt,
           payload: {
             rationale: "最小干预已完成；次日使用新题检查是否能独立回忆。",
-            steps: [
-              {
-                id: "step-d1-unseen-check",
-                kind: "guided_practice",
-                title: "完成次日新题检查",
-                content: "到期后使用一道未见过的完成时词形题进行独立检查。",
-              },
-            ],
+            item: {
+              id: "synthetic-d1-unseen-item-v1",
+              prompt: "Mina has ___ three short notes about saving water this week.",
+              choices: [
+                { id: "choice-wrote", label: "wrote" },
+                { id: "choice-written", label: "written" },
+                { id: "choice-writing", label: "writing" },
+              ],
+              expectedChoiceId: "choice-written",
+              scoringMethod: "exact-choice-v1",
+            },
           },
           sourceEventId: event.eventId,
         },

@@ -1,6 +1,7 @@
 export * from "./client.ts";
 export * from "./case-repository.ts";
 export * from "./demo-clock-repository.ts";
+export * from "./d1-retest-repository.ts";
 export * from "./persist-case-transition.ts";
 export * from "./retest-repository.ts";
 export * from "./run-migrations.ts";
