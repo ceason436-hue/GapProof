@@ -2,15 +2,15 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.16"
+version: "0.3.17"
 status: "DRAFT_FOR_IMPLEMENTATION"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.23"
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.15"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.24"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.16"
 ---
 
 # 知隙 GapProof 技术设计文档（TDD）
@@ -403,7 +403,7 @@ Tailwind CSS 可随 Next.js 默认方案使用；组件层推荐 Radix Primitive
 - “重点任务卡” CTA 和侧栏固定“开始学习”必须从同一 `current_task_id` 读取，并导航至同一路由/同一任务状态；不能在前端分别创建任务、写入完成状态或绕开 API。
 - 本周学习足迹、待确认、最近进展、稍后继续和下次检查均为服务端任务/计划状态的只读投影；无数据、加载、失败和演示数据时必须使用 7.3 的状态 UX，不得伪造已完成或已掌握。
 - 当前首页不依赖显式全局搜索或“新报告”提醒；后续增加紧凑搜索时，必须有键盘焦点、可访问名称和独立的空/失败状态。
-- F0 已完成构建、自动化和 1440×900/1366×768 截图验收并合并 `main`：顶部栏、Logo/品牌位与侧栏固定，仅 `.content` 内容区滚动；当前仍为 Mock 数据且未接入真实 API。
+- F0 Mock 与 F1b 显式只读 API 模式均已完成构建、自动化和 1440×900/1366×768 截图验收并合并 `main`：顶部栏、Logo/品牌位与侧栏固定，仅 `.content` 内容区滚动。默认入口仍为 Mock；F1b 不含 POST、评分或状态迁移。
 
 ### 7.6 前端—API 集成执行规范 V1
 
@@ -438,12 +438,25 @@ Tailwind CSS 可随 Next.js 默认方案使用；组件层推荐 Radix Primitive
 
 学习任务接口已冻结为：
 
-- `GET /v1/students/{studentId}/today` 成功数据为 `TodayTasksView { studentId, tasks: LearningTaskView[] }`。
-- `LearningTaskView` 公开字段为 `id`、`caseId`、`studentId`、`taskType`、`status`、`title`、`rationale`、`estimatedMinutes`、`scheduledFor`、`dueAt`、`completedAt`、`steps`；`taskType` 为 `guided_intervention | d1_retest`，`status` 为 `ready | scheduled | completed`。
+- `GET /v1/students/{studentId}/today` 成功数据为 `TodayTasksView { studentId, timeZone, currentTaskId, tasks }`。`timeZone` 必须是目标学生记录中可由 `Intl.DateTimeFormat` 接受的 IANA 标识；无效存储值返回 `STORED_STUDENT_INVALID`，不得回退系统或浏览器时区。
+- `currentTaskId` 为 `uuid | null`，只指向服务端判定的当前可行动 ready D1 或 ready guided 任务。只有 scheduled、无任务、全部完成或只有 ready D7 时为 `null`。多个候选按 `dueAt ASC NULLS LAST → taskType（d1_retest 优先于 guided_intervention）→ createdAt → taskId` 稳定选择；前端不得猜测替代任务。D7 只有在 attempts 路由与状态迁移原子上线后才能加入 actionable 集合。
+- `LearningTaskView` 是 `guided_intervention | d1_retest | d7_retest` 的 TypeBox 判别联合。三类共享 `id`、`caseId`、`studentId`、`status`、`title`、`rationale`、`estimatedMinutes`、`scheduledFor`、`dueAt`、`completedAt`；guided 独有 `steps`，D1/D7 独有公开 `item { id, prompt, choices[] }`。公开题目不得包含答案键或内部评分映射。
+- `GET /v1/tasks/{taskId}` 返回同一公开 `LearningTaskView` 判别联合；资源缺失返回 `RESOURCE_NOT_FOUND`。
 - `POST /v1/tasks/{taskId}/submit` 要求 `Idempotency-Key`，请求为 `{ expectedVersion, completedStepIds: string[] }`；成功数据为 `{ caseId, state: "d1_scheduled", stateVersion, completedTask, scheduledRetest }`。
 - 干预任务提交必须恰好覆盖服务端任务的全部步骤；不完整或额外步骤返回 `INVALID_INPUT`。非 `ready` 干预任务返回 `INVALID_TASK_STATE`；旧 Case 版本返回 `VERSION_CONFLICT`；非法 Case 状态返回 `INVALID_CASE_TRANSITION`；资源缺失沿用 `RESOURCE_NOT_FOUND`。
 - 幂等重放返回 `200`，同一个 key 配不同 Body 返回 `IDEMPOTENCY_KEY_REUSED`；并发相同提交只允许一个 `intervention_completed` 事件和一个 D+1 任务。
 - 公开 DTO 禁止包含 `selectedHypothesisId`、答案键、工具 `warnings` 或内部版本；前端只能消费共享 contracts，不得从数据库 payload 反推私有字段。
+
+D1 客观复测 attempts 已冻结为：
+
+- `POST /v1/tasks/{taskId}/attempts` 必须携带 `Idempotency-Key`，请求为 `{ expectedVersion, itemId, selectedChoiceId }`；仅接受 `ready d1_retest + Case.state=d1_scheduled`。
+- 成功数据为 `{ attemptId, caseId, taskId, itemId, selectedChoiceId, passed, scoringMethod:"exact-choice-v1", state, stateVersion, completedTask, scheduledRetest }`；`state` 为 `d7_scheduled | replan_required`，`scheduledRetest` 为公开 D7 task 或 `null`。`selectedChoiceId` 只回显当前用户自己的提交；答案键、内部映射和完整评分证据禁止进入 Today、任务详情或公开响应。
+- 评分时刻 `evaluatedAt` 由服务端注入的 `Clock.now()` 提供并以 UTC 持久化。通过分支在同一事务完成 D1、追加唯一 `retest_evaluated { kind:"d1", passed:true }`、推进 Case 至 `d7_scheduled`、创建 D7 任务与延迟 `retest.due` Job；`d7ScheduledFor = d1EvaluatedAt + 144h`，`dueAt = d7ScheduledFor + 12h`。若 D1 延迟完成，用户文案不得误导为严格自然日“第 7 天”。
+- 失败分支在同一事务完成 D1、追加唯一 `retest_evaluated { kind:"d1", passed:false }`、推进 Case 至 `replan_required` 并入队 `case.replan`；真正的新干预由 Worker 异步生成。当前 `FakeBuildInterventionAdapter` 仍可能生成内容等价的合成任务，只是可测试骨架，不得描述为真实个性化学习效果。
+- 首次成功响应按幂等键冻结；相同 key/body 的顺序或并发重放返回同一响应，不重复事件、任务或 Job。同 key 异 Body 返回 `IDEMPOTENCY_KEY_REUSED`；旧版本返回 `VERSION_CONFLICT`；Schema、输入、任务状态和资源错误分别使用 `SCHEMA_INVALID`、`INVALID_INPUT`、`INVALID_TASK_STATE`、`RESOURCE_NOT_FOUND`。前端只在网络结果未知或 `retryable=true` 时用同 key/body 重试一次；版本冲突先 GET Case，禁止自动重交。
+- D7 到期激活已复用 `retest.due`，但 `POST .../attempts` 当前拒绝 D7；D7 评分、报告触发、持久 mastery、自动重排上限与上限后的产品状态仍未冻结/实现。
+
+F1b Server Component 在服务端使用私有 `GAPPROOF_API_ORIGIN` 组成绝对 URL 并设置 `cache:"no-store"`；浏览器端仍只允许同源 `/api/v1/**`。正式只读模式通过显式 `?source=api` 启用，默认入口仍为 Mock；API 空列表、缺失 current 引用或无效学生时区不得回退 Mock。
 
 Demo 虚拟时钟接口已冻结为：
 
@@ -499,6 +512,8 @@ GET    /v1/students/{studentId}/today
 PATCH  /v1/students/{studentId}/learning-budget
 GET    /v1/students/{studentId}/skill-map
 POST   /v1/tasks/{taskId}/submit
+GET    /v1/tasks/{taskId}
+POST   /v1/tasks/{taskId}/attempts
 GET    /v1/reports/{reportId}
 POST   /v1/reviews
 DELETE /v1/students/{studentId}/data
@@ -529,7 +544,7 @@ type ApiErrorResponse = {
 };
 ```
 
-API 错误码至少包括：`INVALID_INPUT`、`SCHEMA_INVALID`、`UNAUTHORIZED`、`FORBIDDEN`、`RESOURCE_NOT_FOUND`、`VERSION_CONFLICT`、`INVALID_CASE_TRANSITION`、`INVALID_TASK_STATE`、`IDEMPOTENCY_KEY_REUSED`、`STORED_EVENT_INVALID`、`DEMO_CLOCK_MISMATCH`、`DEMO_CASE_REQUIRED`、`LOW_CONFIDENCE`、`NO_SOURCE`、`SOURCE_CONFLICT`、`PROVIDER_TIMEOUT`、`PROVIDER_RATE_LIMITED`、`PROVIDER_UNAVAILABLE`、`HUMAN_REVIEW_REQUIRED`、`TOOL_DISABLED`、`INTERNAL_ERROR`。
+API 错误码至少包括：`INVALID_INPUT`、`SCHEMA_INVALID`、`UNAUTHORIZED`、`FORBIDDEN`、`RESOURCE_NOT_FOUND`、`VERSION_CONFLICT`、`INVALID_CASE_TRANSITION`、`INVALID_TASK_STATE`、`IDEMPOTENCY_KEY_REUSED`、`STORED_EVENT_INVALID`、`STORED_STUDENT_INVALID`、`DEMO_CLOCK_MISMATCH`、`DEMO_CASE_REQUIRED`、`LOW_CONFIDENCE`、`NO_SOURCE`、`SOURCE_CONFLICT`、`PROVIDER_TIMEOUT`、`PROVIDER_RATE_LIMITED`、`PROVIDER_UNAVAILABLE`、`HUMAN_REVIEW_REQUIRED`、`TOOL_DISABLED`、`INTERNAL_ERROR`。
 
 ## 9. Agent 技术路线
 
@@ -1179,10 +1194,12 @@ Serverless 很适合短 API 和自动扩容，但 OCR、多轮模型、报告、
 - 已实现 `GET /v1/students/{studentId}/today` 与 `POST /v1/tasks/{taskId}/submit`；完成干预后在同一事务写入 `intervention_completed { taskId, d1TaskId, d1ScheduledFor }`、完成原任务、创建 `scheduled` 的 D+1 任务并推进到 `d1_scheduled`。`scheduledFor = completedAt + 24h`，`dueAt = scheduledFor + 12h`，mastery 仅为 `pending_retest`。
 - 完成干预的同一 PostgreSQL 事务现通过 pg-boss `fromDrizzle(transaction, sql)` 写入延迟 `retest.due` Job，Job ID 与 D+1 task ID 相同；独立 `RetestDueWorker` 只把指定 Case、指定 `d1_retest` 的 `scheduled → ready`，重复/并发执行只生效一次。
 - 新增 `Clock/SystemClock/FixedClock`、`RetestDueJobData { caseId, taskId }`、`app.demo_clocks`、`demo_clock_advanced` 与迁移 `packages/db/drizzle/0004_goofy_vindicator.sql`；虚拟时钟按 Case 隔离、带版本并受环境开关保护。
-- F0 已完成技术与视觉验收并合并 `main`，但仍为 Mock 数据且未接入真实 API，不构成真实端到端接口接入证据。
-- 当前证据为 38 条快速测试通过、35 条真实 PostgreSQL/API/Worker 集成测试通过、TypeScript 严格类型检查、Next.js production build 和双视口视觉/滚动回归通过。
+- 已实现任务详情、Today `timeZone/currentTaskId` 与 guided/D1/D7 判别联合；`currentTaskId` 仅选择 ready D1/guided，D7 在 attempts 未实现前保持只读。
+- 已实现 D1 `POST /v1/tasks/{taskId}/attempts`：私有 `exact-choice-v1` 评分、`retest_evaluated(kind=d1)`、D7 144h + 12h 调度、失败事务内 `case.replan` Job、Worker 异步合成干预骨架，以及迁移 `0005_flawless_omega_flight.sql`。幂等重放、并发去重、乐观锁、事务回滚与公开响应脱敏均有测试。
+- F0 Mock 与 F1b 显式只读 API 模式已完成技术与视觉验收并合并 `main`；F1b 消费共享 contracts、使用学生时区和服务端 currentTaskId，但不提交 D1/D7，不构成真实端到端写入证据。
+- 当前证据为 69 条快速测试通过、41 条真实 PostgreSQL/API/Worker 集成测试通过、39 条 apps/web 测试通过、TypeScript 严格类型检查、Next.js production build、六张合成 API Fixture 截图和原 Mock 双视口视觉/滚动回归通过。
 
-该快照不等于 Phase A 完成：F0 尚未接入真实 API；真实上传/对象存储、真实 AI 干预、真实题库、D+1 作答评分、`retest_evaluated`、D+7、失败重排、通知、报告、真实 OCR/模型 Provider 和完整端到端 Playwright Demo 仍未实现。
+该快照不等于 Phase A 完成：默认前端入口仍为 Mock，D1 前端作答尚未接入；真实上传/对象存储、真实 AI 干预、真实题库、D7 作答评分、可执行的重排上限和差异化真实重排内容、通知、报告、真实 OCR/模型 Provider 和完整端到端 Playwright Demo 仍未实现。
 
 ### 21.1 Phase A：Thin Slice（先证明闭环）
 
@@ -1270,7 +1287,7 @@ LoadCaseContext
 | `redact_pii`、`retrieve_curriculum` | 仍按第一阶段计划完成接口、Schema、fake/mock、错误处理并接入 MVP 主链 |
 | `score_objective`、`update_mastery`、`render_report` | MVP 实现确定性/规则版本 |
 | `verify_item` | MVP 最小实现：唯一答案、技能绑定、答案格式、错因标签、审核状态、教材版本、版权来源 |
-| `schedule_retest` | 已实现 D+1 任务创建、事务内延迟 Job、生产到期激活和受开关保护的 Case 级虚拟时钟；D+7、取消/重排及短信/微信/邮件尚未实现 |
+| `schedule_retest` | 已实现 D+1 任务创建/到期/评分、D7 任务创建及到期激活、事务内延迟 Job、失败重排 Job 和受开关保护的 Case 级虚拟时钟；D7 作答评分、重排上限、取消及短信/微信/邮件尚未实现 |
 | `escalate_human` | 只创建 `human_review_tasks` 待处理记录，不接真实人工系统 |
 | `analyze_speech` | 仅接口、Schema、Mock 和错误处理；暂缓真实 ASR/发音分析 |
 | `score_writing` | 仅接口、Schema、Mock 和错误处理；暂缓真实写作评分 |
@@ -1507,7 +1524,7 @@ MVP 工具 Schema 最小字段：
 | TECH-022 | MVP Agent 固定为六节点 LangGraph.js 图 | accepted | 业务闭环增加新节点时更新图版本和 Golden Cases |
 | TECH-023 | 所有工具先完成接口、Schema、Mock 和错误处理；verify_item/schedule_retest 做 MVP 最小实现 | accepted | 工具边界或真实 Provider 能力发生变化 |
 | TECH-024 | escalate_human 先创建待处理记录；analyze_speech/score_writing 暂缓真实能力 | accepted | 真实人工流程、语音或写作试点启动 |
-| TECH-025 | UUIDv7 + PostgreSQL 16+；核心表字段/索引/枚举/删除策略按 TDD v0.3.16 | accepted | 数据规模、托管扩展或合规要求变化 |
+| TECH-025 | UUIDv7 + PostgreSQL 16+；核心表字段/索引/枚举/删除策略按 TDD v0.3.17 | accepted | 数据规模、托管扩展或合规要求变化 |
 | TECH-026 | 采用 TDD 详细 API 路由作为唯一正式接口 | accepted | API 版本升级或新客户端边界产生 |
 | TECH-027 | 杭州阿里云单区域联网 Docker Compose；真实 Provider 演示，Mock 仅测试/故障注入 | accepted | 比赛网络、并发、合规或可用性要求变化 |
 | TECH-028 | DeepSeek `deepseek-v4-flash` 主分析，MiniMax `minimax-m3` 教学/降级，腾讯混元 Embedding 1024 维 | accepted | 账号权限、供应商模型版本或评测结果变化 |
@@ -1569,8 +1586,16 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-006 | 2026-08-15 | `main` | `pushed` | `feat: generate interventions and schedule D+1 retests` | 新增确定性最小干预工具契约与 Worker 生成路径、`intervention_active` 状态、今日任务查询、任务完成接口、`app.tasks` 与迁移；完成干预后原子创建 D+1 复测并同步四份主文档 | 27 条快速测试、23 条真实 PostgreSQL/API/Worker 集成测试及 TypeScript 严格类型检查通过；暂存范围与私有材料隔离已审计，推送后已核对本地 `main` 与 `origin/main` 一致 |
 | PUSH-007 | 2026-08-15 | `main` | `pushed` | `feat: activate due retests with demo clock` | 新增生产 `retest.due` 延迟 Job 与 `SystemClock` Worker、事务内入队、受开关保护且按 Case 隔离的版本化 Demo 虚拟时钟、`demo_clock_advanced` 审计、`app.demo_clocks` 与 0004 migration；同步四文档，前端 F0 仅登记为已在隔离 Worktree 验收且尚未合并 | 31 条快速测试、35 条真实 PostgreSQL/API/Worker 集成测试、TypeScript 严格类型检查及 `git diff --check` 通过；暂存范围与私有材料隔离已审计，推送后已核对本地 `main` 与 `origin/main` 一致 |
 | PUSH-008 | 2026-08-15 | `main` | `pushed` | `feat: build student today frontend shell` | 合并 `apps/web` Next.js F0：Stitch V1.1 今日页多状态、固定顶栏/侧栏应用壳、Mock Adapter、共享 contracts 薄 API client、同源代理、路由骨架、双视口截图与视觉/滚动回归；同步四文档为已合并但未接真实 API | 38 条快速测试、35 条真实 PostgreSQL/API/Worker 集成测试、workspace/apps-web 严格类型检查、Next.js production build、1440×900/1366×768 视觉/滚动回归及 `git diff --check` 通过；精确范围审计未纳入私有资产、环境文件或生成缓存；用户明确授权后推送 `origin/main`，并核对本地与远端 SHA 一致 |
+| PUSH-009 | 2026-08-15 | `main` | `pushed` | `feat: evaluate D1 retests and render live today state` | 合并 D1 客观复测 attempts、D7 精确调度、失败事务内重排 Job/异步 Worker 骨架、Today 学生时区/currentTaskId/任务判别联合，以及 F1a/F1b 显式只读 API 模式和合成 Fixture 双视口截图；同步四主文档，保持默认入口为 Mock、D7 与报告为未完成 | 69 条快速测试、41 条真实 PostgreSQL/API/Worker 集成测试、39 条 apps/web 测试、全仓 TypeScript、Next.js production build、API/Mock 双视口视觉与滚动回归、`git diff --check` 和敏感范围审计通过；用户既有授权覆盖本轮最终联检后推送，须在同轮核对本地/远端 SHA 一致 |
 
 ## 27. 变更日志
+
+### v0.3.17 — 2026-08-15
+
+- 冻结并同步 D1 `POST /v1/tasks/{taskId}/attempts`、任务详情、`TodayTasksView.timeZone/currentTaskId`、guided/D1/D7 判别联合及稳定 actionable 排序。
+- 记录 D1 通过时 `evaluatedAt + 144h` 调度 D7、12 小时 due 窗口，以及失败时 `retest_evaluated + replan_required + case.replan Job` 的事务/幂等/并发语义；D7 attempts、报告与重排上限保持未实现。
+- 登记 F1a/F1b 显式只读 API 模式、`cache:"no-store"`、学生时区显示、受控 current 契约错误与合成 Fixture 视觉回归；默认入口仍为 Mock，不含前端 attempts。
+- 测试基线更新为 69 fast、41 integration、39 apps/web，并同步 PROJECT_MASTER v0.1.24、PRD v0.1.16、DESIGN v0.2.14 与 PUSH-009。
 
 ### v0.3.16 — 2026-08-15
 
