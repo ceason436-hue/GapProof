@@ -216,6 +216,59 @@ export type GuidedInterventionTaskView = Static<
 export type D1RetestTaskView = Static<typeof D1RetestTaskViewSchema>;
 export type D7RetestTaskView = Static<typeof D7RetestTaskViewSchema>;
 
+export const TodayActivityDaySchema = Type.Object({
+  localDate: Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" }),
+  completedTaskCount: Type.Integer({ minimum: 0 }),
+}, { additionalProperties: false });
+
+export const TodayWeeklyGoalSchema = Type.Object({
+  targetDays: Type.Integer({ minimum: 1, maximum: 7 }),
+  completedDays: Type.Integer({ minimum: 0, maximum: 7 }),
+}, { additionalProperties: false });
+
+export const TodayRecentProgressKindSchema = Type.Union([
+  Type.Literal("recognition_confirmed"),
+  Type.Literal("diagnosis_checked"),
+  Type.Literal("practice_completed"),
+  Type.Literal("d1_passed"),
+  Type.Literal("d1_needs_followup"),
+  Type.Literal("plan_adjusted"),
+]);
+
+export const TodayRecentProgressSchema = Type.Object({
+  eventId: Type.String({ format: "uuid" }),
+  caseId: Type.String({ format: "uuid" }),
+  kind: TodayRecentProgressKindSchema,
+  occurredAt: Type.String({ format: "date-time" }),
+}, { additionalProperties: false });
+
+export const TodayNextCheckSchema = Type.Object({
+  taskId: Type.String({ format: "uuid" }),
+  taskType: Type.Union([
+    Type.Literal("d1_retest"),
+    Type.Literal("d7_retest"),
+  ]),
+  title: Type.String({ minLength: 1 }),
+  scheduledFor: Type.String({ format: "date-time" }),
+  dueAt: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
+  estimatedMinutes: Type.Integer({ minimum: 1 }),
+}, { additionalProperties: false });
+
+export const TodayOverviewSchema = Type.Object({
+  /** Seven consecutive local calendar days ending on the server-authoritative today. */
+  activityDays: Type.Array(TodayActivityDaySchema, {
+    minItems: 7,
+    maxItems: 7,
+  }),
+  /** Null until a real plan or student preference stores an explicit goal. */
+  weeklyGoal: Type.Union([TodayWeeklyGoalSchema, Type.Null()]),
+  pendingConfirmationCount: Type.Integer({ minimum: 0 }),
+  recentProgress: Type.Array(TodayRecentProgressSchema, { maxItems: 2 }),
+  nextCheck: Type.Union([TodayNextCheckSchema, Type.Null()]),
+}, { additionalProperties: false });
+
+export type TodayOverview = Static<typeof TodayOverviewSchema>;
+
 export const TodayTasksViewSchema = Type.Object({
   studentId: Type.String({ format: "uuid" }),
   /** Valid IANA time-zone identifier sourced from the student record. */
@@ -225,6 +278,8 @@ export const TodayTasksViewSchema = Type.Object({
     Type.Null(),
   ]),
   tasks: Type.Array(LearningTaskViewSchema),
+  /** Optional only during the contract-first rollout; the API implementation must populate it. */
+  overview: Type.Optional(TodayOverviewSchema),
 });
 
 export type TodayTasksView = Static<typeof TodayTasksViewSchema>;
