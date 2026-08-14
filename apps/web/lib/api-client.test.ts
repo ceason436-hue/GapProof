@@ -1,6 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiClientError, apiGet, apiPost } from "./api-client";
+import { ApiClientError, apiGet, apiPost, apiPut } from "./api-client";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -32,5 +32,28 @@ describe("api client", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[0]?.[1]?.headers["Idempotency-Key"]).toBe("same-key");
     expect(fetchMock.mock.calls[1]?.[1]?.headers["Idempotency-Key"]).toBe("same-key");
+  });
+
+  it("retries a raw PUT once with the same token and bytes", async () => {
+    const body = new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" });
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new TypeError("network"))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        data: { uploaded: true }, requestId: "r", traceId: "t",
+      }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await apiPut(
+      "/api/v1/source-assets/0198c111-1111-7000-8000-000000000002/content",
+      Type.Object({ uploaded: Type.Boolean() }),
+      body,
+      { Authorization: "Bearer short-lived-token", "Content-Type": "image/png" },
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toBe(body);
+    expect(fetchMock.mock.calls[1]?.[1]?.body).toBe(body);
+    expect(fetchMock.mock.calls[0]?.[1]?.headers.Authorization).toBe("Bearer short-lived-token");
+    expect(fetchMock.mock.calls[1]?.[1]?.headers["Content-Type"]).toBe("image/png");
   });
 });

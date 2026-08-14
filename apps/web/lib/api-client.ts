@@ -10,7 +10,15 @@ export class ApiClientError extends Error {
   }
 }
 
-type RequestOptions = { signal?: AbortSignal; method?: "GET" | "POST"; body?: unknown; idempotencyKey?: string; cache?: "no-store" };
+type RequestOptions = {
+  signal?: AbortSignal;
+  method?: "GET" | "POST" | "PUT";
+  body?: unknown;
+  rawBody?: BodyInit;
+  headers?: Record<string, string>;
+  idempotencyKey?: string;
+  cache?: "no-store";
+};
 
 const wait = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve, reject) => {
   const timer = setTimeout(resolve, ms);
@@ -34,11 +42,16 @@ export async function apiRequestUrl<S extends TSchema>(
         ...(options.signal ? { signal: options.signal } : {}),
         ...(options.cache ? { cache: options.cache } : {}),
         headers: {
+          ...(options.headers ?? {}),
           Accept: "application/json",
           ...(options.body === undefined ? {} : { "Content-Type": "application/json" }),
           ...(options.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}),
         },
-        ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+        ...(options.rawBody !== undefined
+          ? { body: options.rawBody }
+          : options.body === undefined
+            ? {}
+            : { body: JSON.stringify(options.body) }),
       });
       const payload: unknown = await response.json();
       if (response.ok) {
@@ -52,6 +65,7 @@ export async function apiRequestUrl<S extends TSchema>(
     } catch (error) {
       if (options.signal?.aborted) throw error;
       if (error instanceof ApiClientError) throw error;
+      if (method !== "GET" && !(error instanceof TypeError)) throw error;
       if (attempt === maxAttempts - 1) throw error;
     }
     await wait(method === "GET" ? 250 * (attempt + 1) : 500, options.signal);
@@ -77,3 +91,16 @@ export const apiPost = <S extends TSchema>(
   idempotencyKey: string,
   signal?: AbortSignal,
 ) => apiRequest(path, schema, { method: "POST", body, idempotencyKey, ...(signal ? { signal } : {}) });
+
+export const apiPut = <S extends TSchema>(
+  path: `/api/v1/${string}`,
+  schema: S,
+  body: BodyInit,
+  headers: Record<string, string>,
+  signal?: AbortSignal,
+) => apiRequest(path, schema, {
+  method: "PUT",
+  rawBody: body,
+  headers,
+  ...(signal ? { signal } : {}),
+});
