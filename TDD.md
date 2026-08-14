@@ -2,15 +2,15 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.20"
+version: "0.3.21"
 status: "DRAFT_FOR_IMPLEMENTATION"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.27"
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.19"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.28"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.20"
 ---
 
 # 知隙 GapProof 技术设计文档（TDD）
@@ -403,7 +403,7 @@ Tailwind CSS 可随 Next.js 默认方案使用；组件层推荐 Radix Primitive
 - “重点任务卡” CTA 和侧栏固定“开始学习”必须从同一 `current_task_id` 读取，并导航至同一路由/同一任务状态；不能在前端分别创建任务、写入完成状态或绕开 API。
 - 本周学习足迹、待确认、最近进展、稍后继续和下次检查均为服务端任务/计划状态的只读投影；无数据、加载、失败和演示数据时必须使用 7.3 的状态 UX，不得伪造已完成或已掌握。
 - 当前首页不依赖显式全局搜索或“新报告”提醒；后续增加紧凑搜索时，必须有键盘焦点、可访问名称和独立的空/失败状态。
-- F0 Mock、F1b 显式只读 API 与 F1c ready D1 客户端作答均已合并 `main` 并通过对应门禁。顶部栏、Logo/品牌位与侧栏固定，仅 `.content` 内容区滚动。默认入口仍为 Mock；D7 与无真实投影模块继续只读/不可用。
+- F0 Mock、F1b 只读 API、F1c ready D1 客户端作答与真实 overview 均已合并 `main` 并通过对应门禁。顶部栏、Logo/品牌位与侧栏固定，仅 `.content` 内容区滚动。无参数入口默认使用 API，只有显式 `?source=mock` 使用合成页面；D7 继续只读。
 
 ### 7.6 前端—API 集成执行规范 V1
 
@@ -458,7 +458,7 @@ D1 客观复测 attempts 已冻结为：
 - 首次成功响应按幂等键冻结；相同 key/body 的顺序或并发重放返回同一响应，不重复事件、任务或 Job。同 key 异 Body 返回 `IDEMPOTENCY_KEY_REUSED`；旧版本返回 `VERSION_CONFLICT`；Schema、输入、任务状态和资源错误分别使用 `SCHEMA_INVALID`、`INVALID_INPUT`、`INVALID_TASK_STATE`、`RESOURCE_NOT_FOUND`。前端只在网络结果未知或 `retryable=true` 时用同 key/body 重试一次；版本冲突先 GET Case，禁止自动重交。
 - D7 到期激活已复用 `retest.due`，但 `POST .../attempts` 当前拒绝 D7；D7 评分、报告触发、持久 mastery、自动重排上限与上限后的产品状态仍未冻结/实现。
 
-F1b Server Component 在服务端使用私有 `GAPPROOF_API_ORIGIN` 组成绝对 URL 并设置 `cache:"no-store"`；浏览器端仍只允许同源 `/api/v1/**`。正式只读模式通过显式 `?source=api` 启用，默认入口仍为 Mock；API 空列表、缺失 current 引用或无效学生时区不得回退 Mock。
+F1b Server Component 在服务端使用私有 `GAPPROOF_API_ORIGIN` 组成绝对 URL 并设置 `cache:"no-store"`；浏览器端仍只允许同源 `/api/v1/**`。无参数与 `?source=api` 均进入正式 API 模式，只有 `?source=mock` 可启用合成页面；API 空列表、缺失 current/overview、无效学生时区或配置/网络错误不得回退 Mock。
 
 F1c 仅为服务端 `currentTaskId` 指向的 ready D1 增加客户端作答：提交前 GET Case 获取权威 `stateVersion`，请求/响应直接消费共享 `SubmitD1RetestAttemptRequestSchema` / `D1RetestAttemptViewSchema`。一次已确认用户意图生成一个浏览器 UUIDv7 幂等键；`apiPost` 对网络结果未知或显式可重试错误只用同 key/body 重试一次。`VERSION_CONFLICT` 只刷新最新 Case 并要求再次确认，不自动重交；两次网络结果仍未知时锁定选择和提交，避免第三次 POST 或新幂等键。受控 HTTP 浏览器 Fixture 已用真实页面点击覆盖成功、冲突与网络未知三条路径；D7 仍只读，该 Fixture 不等于默认 API 入口或完整业务端到端闭环。
 
@@ -1200,10 +1200,11 @@ Serverless 很适合短 API 和自动扩容，但 OCR、多轮模型、报告、
 - 新增 `Clock/SystemClock/FixedClock`、`RetestDueJobData { caseId, taskId }`、`app.demo_clocks`、`demo_clock_advanced` 与迁移 `packages/db/drizzle/0004_goofy_vindicator.sql`；虚拟时钟按 Case 隔离、带版本并受环境开关保护。
 - 已实现任务详情、Today `timeZone/currentTaskId/overview` 与 guided/D1/D7 判别联合；`currentTaskId` 仅选择 ready D1/guided，overview 为真实只读投影，D7 在 attempts 未实现前保持只读。
 - 已实现 D1 `POST /v1/tasks/{taskId}/attempts`：私有 `exact-choice-v1` 评分、`retest_evaluated(kind=d1)`、D7 144h + 12h 调度、失败事务内 `case.replan` Job、Worker 异步合成干预骨架，以及迁移 `0005_flawless_omega_flight.sql`。幂等重放、并发去重、乐观锁、事务回滚与公开响应脱敏均有测试。
-- F0 Mock、F1b 显式只读 API 与 F1c ready D1 客户端作答已完成对应技术门禁并合并 `main`；F1c 消费共享 contracts、权威 Case 版本和 UUIDv7 幂等意图，受控 HTTP 浏览器 Fixture 已验证同源 POST、成功脱敏回显、冲突重新确认和网络未知锁定。
-- 当前证据为 78 条快速测试通过、41 条真实 PostgreSQL/API/Worker 集成测试通过、48 条 apps/web 测试通过、D1 浏览器 Fixture、TypeScript 严格类型检查、Next.js production build、API 视觉/滚动回归通过。
+- 已实现 `app.source_assets`、冻结 `asset_type/asset_processing_status` 与迁移 `0006_source_assets.sql`：数据库只保存对象键、hash、MIME、大小、所有权/保留期和处理状态；真实文件字节、OCR 文本与答案不入该表。真实上传 API、StorageAdapter 和对象存储仍未实现。
+- F0 Mock、F1b 只读 API、F1c ready D1 客户端作答与真实 overview 已完成对应技术门禁并合并 `main`；无参数入口默认使用 API，Mock 仅显式启用。F1c 消费共享 contracts、权威 Case 版本和 UUIDv7 幂等意图，受控 HTTP 浏览器 Fixture 已验证同源 POST、成功脱敏回显、冲突重新确认和网络未知锁定。
+- 当前证据为 85 条快速测试通过、44 条真实 PostgreSQL/API/Worker 集成测试通过、56 条 apps/web 测试通过、migration drift、Mock/API 双视口、D1 浏览器 Fixture、TypeScript 严格类型检查和 Next.js production build 通过。
 
-该快照不等于 Phase A 完成：默认前端入口仍为 Mock；真实上传/对象存储、真实 AI 干预、真实题库、D7 作答评分、可执行的重排上限和差异化真实重排内容、通知、报告、真实 OCR/模型 Provider 和完整端到端 Playwright Demo 仍未实现。
+该快照不等于 Phase A 完成：默认 Today 入口虽已使用 API，但真实上传/对象存储、真实 AI 干预、真实题库、D7 作答评分、可执行的重排上限和差异化真实重排内容、通知、报告、真实 OCR/模型 Provider 和完整端到端 Playwright Demo 仍未实现。
 
 ### 21.1 Phase A：Thin Slice（先证明闭环）
 
@@ -1528,7 +1529,7 @@ MVP 工具 Schema 最小字段：
 | TECH-022 | MVP Agent 固定为六节点 LangGraph.js 图 | accepted | 业务闭环增加新节点时更新图版本和 Golden Cases |
 | TECH-023 | 所有工具先完成接口、Schema、Mock 和错误处理；verify_item/schedule_retest 做 MVP 最小实现 | accepted | 工具边界或真实 Provider 能力发生变化 |
 | TECH-024 | escalate_human 先创建待处理记录；analyze_speech/score_writing 暂缓真实能力 | accepted | 真实人工流程、语音或写作试点启动 |
-| TECH-025 | UUIDv7 + PostgreSQL 16+；核心表字段/索引/枚举/删除策略按 TDD v0.3.20 | accepted | 数据规模、托管扩展或合规要求变化 |
+| TECH-025 | UUIDv7 + PostgreSQL 16+；核心表字段/索引/枚举/删除策略按 TDD v0.3.21 | accepted | 数据规模、托管扩展或合规要求变化 |
 | TECH-026 | 采用 TDD 详细 API 路由作为唯一正式接口 | accepted | API 版本升级或新客户端边界产生 |
 | TECH-027 | 杭州阿里云单区域联网 Docker Compose；真实 Provider 演示，Mock 仅测试/故障注入 | accepted | 比赛网络、并发、合规或可用性要求变化 |
 | TECH-028 | DeepSeek `deepseek-v4-flash` 主分析，MiniMax `minimax-m3` 教学/降级，腾讯混元 Embedding 1024 维 | accepted | 账号权限、供应商模型版本或评测结果变化 |
@@ -1596,8 +1597,15 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-010 | 2026-08-15 | `main` | `pushed` | `feat: submit D1 retests safely from Today` | 合并 F1c ready D1 客户端作答、权威 Case `stateVersion`、共享 attempts contracts、UUIDv7 幂等意图、同 key/body 单次未知结果重试、冲突刷新后重新确认与 NETWORK_UNKNOWN 锁定；同步四主文档与选择性任务迁移治理，保持默认入口为 Mock、D7/首页投影/报告/浏览器 POST Fixture未完成 | 78 条快速测试、41 条真实 PostgreSQL/API/Worker 集成测试、48 条 apps/web 测试、全仓 TypeScript、Next.js production build、API 视觉/滚动回归、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；须在同轮推送并核对本地/远端 SHA 一致 |
 | PUSH-011 | 2026-08-15 | `main` | `pushed` | `test: prove D1 browser submission safety` | 合并受控 HTTP D1 浏览器 Fixture，覆盖真实点击同源 POST、UUIDv7、权威请求体、成功脱敏回显、冲突重新确认与网络未知锁定；同步四主文档、长期任务模型默认和“项目本身初赛验收”边界，保持默认入口为 Mock、D7/首页投影/报告/完整业务闭环未完成 | 78 条快速测试、41 条真实 PostgreSQL/API/Worker 集成测试、48 条 apps/web 测试、D1 浏览器 Fixture、全仓 TypeScript、Next.js production build、API 视觉/滚动回归、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；须在同轮推送并核对本地/远端 SHA 一致 |
 | PUSH-012 | 2026-08-15 | `main` | `pushed` | `feat: project factual Today overview` | 合并 Today overview 共享 contracts、PostgreSQL 只读投影、API 必返字段和显式 API 页面；展示连续 7 个学生本地日、`weeklyGoal:null`、真实待确认数、最多两条脱敏进展与最早 scheduled D1/D7 检查；缺失 overview 不回退 Mock，默认入口仍为 Mock，D7/报告/完整闭环仍未完成 | 82 条快速测试、42 条真实 PostgreSQL/API/Worker 集成测试、53 条 apps/web 测试、D1 浏览器 Fixture、API 双视口视觉回归、全仓 TypeScript、Next.js production build、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；须在同轮推送并核对本地/远端 SHA 一致 |
+| PUSH-013 | 2026-08-15 | `main` | `pushed` | `feat: default Today to API and persist source asset metadata` | Today 无参数入口默认进入真实 API、Mock 仅由 `?source=mock` 显式启用；新增 `app.source_assets`、冻结枚举与 0006 migration，只存对象元数据/所有权/保留期/处理状态，不含文件字节、OCR 文本或答案；真实上传/StorageAdapter/D7/报告仍未完成 | 85 条快速测试、44 条真实 PostgreSQL/API/Worker 集成测试、56 条 apps/web 测试、Drizzle migration drift、Mock/API 双视口、D1 浏览器 Fixture、全仓 TypeScript、Next.js production build、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；须在同轮推送并核对本地/远端 SHA 一致 |
 
 ## 27. 变更日志
+
+### v0.3.21 — 2026-08-15
+
+- Today 无参数入口默认使用正式 API，显式 `?source=mock` 才进入合成页面；配置/API/overview 错误不回退 Mock，D7 继续只读。
+- 实现 `app.source_assets`、冻结枚举、约束/索引与 0006 migration；当前仅为真实上传建立元数据基础，不含上传 API、对象存储、OCR 文本或答案。
+- 同步 PROJECT_MASTER v0.1.28、PRD v0.1.20、DESIGN v0.2.18 与 PUSH-013；门禁为 85 fast、44 integration、56 apps/web、migration drift、Mock/API 视觉、D1 浏览器 Fixture、全仓 TypeScript 与 Next build。
 
 ### v0.3.20 — 2026-08-15
 

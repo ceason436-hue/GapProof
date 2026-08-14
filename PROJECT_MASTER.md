@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.27"
+version: "0.1.28"
 status: "ACTIVE"
-current_stage: "项目本身初赛验收冲刺；学生端今日页已具备 ready D1 浏览器安全交互与真实概览投影，默认入口仍为 Mock；D7 与报告未完成"
+current_stage: "项目本身初赛验收冲刺；学生端今日页默认入口已使用真实 API，合成 Mock 仅显式启用；source_assets 数据基础已建立，真实上传、D7 与报告未完成"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -143,7 +143,7 @@ next_action:
 
 `[FACT]` GOAI 无界应用赛道参赛手册列出的初赛截止日期为 2026-08-16；具体当天截止时刻、入口、文件大小及后续通知仍须在官网、提交系统或官方群再次核对。
 
-`[DECISION]` 当前处于：**项目本身初赛验收冲刺；学生端“今日”页已在显式 `?source=api` 模式接入 ready D1 客户端作答与真实概览投影，并用受控 HTTP 浏览器 Fixture 证明真实点击、同源 POST、服务端权威 Case `stateVersion`、共享 attempts contracts、UUIDv7 幂等键、同 key/body 单次未知结果重试、冲突刷新后重新确认与网络未知锁定。默认入口仍为 Mock；D7 作答、报告及上传到修复证明的完整业务闭环仍未完成**。
+`[DECISION]` 当前处于：**项目本身初赛验收冲刺；学生端“今日”页默认入口已接入真实 API 的 ready D1 客户端作答与真实概览投影，并用受控 HTTP 浏览器 Fixture 证明真实点击、同源 POST、服务端权威 Case `stateVersion`、共享 attempts contracts、UUIDv7 幂等键、同 key/body 单次未知结果重试、冲突刷新后重新确认与网络未知锁定。合成 Mock 仅由显式 `?source=mock` 启用；D7 作答、真实上传、报告及上传到修复证明的完整业务闭环仍未完成**。
 
 ### 1.2 已完成
 
@@ -159,14 +159,14 @@ next_action:
 - `[DECISION]` 已确定比赛阶段优先使用原创、公开许可或合成数据，不等待真实学生试卷渠道。
 - `[DECISION]` 已确定后台多 Agent、前台单一 AI 学习教练的产品形态。
 - `[DECISION]` 已确定苏格拉底脚手架、学习证据图谱和延迟迁移验证为核心设计。
-- `[RESULT]` 已在 Stitch 中选定学生端“今日”页桌面高保真视觉基线；F0、F1b 与 F1c 已通过相应构建和自动化门禁。F1c 的受控 HTTP 浏览器 Fixture 已覆盖 ready D1 成功、`VERSION_CONFLICT` 与 `NETWORK_UNKNOWN` 三条真实页面交互路径；默认入口仍是 Mock，因此不代表业务主闭环已接通。
+- `[RESULT]` 已在 Stitch 中选定学生端“今日”页桌面高保真视觉基线；F0、F1b 与 F1c 已通过相应构建和自动化门禁。F1c 的受控 HTTP 浏览器 Fixture 已覆盖 ready D1 成功、`VERSION_CONFLICT` 与 `NETWORK_UNKNOWN` 三条真实页面交互路径；默认入口现为 API，Mock 只在显式参数下使用，但这仍不代表业务主闭环已接通。
 - `[DECISION]` 当前学生首页的核心视觉色为蓝 `#0036FF` 与青柠绿 `#B5F800`；学生端、家长端和后续页面的详细规范以 `DESIGN.md v0.2.17` 为准。
 - `[FACT]` 用户已将目标教材 ISBN 确认为 `978-7-5720-3630-9`，与当前 161 页教材 PDF 封底条码一致；版权页照片无法提供，因此版次、印次保持未知，不再作为 MVP 开工阻塞项。
 - `[FACT]` 已收到线上购买的教研与试题资料 191 个文件：184 个 DOCX、4 个 PDF 和 3 个 MP3，覆盖学生/考试版、参考答案、教师/解析版、知识清单、答题卡和听力等类型；这些内容资产不是真实学生作答数据。
 - `[DECISION]` 用户确认教材与试题材料可供本项目使用和公开展示，并确认 `logo.png` 可作为 MVP Logo V1；权利台账记录为 `user_asserted_permitted`，购买页/许可条款凭证待归档；教材版权页不可取得。
 - `[DECISION]` 教材和试题的完整 Markdown 转换结果仅保存在 `.gitignore` 覆盖的本地私有目录，不进入 Git；公开仓库只保存来源元数据、哈希、处理程序及项目原创/合成内容。
 - `[DECISION]` 答题卡与听力音频不进入 MVP 题库、RAG 或视觉 QA；原文件继续私有留存，不做永久删除。视觉核验只覆盖实际入选 Demo/题库的文件，且入选文件逐份核验，其余材料不要求逐份目视。
-- `[RESULT]` 已初始化 Bun workspace 的 `web`、`contracts`、`domain`、`db`、`jobs` 与 `testkit`；首个原创合成 Case 已保存为可版本化 Fixture。当前组合基线为 82 条快速测试通过、42 条真实 PostgreSQL/API/Worker 集成测试通过、53 条 apps/web 测试通过、TypeScript 严格类型检查和 Next.js production build 通过。
+- `[RESULT]` 已初始化 Bun workspace 的 `web`、`contracts`、`domain`、`db`、`jobs` 与 `testkit`；首个原创合成 Case 已保存为可版本化 Fixture。当前组合基线为 85 条快速测试通过、44 条真实 PostgreSQL/API/Worker 集成测试通过、56 条 apps/web 测试通过、TypeScript 严格类型检查和 Next.js production build 通过。
 - `[RESULT]` 已实现 `parse_paper` 的 TypeBox/JSON Schema、统一 `ToolResult` 契约与确定性 fake adapter；成功、低置信、超时、权限失败四类 Fixture 已通过 7 条契约测试。尚未接入真实 OCR Provider。
 - `[RESULT]` 已实现 Case 创建/读取、异步 `run-next`、识别确认和 `GET /v1/cases/{caseId}/hypotheses`。Worker 可从 `ready_for_diagnosis` 生成两条有证据引用的竞争性错因和一条确认小题，以 `hypotheses_generated` 将 Case 推进到 `probe_required`；查询响应不暴露答案键。
 - `[RESULT]` 已实现 `POST /v1/cases/{caseId}/attempts`：服务端从内部评分规则执行 `exact_choice_v1`，以 `probe_evaluated` 原子推进至 `intervention_ready`；答错时映射受支持的竞争性错因，答对时不虚构已确认错因。接口具备 Schema、幂等重放、并发去重、版本冲突和非法状态/选项保护。
@@ -177,6 +177,7 @@ next_action:
 - `[RESULT]` 已实现 `GET /v1/tasks/{taskId}` 与 `POST /v1/tasks/{taskId}/attempts` 的 D1 客观复测最小切片。服务端用私有答案执行 `exact-choice-v1`：通过时原子完成 D1、追加 `retest_evaluated { kind:"d1", passed:true }`，并按 `evaluatedAt + 144h` 创建 D7、再给出 12 小时窗口；失败时原子进入 `replan_required` 并入队 `case.replan`，由 Worker 异步生成合成干预骨架。公开响应不含答案键，幂等、并发与乐观锁已有测试覆盖。
 - `[RESULT]` Today contracts 已扩展为服务端学生 `timeZone`、`currentTaskId: uuid | null` 与 guided/D1/D7 判别联合；只有服务端判定的 ready D1 或 guided 任务可成为当前任务。F1c 对 ready D1 使用共享 attempts contracts、权威 Case 版本和 UUIDv7 幂等意图提交；D7 在 attempts 未实现前保持只读。
 - `[RESULT]` Today API 现始终返回真实只读 `overview`：学生时区下连续 7 日完成数、明确目标或 `null`、待确认数、最多两条脱敏进展与最早 scheduled D1/D7 检查。显式 API 页面严格消费该投影，缺失时受控报错且不回退 Mock；当前数据库没有权威周目标，因此 API 返回 `weeklyGoal:null`，不得从任务或视觉稿推断。
+- `[RESULT]` PostgreSQL 已新增 `app.source_assets` 与 0006 migration：只保存对象键、SHA-256、MIME、大小、所有权/保留期及处理状态，不保存文件字节、OCR 文本或答案；本轮仅建立受测数据基础，真实上传 API、StorageAdapter 与对象存储尚未实现。
 
 ### 1.3 尚未完成或尚未验证
 
@@ -186,7 +187,7 @@ next_action:
 - `[PLANNED]` 尚未制作比赛用原创模拟试卷、合成学生轨迹和独立金标集。
 - `[PLANNED]` 尚未确认至少一位英语教育背景人员能否短时抽检核心金标内容。
 - `[PROTOTYPE]` 已建立最小后端 Thin Slice，并完成确定性干预生成、今日任务查询、干预提交、D+1 调度/到期/客观评分及失败后的异步重排骨架；尚未形成从上传到报告的完整端到端 Demo。真实 AI 干预、真实题库、D7 作答评分、可执行的重排上限、真实个性化重排内容、通知和报告仍未实现。
-- `[PROTOTYPE]` 学生端“今日”页 F0 Mock、F1b 只读 API、F1c ready D1 客户端作答及真实概览投影已完成对应技术门禁；受控 HTTP 浏览器 Fixture 已证明成功、冲突和网络未知三条交互边界。真实模式仍仅通过显式 `?source=api` 启用；默认入口切换和业务主闭环仍未完成，其余学生 P0 页面、家长端页面和评委最小页仍未完成。
+- `[PROTOTYPE]` 学生端“今日”页 F0 Mock、F1b 只读 API、F1c ready D1 客户端作答及真实概览投影已完成对应技术门禁；受控 HTTP 浏览器 Fixture 已证明成功、冲突和网络未知三条交互边界。默认入口现为 API，只有显式 `?source=mock` 使用合成页面；业务主闭环仍未完成，其余学生 P0 页面、家长端页面和评委最小页仍未完成。
 - `[PLANNED]` 尚未完成正式 500 字简介、初赛 PPT、视频、README、数据卡、依赖清单和合规一页纸。
 - `[PLANNED]` 尚未产生可报告的工程评测结果或真实学生学习效果。
 
@@ -1607,7 +1608,7 @@ Demo 至少现场演一个真实失败分支，视频中再展示两个。
 
 ### 18.3 已确定的轻量技术栈
 
-详细架构、选型对比和系统边界以 `TDD.md v0.3.20` 为准。本节只保留主文档级决策：
+详细架构、选型对比和系统边界以 `TDD.md v0.3.21` 为准。本节只保留主文档级决策：
 
 - 语言：TypeScript 单栈；Bun 管理 workspace 和依赖，Node.js 24 LTS 作为生产运行时。
 - 前端：Next.js App Router + React，桌面与平板完整支持，手机保留基础响应式访问和内容适配的 Web。
@@ -1625,7 +1626,7 @@ Demo 至少现场演一个真实失败分支，视频中再展示两个。
 - OCR：阿里云读光教育试卷识别为主，腾讯云高精度 OCR 为通用/备用；统一 `OcrProvider`。
 - 知识增强：PostgreSQL 全文 + pgvector；LangChain.js 仅作 Retriever 辅助层，KnowledgeService 和固定数据库工具由项目自建。
 - MVP Agent：固定六节点 `LoadCaseContext → RetrieveKnowledge → GenerateHypotheses → SelectProbe → EvaluateEvidence → CreateDecisionProposal`。
-- 数据基线：UUIDv7、PostgreSQL 16+、核心表/索引/枚举/删除策略以 `TDD.md v0.3.20` 为准。
+- 数据基线：UUIDv7、PostgreSQL 16+、核心表/索引/枚举/删除策略以 `TDD.md v0.3.21` 为准。
 - 部署：杭州阿里云单区域联网 Docker Compose；真实 Provider 用于演示，Mock 仅用于测试和故障注入。
 
 当前规模不需要 Kubernetes、Kafka、复杂分布式多 Agent 平台或大规模微调。
@@ -1821,7 +1822,7 @@ mastery:
 
 ### 技术类
 
-6. `TDD.md`：技术路线、系统边界、架构选型和工程门禁（v0.3.20，当前版本）。
+6. `TDD.md`：技术路线、系统边界、架构选型和工程门禁（v0.3.21，当前版本）。
 7. `Agent-State-Machine-Spec.md`
 8. `Tool-Contract-Spec.md`
 9. `OpenAPI.yaml`
@@ -2023,11 +2024,11 @@ review_date:
 | DEC-028 | MVP Agent 固定为六节点 LangGraph.js 图 | accepted | 新增节点必须更新图版本、Schema 和 Golden Cases |
 | DEC-029 | 所有工具先完成接口、Schema、Mock 和错误处理；verify_item/schedule_retest 做 MVP 最小实现 | accepted | 工具边界或 Provider 能力变化 |
 | DEC-030 | escalate_human 先创建待处理记录；analyze_speech/score_writing 暂缓真实能力 | accepted | 真实人工、语音或写作试点启动 |
-| DEC-031 | UUIDv7 + PostgreSQL 16+，完整表结构和删除策略以 TDD v0.3.20 为准 | accepted | 数据规模、扩展支持或合规要求变化 |
+| DEC-031 | UUIDv7 + PostgreSQL 16+，完整表结构和删除策略以 TDD v0.3.21 为准 | accepted | 数据规模、扩展支持或合规要求变化 |
 | DEC-032 | TDD 详细 API 路由为唯一正式接口 | accepted | API 版本升级或新客户端边界产生 |
 | DEC-033 | 杭州阿里云单区域联网 Docker Compose，真实 Provider 演示，Mock 仅测试/故障注入 | accepted | 比赛网络、并发、合规或可用性要求变化 |
 | DEC-034 | DeepSeek `deepseek-v4-flash`、MiniMax `minimax-m3`、腾讯混元 Embedding 作为当前模型配置 | accepted | 账号权限、供应商模型版本或评测结果变化 |
-| DEC-035 | 学生端“今日”页桌面视觉基线已选定；使用 `#0036FF` 导航/进度与 `#B5F800` 行动/积极变化，完整规范以 DESIGN v0.2.17 为准 | accepted | 真实前端实现、可用性测试或品牌资产定稿产生反证 |
+| DEC-035 | 学生端“今日”页桌面视觉基线已选定；使用 `#0036FF` 导航/进度与 `#B5F800` 行动/积极变化，完整规范以 DESIGN v0.2.18 为准 | accepted | 真实前端实现、可用性测试或品牌资产定稿产生反证 |
 | DEC-036 | 新用户今日页先完成第一次检查，不显示虚构的足迹、进展或下次检查；首次任务生成后切换常规今日页 | accepted | onboarding 实测或产品范围变化 |
 | DEC-037 | 目标教材 ISBN 为 `978-7-5720-3630-9`；配套练习 `978-7-5720-3519-7` 不纳入 MVP | accepted | 版权页或出版社正式材料产生冲突 |
 | DEC-038 | 购买教材/试题及完整转换文本保持本地私有并排除 Git；仓库只保存元数据、处理器和项目原创/合成内容 | accepted | 取得可归档的明确再分发许可且完成权利复核 |
@@ -2051,7 +2052,7 @@ review_date:
 | 初赛 PPT | `[PLANNED]` | 8–10 页覆盖评分项 | 原型/图表 |
 | 原创模拟试卷 | `[PLANNED]` | 来源自有、已知根因、许可清楚 | 技能示例 |
 | 合成 Case | `[PROTOTYPE]` | 已完成 1 个原创合成 Case 及低置信、复测失败重排、D+7 成功分支；仍需扩充同题同错不同根因与回归集 | 数据 Schema/教材映射 |
-| 学生“今日”页视觉基线 | `[PROTOTYPE]` | 已选定 Stitch 桌面稿；F0/F1b、F1c ready D1 客户端作答、受控 HTTP 浏览器 Fixture 与真实概览投影已合并 `main` 并通过技术门禁；默认入口仍为 Mock，完整业务写入闭环未完成 | DESIGN v0.2.17 |
+| 学生“今日”页视觉基线 | `[PROTOTYPE]` | 已选定 Stitch 桌面稿；F0/F1b、F1c ready D1 客户端作答、受控 HTTP 浏览器 Fixture 与真实概览投影已合并 `main` 并通过技术门禁；默认入口为 API，合成 Mock 仅显式启用，完整业务写入闭环未完成 | DESIGN v0.2.18 |
 | 其余学生/家长关键页设计 | `[PLANNED]` | 覆盖主闭环并遵循今日页设计准则 | 视觉基线 |
 | 可点击 Thin Slice | `[PLANNED]` | 上传到修复证明全链路 | 设计/开发 |
 | 数据与合规页 | `[PLANNED]` | 类型、来源、授权、脱敏、删除、边界 | 数据选择 |
@@ -2110,6 +2111,12 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.28 — 2026-08-15
+
+- 学生 Today 无参数入口默认使用真实 API；只有显式 `?source=mock` 才使用合成页面，缺配置/API/overview 保持受控错误且不回退 Mock，D7 仍只读。
+- 新增 `app.source_assets`、冻结枚举与 0006 migration，覆盖对象键唯一、SHA-256/大小约束、所有权外键、处理状态与保留期索引；尚未实现真实上传或对象存储。
+- 门禁为 85 fast、44 integration、56 apps/web，并通过 migration drift、Mock/API 双视口、D1 浏览器 Fixture、全仓 TypeScript 与 Next build；同步 PRD v0.1.20、TDD v0.3.21、DESIGN v0.2.18 与 PUSH-013。
 
 ### v0.1.27 — 2026-08-15
 

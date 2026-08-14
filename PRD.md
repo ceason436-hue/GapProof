@@ -7,10 +7,10 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档状态 | Draft v0.1.19 |
+| 文档状态 | Draft v0.1.20 |
 | 产品名称 | 知隙 GapProof |
 | 文档角色 | 产品需求、业务流程、功能范围与验收标准 |
-| 当前阶段 | 学生端“今日”页已完成显式 API 模式的 ready D1 客户端作答、浏览器安全交互与真实概览投影，默认入口仍为 Mock；D7 与报告未完成 |
+| 当前阶段 | 学生端“今日”页默认入口已使用真实 API，合成 Mock 仅显式启用；source_assets 数据基础已建立，真实上传、D7 与报告未完成 |
 | 产品形态 | Web 应用 |
 | 目标教材 | 上海教育出版社《义务教育教科书（五·四学制）英语 八年级上册》 |
 | 适用版本 | 目标教材以 ISBN、当前 PDF 哈希和内容快照锁定；版权页不可取得，版次、印次和册次保持未知 |
@@ -492,8 +492,8 @@ Demo 界面或旁白必须明确区分：
 - `[PROTOTYPE]` Worker 可从 `intervention_ready` 生成 3 步/8 分钟的确定性最小干预任务并进入 `intervention_active`；学生可通过正式接口读取今日任务并提交完整步骤。提交后系统原子创建 24 小时后的 D+1 复测任务、进入 `d1_scheduled`，但 mastery 仅为 `pending_retest`。
 - `[PROTOTYPE]` D+1 任务通过事务内 `retest.due` 延迟 Job 和生产 Worker 到期激活；Demo 可在受环境开关保护的虚拟时钟接口中按 Case 快进。到期仅把任务从 `scheduled` 改为 `ready`，Case 仍为 `d1_scheduled`、mastery 仍为 `pending_retest`。
 - `[PROTOTYPE]` D+1 ready 任务现可通过共享 `POST /v1/tasks/{taskId}/attempts` 契约提交客观选择并由服务端私有答案确定性评分；通过时创建 D7 调度，失败时事务内入队异步重排。当前题目与重排内容仍为明确标记的合成 Fixture，不是现实题库或真实个性化效果。
-- `[PROTOTYPE]` 学生端“今日”页 F0 Mock、F1b 显式只读 API 与 F1c ready D1 客户端作答已通过对应构建和自动化门禁；F1c 使用共享 attempts contracts、权威 Case 版本、UUIDv7 幂等意图和受控错误状态。受控 HTTP 浏览器 Fixture 已覆盖真实点击成功、`VERSION_CONFLICT` 重新确认与 `NETWORK_UNKNOWN` 锁定三条路径；默认入口仍为 Mock，不能作为主闭环完成证据。
-- `[PLANNED]` 材料真实上传、真实 AI 干预、完整 7 日计划、D+7 作答与评分、可执行的失败重排上限、学生/家长报告及前端主闭环尚未实现。
+- `[PROTOTYPE]` 学生端“今日”页 F0 Mock、F1b 只读 API、F1c ready D1 客户端作答与真实 overview 已通过对应构建和自动化门禁；F1c 使用共享 attempts contracts、权威 Case 版本、UUIDv7 幂等意图和受控错误状态。受控 HTTP 浏览器 Fixture 已覆盖真实点击成功、`VERSION_CONFLICT` 重新确认与 `NETWORK_UNKNOWN` 锁定三条路径；无参数入口现走真实 API，只有显式 `?source=mock` 使用合成页面，但仍不能作为主闭环完成证据。
+- `[PROTOTYPE]` 已建立不含文件字节/OCR 文本/答案的 `source_assets` 数据表、约束与 migration；材料真实上传 API、StorageAdapter/对象存储、真实 AI 干预、完整 7 日计划、D+7 作答与评分、可执行的失败重排上限、学生/家长报告及前端主闭环尚未实现。
 - 因此，以下验收项仍是完整 MVP 的目标，不因后端局部闭环而标记为 `[LIVE]`。
 
 ### 12.1 主流程验收
@@ -525,7 +525,7 @@ Demo 界面或旁白必须明确区分：
 - 学生首页首屏只突出一个当前重点任务；任务卡 CTA 与侧栏固定“开始学习”进入同一任务，不产生重复任务或重复提交。
 - 学生能在首页理解今天做什么、为什么现在做、预计多久，以及下一次检查是什么；用语不得出现“探针”“学习证据”等内部术语。
 - 首页显示 7 天学习足迹、待确认事项、最近进展和下次检查；学习足迹的完成度使用蓝色深浅而非绿色，待确认与最近进展不把“已掌握”表述为绝对结论。
-- 本条为产品体验与设计验收要求；当前 F0/F1b、F1c ready D1 客户端作答、受控浏览器写入证据与真实 overview 已合并 `main`，但默认入口仍为 Mock，完整业务主流程尚未接通，功能完成仍需通过主流程、接口和测试验收。
+- 本条为产品体验与设计验收要求；当前 F0/F1b、F1c ready D1 客户端作答、受控浏览器写入证据与真实 overview 已合并 `main`，无参数入口默认使用 API、Mock 仅显式启用；完整业务主流程尚未接通，功能完成仍需通过主流程、接口和测试验收。
 - 新用户首次进入今日页不得展示虚构的学习天数、进度、最近进展或下次检查；必须引导其进入第一次材料上传/快速检查，并在首次任务生成后切换到常规今日页。
 
 ### 12.4 前端接口接入验收
@@ -648,6 +648,7 @@ PROJECT_MASTER.md
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
+| 0.1.20 | 2026-08-15 | Today 默认入口切换为真实 API、Mock 仅显式启用；新增 source_assets 数据/迁移基础但未实现真实上传，D7/报告/完整闭环仍未完成；同步 PROJECT_MASTER v0.1.28、TDD v0.3.21、DESIGN v0.2.18 与 PUSH-013 |
 | 0.1.19 | 2026-08-15 | 合并 Today overview 的共享契约、真实只读 API 投影与前端消费；空目标/空进展不造数、缺失 overview 不回退 Mock，默认入口仍为 Mock、D7/报告/完整闭环未完成；同步 PROJECT_MASTER v0.1.27、TDD v0.3.20、DESIGN v0.2.17 与 PUSH-012 |
 | 0.1.18 | 2026-08-15 | 登记 F1c 受控 HTTP 浏览器 Fixture 已覆盖成功、版本冲突与网络未知安全路径；默认入口仍为 Mock，D7、首页真实投影、报告和完整业务闭环未完成；同步 PROJECT_MASTER v0.1.26、TDD v0.3.19、DESIGN v0.2.16 与 PUSH-011 |
 | 0.1.17 | 2026-08-15 | 同步 F1c ready D1 客户端作答、权威 Case 版本、共享 attempts contracts、UUIDv7 幂等意图、冲突/网络未知安全状态；默认入口仍为 Mock，D7、首页真实投影、报告和浏览器 POST Fixture未完成；同步 PROJECT_MASTER v0.1.25、TDD v0.3.18、DESIGN v0.2.15 与 PUSH-010 |

@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.17"
+version: "0.2.18"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "学生端今日页已完成显式 API 模式的 ready D1 客户端作答、浏览器安全交互与真实概览投影，默认入口仍为 Mock；D7 与报告页面待推进"
+current_design_stage: "学生端今日页默认入口已使用真实 API，合成 Mock 仅显式启用；D7、真实上传与报告页面待推进"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -62,7 +62,7 @@ upstream_documents:
 
 ### 0.3.1 当前已确认的视觉基线
 
-`[PROTOTYPE]` 已在 Stitch 中完成并选定学生端“今日”桌面高保真视觉基线；F0 Mock、F1b 显式只读 API、F1c ready D1 客户端作答及受控 HTTP 浏览器 Fixture 均已通过对应门禁后合并 `main`。默认入口仍为 Mock，因此不代表业务主闭环已经完成。
+`[PROTOTYPE]` 已在 Stitch 中完成并选定学生端“今日”桌面高保真视觉基线；F0 Mock、F1b 只读 API、F1c ready D1 客户端作答、真实 overview 及受控 HTTP 浏览器 Fixture 均已通过对应门禁后合并 `main`。无参数入口默认使用 API，只有 `?source=mock` 进入合成页面；这仍不代表业务主闭环已经完成。
 
 - 基础框架为连续白色顶部栏 + 左侧导航 + 中部重点任务 + 右侧学习状态；不使用参考图的整页浅雾蓝展示背景。
 - 视觉主色固定为高饱和蓝 `#0036FF` 与青柠绿 `#B5F800`；黑色重点任务卡承载当天唯一主任务。
@@ -86,11 +86,11 @@ upstream_documents:
 
 ### 0.3.2 当前阶段与下一步
 
-**已完成**：学生端“今日”页的桌面视觉结构、颜色角色、主要卡片层级和关键静态内容已确定；F0/F1b、F1c 及真实 Today overview 已完成对应构建和自动化门禁。F1c 只为服务端当前 ready D1 增加安全作答，使用权威 Case 版本、共享 contracts 和 UUIDv7 幂等意图；受控 HTTP 浏览器 Fixture 已覆盖成功、冲突和网络未知三条真实页面交互路径。显式 API 页面现展示服务端 7 日足迹、nullable 周目标、待确认数、脱敏进展与下次检查。
+**已完成**：学生端“今日”页的桌面视觉结构、颜色角色、主要卡片层级和关键静态内容已确定；F0/F1b、F1c 及真实 Today overview 已完成对应构建和自动化门禁。F1c 只为服务端当前 ready D1 增加安全作答，使用权威 Case 版本、共享 contracts 和 UUIDv7 幂等意图；受控 HTTP 浏览器 Fixture 已覆盖成功、冲突和网络未知三条真实页面交互路径。无参数入口现展示服务端 7 日足迹、nullable 周目标、待确认数、脱敏进展与下次检查；合成 Mock 仅显式启用。
 
-**尚未完成**：默认入口从 Mock 切换到正式 API；其他学生 P0 页面、家长端页面、Logo 紧裁/SVG/Favicon 与最终品牌规范、完整交互原型。D7 作答、报告及其页面仍未实现。
+**尚未完成**：真实材料上传/识别确认页面写入；其他学生 P0 页面、家长端页面、Logo 紧裁/SVG/Favicon 与最终品牌规范、完整交互原型。D7 作答、报告及其页面仍未实现。
 
-**下一步**：在保持 D7 只读边界的前提下，独立验收默认入口切换条件并继续后续主闭环页面；任何新字段须先由共享 contracts 与 TDD 冻结，不从视觉稿或 Fixture 反推业务状态。
+**下一步**：在保持 D7 只读边界的前提下，接入真实材料上传的最小页面/API 闭环并继续后续主流程；任何新字段须先由共享 contracts 与 TDD 冻结，不从视觉稿或 Fixture 反推业务状态。
 
 ### 0.4 设计底线
 
@@ -1635,7 +1635,7 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 
 ### 18.0 当前设计基线
 
-- `[PROTOTYPE]` 学生端“今日”页桌面视觉基线已选定，规范见 5.6.1；前端 F0/F1b、F1c ready D1 客户端作答及受控 HTTP 浏览器 Fixture 已完成对应门禁并合并 `main`。F1c 消费服务端学生时区/currentTaskId、共享 attempts contracts 与权威 Case 版本；默认入口仍为 Mock，尚无上传到修复证明的完整端到端页面写入证据。
+- `[PROTOTYPE]` 学生端“今日”页桌面视觉基线已选定，规范见 5.6.1；前端 F0/F1b、F1c ready D1 客户端作答、真实 overview 及受控 HTTP 浏览器 Fixture 已完成对应门禁并合并 `main`。F1c 消费服务端学生时区/currentTaskId、共享 attempts contracts 与权威 Case 版本；无参数入口默认使用 API、Mock 仅显式启用，尚无上传到修复证明的完整端到端页面写入证据。
 - `[PLANNED]` 其余学生 P0 页面、家长端 P0 页面和评委最小演示页仍需在同一视觉系统下完成设计。
 - 任何后续页面必须沿用：连续白色顶部框架、`#0036FF` 的导航/进度角色、`#B5F800` 的行动/积极变化角色、自然学生用语、单一主操作和轻量立体感。
 
@@ -1765,6 +1765,12 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 ---
 
 ## 22. 版本记录
+
+### v0.2.18 — 2026-08-15
+
+- Today 无参数入口默认展示真实 API 页面，只有 `?source=mock` 使用明确标注的合成视觉；缺配置/API/overview 保持受控错误且不回退 Mock。
+- D7 继续只读，Stitch V1.1 深色卡书本越界裁切不变；source_assets 仅为真实上传建立数据基础，上传/识别页面写入仍未完成。
+- Mock/API 1440×900 与 1366×768、D1 浏览器 Fixture 均通过；同步 PROJECT_MASTER v0.1.28、PRD v0.1.20、TDD v0.3.21 与 PUSH-013。
 
 ### v0.2.17 — 2026-08-15
 
