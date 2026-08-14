@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  bigint,
+  char,
   check,
   index,
   integer,
@@ -58,6 +60,23 @@ export const taskStatus = appSchema.enum("task_status", [
   "completed",
 ]);
 
+export const assetType = appSchema.enum("asset_type", [
+  "student_upload",
+  "synthetic_fixture",
+  "managed_content",
+]);
+
+export const assetProcessingStatus = appSchema.enum("asset_processing_status", [
+  "pending_upload",
+  "uploaded",
+  "queued",
+  "processing",
+  "needs_confirmation",
+  "succeeded",
+  "retryable_error",
+  "failed",
+]);
+
 export const students = appSchema.table(
   "students",
   {
@@ -109,6 +128,51 @@ export const cases = appSchema.table(
   (table) => [
     index("cases_student_updated_idx").on(table.studentId, table.updatedAt),
     check("cases_state_version_nonnegative", sql`${table.stateVersion} >= 0`),
+  ],
+);
+
+export const sourceAssets = appSchema.table(
+  "source_assets",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    studentId: uuid("student_id").references(() => students.id),
+    caseId: uuid("case_id").references(() => cases.id),
+    objectKey: text("object_key").notNull(),
+    sha256: char("sha256", { length: 64 }).notNull(),
+    mimeType: text("mime_type").notNull(),
+    byteSize: bigint("byte_size", { mode: "number" }).notNull(),
+    assetType: assetType("asset_type").notNull(),
+    retentionUntil: timestamp("retention_until", { withTimezone: true }),
+    processingStatus: assetProcessingStatus("processing_status")
+      .notNull()
+      .default("pending_upload"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("source_assets_object_key_uidx").on(table.objectKey),
+    index("source_assets_tenant_created_idx").on(
+      table.tenantId,
+      table.createdAt,
+    ),
+    index("source_assets_student_created_idx").on(
+      table.studentId,
+      table.createdAt,
+    ),
+    index("source_assets_case_created_idx").on(table.caseId, table.createdAt),
+    index("source_assets_status_created_idx").on(
+      table.processingStatus,
+      table.createdAt,
+    ),
+    index("source_assets_retention_idx").on(table.retentionUntil),
+    check(
+      "source_assets_sha256_lower_hex_chk",
+      sql`${table.sha256} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check("source_assets_byte_size_positive_chk", sql`${table.byteSize} > 0`),
   ],
 );
 
@@ -242,6 +306,8 @@ export type StudentRow = typeof students.$inferSelect;
 export type NewStudentRow = typeof students.$inferInsert;
 export type CaseRow = typeof cases.$inferSelect;
 export type NewCaseRow = typeof cases.$inferInsert;
+export type SourceAssetRow = typeof sourceAssets.$inferSelect;
+export type NewSourceAssetRow = typeof sourceAssets.$inferInsert;
 export type ApiIdempotencyRecordRow =
   typeof apiIdempotencyRecords.$inferSelect;
 export type LearningEvidenceEventRow =

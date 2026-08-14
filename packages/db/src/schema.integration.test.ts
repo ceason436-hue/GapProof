@@ -6,6 +6,7 @@ import {
   cases,
   demoClocks,
   learningEvidenceEvents,
+  sourceAssets,
   students,
   tasks,
 } from "./schema.ts";
@@ -32,6 +33,7 @@ describeWithDatabase("PostgreSQL evidence ledger", () => {
 
   beforeAll(async () => {
     await database.db.delete(tasks);
+    await database.db.delete(sourceAssets);
     await database.db.delete(learningEvidenceEvents);
     await database.db.delete(demoClocks);
     await database.db.delete(cases);
@@ -91,6 +93,107 @@ describeWithDatabase("PostgreSQL evidence ledger", () => {
         id: "0198a111-1111-7000-8000-000000000005",
       }),
     ).rejects.toThrow();
+  });
+
+  it("enforces source asset ownership, identity, size, and retention constraints", async () => {
+    const value = {
+      id: "0198a111-1111-7000-8000-000000000020",
+      tenantId: ids.tenant,
+      studentId: ids.student,
+      caseId: ids.case,
+      objectKey: "students/0198a111-1111-7000-8000-000000000002/source-1",
+      sha256: "a".repeat(64),
+      mimeType: "image/png",
+      byteSize: 1024,
+      assetType: "student_upload" as const,
+      retentionUntil: new Date("2027-08-15T00:00:00.000Z"),
+    };
+
+    const [inserted] = await database.db
+      .insert(sourceAssets)
+      .values(value)
+      .returning();
+    expect(inserted).toMatchObject({
+      objectKey: value.objectKey,
+      processingStatus: "pending_upload",
+      studentId: ids.student,
+      caseId: ids.case,
+    });
+
+    await expect(
+      database.db.insert(sourceAssets).values({
+        ...value,
+        id: "0198a111-1111-7000-8000-000000000021",
+      }),
+    ).rejects.toThrow();
+
+    await expect(
+      database.db.insert(sourceAssets).values({
+        ...value,
+        id: "0198a111-1111-7000-8000-000000000022",
+        objectKey: `${value.objectKey}-bad-hash`,
+        sha256: "A".repeat(64),
+      }),
+    ).rejects.toThrow();
+
+    await expect(
+      database.db.insert(sourceAssets).values({
+        ...value,
+        id: "0198a111-1111-7000-8000-000000000023",
+        objectKey: `${value.objectKey}-bad-size`,
+        byteSize: 0,
+      }),
+    ).rejects.toThrow();
+
+    const [unowned] = await database.db
+      .insert(sourceAssets)
+      .values({
+        ...value,
+        id: "0198a111-1111-7000-8000-000000000024",
+        objectKey: `${value.objectKey}-unowned`,
+        studentId: null,
+        caseId: null,
+      })
+      .returning();
+    expect(unowned?.studentId).toBeNull();
+    expect(unowned?.caseId).toBeNull();
+
+    await expect(
+      database.db.insert(sourceAssets).values({
+        ...value,
+        id: "0198a111-1111-7000-8000-000000000025",
+        objectKey: `${value.objectKey}-missing-student`,
+        studentId: "0198a111-1111-7000-8000-000000000099",
+      }),
+    ).rejects.toThrow();
+
+    await expect(
+      database.db.insert(sourceAssets).values({
+        ...value,
+        id: "0198a111-1111-7000-8000-000000000026",
+        objectKey: `${value.objectKey}-missing-case`,
+        caseId: "0198a111-1111-7000-8000-000000000099",
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("creates the source asset lookup indexes", async () => {
+    const result = await database.db.execute(sql<{ indexname: string }>`
+      select indexname
+      from pg_indexes
+      where schemaname = 'app' and tablename = 'source_assets'
+    `);
+
+    expect(result.map((row) => row.indexname)).toEqual(
+      expect.arrayContaining([
+        "source_assets_object_key_uidx",
+        "source_assets_tenant_created_idx",
+        "source_assets_student_created_idx",
+        "source_assets_case_created_idx",
+        "source_assets_status_created_idx",
+        "source_assets_retention_idx",
+      ]),
+    );
   });
 
   it("rejects a negative case state version", async () => {
