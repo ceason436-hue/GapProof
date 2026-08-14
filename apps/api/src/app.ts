@@ -165,6 +165,22 @@ function completionRequestPayload(
   };
 }
 
+function requireValidStudentTimeZone(timeZone: string): string {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone }).format(0);
+    return timeZone;
+  } catch (error) {
+    if (error instanceof RangeError) {
+      throw new ApiHttpError(
+        500,
+        "STORED_STUDENT_INVALID",
+        "The stored student time zone is invalid.",
+      );
+    }
+    throw error;
+  }
+}
+
 function d1AttemptRequestPayload(
   body: SubmitD1RetestAttemptRequest,
 ): Record<string, unknown> {
@@ -1023,6 +1039,7 @@ export async function buildApi(options: BuildApiOptions) {
       );
       return success(request, {
         studentId: student.id,
+        timeZone: requireValidStudentTimeZone(student.timezone),
         currentTaskId,
         tasks: taskRows.map(toLearningTaskView),
       });

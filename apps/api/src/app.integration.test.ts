@@ -1762,6 +1762,15 @@ describeWithDatabase("Fastify API and run-next worker", () => {
 
   it("selects currentTaskId with the frozen due/type/created/id ordering", async () => {
     const prepared = await createProbeRequiredCase(api, "current-task-order-v1");
+    const currentViaToday = async () => {
+      const response = await api.inject({
+        method: "GET",
+        url: `/v1/students/${prepared.studentId}/today`,
+      });
+      expect(response.statusCode).toBe(200);
+      return response.json<ApiResponse<TodayTasksView>>().data.currentTaskId;
+    };
+    expect(await currentViaToday()).toBeNull();
     const sourceEvents = await database.db
       .select({ id: learningEvidenceEvents.id })
       .from(learningEvidenceEvents)
@@ -1800,6 +1809,34 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     const d1HighId = "0198b111-1111-7000-8000-000000000102";
     const d7Id = "0198b111-1111-7000-8000-000000000103";
     const guidedId = "0198b111-1111-7000-8000-000000000104";
+    await database.db.insert(tasks).values({
+      ...common,
+      id: d7Id,
+      taskType: "d7_retest",
+      dueAt: new Date("2026-08-16T11:00:00.000Z"),
+      payload: privateItem,
+      sourceEventId: sourceEvents[0]?.id ?? "",
+    });
+    expect(
+      await findCurrentActionableTaskId(database.db, prepared.studentId),
+    ).toBeNull();
+    expect(await currentViaToday()).toBeNull();
+
+    await database.db.insert(tasks).values({
+      ...common,
+      id: guidedId,
+      taskType: "guided_intervention",
+      payload: {
+        rationale: "Synthetic ordering fixture.",
+        steps: [{ id: "step-1", kind: "explain", title: "Explain", content: "Synthetic." }],
+      },
+      sourceEventId: sourceEvents[0]?.id ?? "",
+    });
+    expect(
+      await findCurrentActionableTaskId(database.db, prepared.studentId),
+    ).toBe(guidedId);
+    expect(await currentViaToday()).toBe(guidedId);
+
     await database.db.insert(tasks).values([
       {
         ...common,
@@ -1815,27 +1852,11 @@ describeWithDatabase("Fastify API and run-next worker", () => {
         payload: privateItem,
         sourceEventId: sourceEvents[0]?.id ?? "",
       },
-      {
-        ...common,
-        id: d7Id,
-        taskType: "d7_retest",
-        payload: privateItem,
-        sourceEventId: sourceEvents[0]?.id ?? "",
-      },
-      {
-        ...common,
-        id: guidedId,
-        taskType: "guided_intervention",
-        payload: {
-          rationale: "Synthetic ordering fixture.",
-          steps: [{ id: "step-1", kind: "explain", title: "Explain", content: "Synthetic." }],
-        },
-        sourceEventId: sourceEvents[0]?.id ?? "",
-      },
     ]);
     expect(
       await findCurrentActionableTaskId(database.db, prepared.studentId),
     ).toBe(d1LowId);
+    expect(await currentViaToday()).toBe(d1LowId);
 
     await database.db
       .update(tasks)
@@ -1844,5 +1865,43 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     expect(
       await findCurrentActionableTaskId(database.db, prepared.studentId),
     ).toBe(guidedId);
+    expect(await currentViaToday()).toBe(guidedId);
+
+    await database.db
+      .update(tasks)
+      .set({ status: "completed", completedAt: new Date("2026-08-16T12:30:00.000Z") })
+      .where(eq(tasks.caseId, prepared.caseId));
+    expect(await currentViaToday()).toBeNull();
+  }, 20_000);
+
+  it("returns the target student's valid IANA time zone and rejects invalid storage", async () => {
+    const prepared = await createProbeRequiredCase(api, "student-time-zone-v1");
+    await database.db
+      .update(students)
+      .set({ timezone: "Pacific/Auckland" })
+      .where(eq(students.id, prepared.studentId));
+
+    const valid = await api.inject({
+      method: "GET",
+      url: `/v1/students/${prepared.studentId}/today`,
+    });
+    expect(valid.statusCode).toBe(200);
+    expect(valid.json<ApiResponse<TodayTasksView>>().data.timeZone).toBe(
+      "Pacific/Auckland",
+    );
+
+    await database.db
+      .update(students)
+      .set({ timezone: "Mars/Olympus_Mons" })
+      .where(eq(students.id, prepared.studentId));
+    const invalid = await api.inject({
+      method: "GET",
+      url: `/v1/students/${prepared.studentId}/today`,
+    });
+    expect(invalid.statusCode).toBe(500);
+    expect(invalid.json<ApiErrorResponse>().error).toMatchObject({
+      code: "STORED_STUDENT_INVALID",
+      retryable: false,
+    });
   }, 20_000);
 });

@@ -1,5 +1,5 @@
 import type { CaseStatus } from "@gapproof/contracts";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import type { Database } from "./client.ts";
 import { ResourceNotFoundError } from "./case-repository.ts";
@@ -55,14 +55,19 @@ export async function findCurrentActionableTaskId(
   const [row] = await database
     .select({ id: tasks.id })
     .from(tasks)
-    .where(and(eq(tasks.studentId, studentId), eq(tasks.status, "ready")))
+    .where(
+      and(
+        eq(tasks.studentId, studentId),
+        eq(tasks.status, "ready"),
+        inArray(tasks.taskType, ["d1_retest", "guided_intervention"]),
+      ),
+    )
     .orderBy(
       sql`${tasks.dueAt} asc nulls last`,
       sql`case ${tasks.taskType}
         when 'd1_retest' then 1
-        when 'd7_retest' then 2
-        when 'guided_intervention' then 3
-        else 4
+        when 'guided_intervention' then 2
+        else 3
       end`,
       asc(tasks.createdAt),
       asc(tasks.id),

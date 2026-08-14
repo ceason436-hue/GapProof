@@ -3,7 +3,7 @@ import { Value } from "@sinclair/typebox/value";
 import { describe, expect, it } from "vitest";
 
 import {
-  CURRENT_TASK_TYPE_PRIORITY,
+  CURRENT_ACTIONABLE_TASK_TYPE_PRIORITY,
   D1RetestAttemptViewSchema,
   LearningTaskViewSchema,
   SubmitD1RetestAttemptRequestSchema,
@@ -33,9 +33,8 @@ const baseTask = {
 
 describe("D1 retest HTTP contracts", () => {
   it("freezes the server-side actionable task type tie-break order", () => {
-    expect(CURRENT_TASK_TYPE_PRIORITY).toEqual([
+    expect(CURRENT_ACTIONABLE_TASK_TYPE_PRIORITY).toEqual([
       "d1_retest",
-      "d7_retest",
       "guided_intervention",
     ]);
   });
@@ -90,9 +89,15 @@ describe("D1 retest HTTP contracts", () => {
     };
     expect(Value.Check(TodayTasksViewSchema, {
       studentId: baseTask.studentId,
+      timeZone: "Asia/Shanghai",
       currentTaskId: baseTask.id,
       tasks: [d1Task],
     })).toBe(true);
+    expect(Value.Check(TodayTasksViewSchema, {
+      studentId: baseTask.studentId,
+      currentTaskId: baseTask.id,
+      tasks: [d1Task],
+    })).toBe(false);
     expect(Value.Check(D1RetestAttemptViewSchema, {
       attemptId: "0198b111-1111-7000-8000-000000000004",
       caseId: baseTask.caseId,

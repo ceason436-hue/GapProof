@@ -200,10 +200,12 @@ export const LearningTaskViewSchema = Type.Union([
   D7RetestTaskViewSchema,
 ]);
 
-/** Stable server-side tie-break order after dueAt ASC NULLS LAST. */
-export const CURRENT_TASK_TYPE_PRIORITY = [
+/**
+ * Stable actionable tie-break order after dueAt ASC NULLS LAST. D7 remains
+ * read-only until its attempt contract and evaluation route are implemented.
+ */
+export const CURRENT_ACTIONABLE_TASK_TYPE_PRIORITY = [
   "d1_retest",
-  "d7_retest",
   "guided_intervention",
 ] as const;
 
@@ -216,6 +218,8 @@ export type D7RetestTaskView = Static<typeof D7RetestTaskViewSchema>;
 
 export const TodayTasksViewSchema = Type.Object({
   studentId: Type.String({ format: "uuid" }),
+  /** Valid IANA time-zone identifier sourced from the student record. */
+  timeZone: Type.String({ minLength: 1 }),
   currentTaskId: Type.Union([
     Type.String({ format: "uuid" }),
     Type.Null(),
