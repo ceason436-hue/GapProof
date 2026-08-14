@@ -1,61 +1,128 @@
-import type { LearningTaskView, TodayTasksView } from "@gapproof/contracts";
+import type {
+  D1RetestTaskView,
+  D7RetestTaskView,
+  GuidedInterventionTaskView,
+  LearningTaskView,
+  TodayTasksView,
+} from "@gapproof/contracts";
 import { describe, expect, it } from "vitest";
-import { toTodayReadModel } from "./today-adapter";
+import { formatTaskDateTime, toTodayReadModel } from "./today-adapter";
 
 const studentId = "11111111-1111-4111-8111-111111111111";
+const caseId = "22222222-2222-4222-8222-222222222222";
+const scheduledFor = "2026-08-16T12:00:00.000Z";
 
-function task(
-  id: string,
-  taskType: LearningTaskView["taskType"],
-  status: LearningTaskView["status"],
-): LearningTaskView {
+function base(id: string, status: LearningTaskView["status"]) {
   return {
     id,
-    caseId: "22222222-2222-4222-8222-222222222222",
+    caseId,
     studentId,
-    taskType,
     status,
-    title: `${taskType}-${status}`,
+    title: `task-${id.slice(0, 4)}`,
     rationale: "contract fixture",
     estimatedMinutes: 5,
-    scheduledFor: "2026-08-16T01:00:00.000Z",
-    dueAt: taskType === "d1_retest" ? "2026-08-16T01:00:00.000Z" : null,
-    completedAt: status === "completed" ? "2026-08-16T01:05:00.000Z" : null,
+    scheduledFor,
+    dueAt: "2026-08-16T13:00:00.000Z",
+    completedAt: status === "completed" ? "2026-08-16T13:05:00.000Z" : null,
+  };
+}
+
+function guided(
+  id = "33333333-3333-4333-8333-333333333333",
+  status: LearningTaskView["status"] = "ready",
+): GuidedInterventionTaskView {
+  return {
+    ...base(id, status),
+    taskType: "guided_intervention",
     steps: [{ id: "step-1", kind: "explain", title: "Read", content: "Fixture" }],
   };
 }
 
+function retest(
+  taskType: "d1_retest" | "d7_retest",
+  status: LearningTaskView["status"] = "ready",
+  id = taskType === "d1_retest"
+    ? "44444444-4444-4444-8444-444444444444"
+    : "55555555-5555-4555-8555-555555555555",
+): D1RetestTaskView | D7RetestTaskView {
+  return {
+    ...base(id, status),
+    taskType,
+    item: {
+      id: `${taskType}-item`,
+      prompt: "Synthetic prompt",
+      choices: [{ id: "a", label: "A" }, { id: "b", label: "B" }],
+    },
+  } as D1RetestTaskView | D7RetestTaskView;
+}
+
+function today(tasks: LearningTaskView[], currentTaskId: string | null): TodayTasksView {
+  return { studentId, timeZone: "Asia/Tokyo", currentTaskId, tasks };
+}
+
 describe("Today contract adapter", () => {
-  it("keeps an API empty result empty", () => {
-    expect(toTodayReadModel({ studentId, tasks: [] })).toEqual({
-      studentId,
-      taskCount: 0,
-      hasServerSelectedCurrentTask: false,
-      retests: [],
+  it("preserves a server null current task without guessing from ready tasks", () => {
+    const model = toTodayReadModel(today([guided(), retest("d1_retest")], null));
+    expect(model.current).toEqual({ kind: "none" });
+    expect(model.taskCount).toBe(2);
+  });
+
+  it.each([
+    ["guided_intervention", guided()],
+    ["d1_retest", retest("d1_retest")],
+  ] as const)("selects only the server-referenced ready %s", (_, task) => {
+    expect(toTodayReadModel(today([task], task.id)).current).toEqual({
+      kind: "selected",
+      task,
     });
   });
 
-  it("does not infer a current task from array order or status", () => {
-    const view: TodayTasksView = {
-      studentId,
-      tasks: [
-        task("33333333-3333-4333-8333-333333333333", "guided_intervention", "ready"),
-        task("44444444-4444-4444-8444-444444444444", "d1_retest", "ready"),
-      ],
-    };
-    expect(toTodayReadModel(view).hasServerSelectedCurrentTask).toBe(false);
+  it("returns a controlled error for a missing currentTaskId reference", () => {
+    expect(toTodayReadModel(today([guided()], "66666666-6666-4666-8666-666666666666")).current)
+      .toEqual({ kind: "contract_error", code: "CURRENT_TASK_NOT_FOUND" });
   });
 
-  it.each(["scheduled", "ready", "completed"] as const)(
-    "keeps a %s D+1 task read-only",
+  it.each(["scheduled", "completed"] as const)(
+    "does not replace a server-referenced %s task",
     status => {
-      const view = {
-        studentId,
-        tasks: [task("55555555-5555-4555-8555-555555555555", "d1_retest", status)],
-      } satisfies TodayTasksView;
-      expect(toTodayReadModel(view).retests).toEqual([
-        expect.objectContaining({ status, submitAvailable: false }),
-      ]);
+      const task = guided(undefined, status);
+      expect(toTodayReadModel(today([task, retest("d1_retest")], task.id)).current)
+        .toMatchObject({ kind: "contract_error", code: "CURRENT_TASK_NOT_READY", referencedTask: task });
     },
   );
+
+  it("keeps a ready D7 reference read-only and never promotes another task", () => {
+    const d7 = retest("d7_retest");
+    expect(toTodayReadModel(today([d7, guided()], d7.id)).current).toMatchObject({
+      kind: "contract_error",
+      code: "CURRENT_TASK_READ_ONLY",
+      referencedTask: d7,
+    });
+  });
+
+  it("preserves the shared D1/D7 discriminants in the read-only list", () => {
+    const model = toTodayReadModel(today([
+      retest("d1_retest", "scheduled"),
+      retest("d7_retest", "completed"),
+    ], null));
+    expect(model.retests.map(task => [task.taskType, task.status])).toEqual([
+      ["d1_retest", "scheduled"],
+      ["d7_retest", "completed"],
+    ]);
+  });
+
+  it("formats task dates only in the response time zone", () => {
+    expect(formatTaskDateTime(scheduledFor, "Asia/Tokyo")).toContain("21:00");
+    expect(formatTaskDateTime(scheduledFor, "America/New_York")).toContain("08:00");
+    expect(() => formatTaskDateTime(scheduledFor, "Not/A_TimeZone")).toThrow(RangeError);
+  });
+
+  it("rejects an unusable response time zone even when the task list is empty", () => {
+    expect(() => toTodayReadModel({
+      studentId,
+      timeZone: "Not/A_TimeZone",
+      currentTaskId: null,
+      tasks: [],
+    })).toThrow(RangeError);
+  });
 });

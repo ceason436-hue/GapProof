@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "bun scripts/serve.mjs start",
     "screenshots": "node tests/visual-regression.mjs",
+    "screenshots:api": "node tests/real-api-visual-regression.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

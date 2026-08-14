@@ -10,7 +10,7 @@ export class ApiClientError extends Error {
   }
 }
 
-type RequestOptions = { signal?: AbortSignal; method?: "GET" | "POST"; body?: unknown; idempotencyKey?: string };
+type RequestOptions = { signal?: AbortSignal; method?: "GET" | "POST"; body?: unknown; idempotencyKey?: string; cache?: "no-store" };
 
 const wait = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve, reject) => {
   const timer = setTimeout(resolve, ms);
@@ -32,6 +32,7 @@ export async function apiRequestUrl<S extends TSchema>(
       const response = await fetch(url, {
         method,
         ...(options.signal ? { signal: options.signal } : {}),
+        ...(options.cache ? { cache: options.cache } : {}),
         headers: {
           Accept: "application/json",
           ...(options.body === undefined ? {} : { "Content-Type": "application/json" }),

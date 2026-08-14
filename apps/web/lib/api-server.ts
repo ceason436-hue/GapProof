@@ -10,5 +10,8 @@ export function apiServerGet<S extends TSchema>(
   signal?: AbortSignal,
 ) {
   const origin = parseApiOrigin(process.env.GAPPROOF_API_ORIGIN);
-  return apiRequestUrl(serverApiUrl(origin, path), schema, signal ? { signal } : {});
+  return apiRequestUrl(serverApiUrl(origin, path), schema, {
+    cache: "no-store",
+    ...(signal ? { signal } : {}),
+  });
 }
