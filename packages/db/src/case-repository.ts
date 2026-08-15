@@ -8,7 +8,6 @@ import {
   sourceAssets,
   students,
 } from "./schema.ts";
-import { v7 as uuidv7 } from "uuid";
 
 export class ResourceNotFoundError extends Error {
   readonly code = "RESOURCE_NOT_FOUND";
@@ -50,6 +49,7 @@ const START_RECOGNITION_SCOPE = "source_asset_start_recognition";
 
 export interface StartSyntheticRecognitionInput {
   readonly assetId: string;
+  readonly caseId: string;
   readonly idempotencyKey: string;
   readonly idempotencyRecordId: string;
   readonly enqueueRunNext: (
@@ -133,11 +133,10 @@ export async function startSyntheticRecognitionIdempotent(
       throw new SyntheticRecognitionNotReadyError("The source asset student ownership is invalid.");
     }
 
-    const caseId = uuidv7();
     const [createdCase] = await transaction
       .insert(cases)
       .values({
-        id: caseId,
+        id: input.caseId,
         tenantId: asset.tenantId,
         studentId: student.id,
         title: "合成 OCR 演示",
@@ -149,12 +148,12 @@ export async function startSyntheticRecognitionIdempotent(
 
     const [boundAsset] = await transaction
       .update(sourceAssets)
-      .set({ caseId, updatedAt: new Date() })
+      .set({ caseId: input.caseId, updatedAt: new Date() })
       .where(and(eq(sourceAssets.id, asset.id), isNull(sourceAssets.caseId)))
       .returning();
     if (boundAsset === undefined) throw new SourceAssetAlreadyBoundError();
 
-    const jobId = await input.enqueueRunNext(transaction, caseId);
+    const jobId = await input.enqueueRunNext(transaction, input.caseId);
     await transaction.insert(apiIdempotencyRecords).values({
       id: input.idempotencyRecordId,
       scope: START_RECOGNITION_SCOPE,

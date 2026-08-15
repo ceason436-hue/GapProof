@@ -35,6 +35,7 @@ import {
   runMigrations,
   sourceAssets,
   students,
+  startSyntheticRecognitionIdempotent,
   tasks,
 } from "@gapproof/db";
 import { FixedClock } from "@gapproof/domain";
@@ -701,6 +702,140 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json<ApiErrorResponse>().error.code).toBe("SCHEMA_INVALID");
   });
+
+  it("rejects unready, non-passed, and already-bound assets without creating recognition state", async () => {
+    const created = await api.inject({
+      method: "POST",
+      url: "/v1/cases",
+      headers: { "idempotency-key": "source-start-rejection-fixture-v1" },
+      payload: { entry: "synthetic_demo" },
+    });
+    const caseView = created.json<ApiResponse<CaseView>>().data;
+
+    const initiate = async (key: string, bytes: Buffer) => {
+      const sha256 = createHash("sha256").update(bytes).digest("hex");
+      const response = await api.inject({
+        method: "POST",
+        url: "/v1/source-assets/uploads",
+        headers: { "idempotency-key": `${key}-upload` },
+        payload: {
+          studentId: caseView.studentId,
+          caseId: null,
+          fileName: `${key}.png`,
+          mimeType: "image/png",
+          byteSize: bytes.byteLength,
+          sha256,
+        },
+      });
+      expect(response.statusCode).toBe(201);
+      const asset = response.json<ApiResponse<InitiatedSourceAssetUploadView>>().data;
+      const uploaded = await api.inject({
+        method: "PUT",
+        url: asset.upload.path.replace("/api", ""),
+        headers: { "x-gapproof-upload-token": asset.upload.token, "content-type": "image/png" },
+        payload: bytes,
+      });
+      expect(uploaded.statusCode).toBe(200);
+      return asset;
+    };
+
+    const pendingResponse = await api.inject({
+      method: "POST",
+      url: "/v1/source-assets/uploads",
+      headers: { "idempotency-key": "source-start-pending-upload-v1" },
+      payload: {
+        studentId: caseView.studentId,
+        caseId: null,
+        fileName: "pending.png",
+        mimeType: "image/png",
+        byteSize: 33,
+        sha256: createHash("sha256").update(pngBytes(1280, 960)).digest("hex"),
+      },
+    });
+    const pending = pendingResponse.json<ApiResponse<InitiatedSourceAssetUploadView>>().data;
+    const low = await initiate("source-start-needs-confirmation-v1", pngBytes(320, 240));
+    await api.inject({
+      method: "POST",
+      url: `/v1/source-assets/${low.assetId}/commands/prepare`,
+      headers: { "idempotency-key": "source-start-needs-confirmation-prepare-v1" },
+      payload: {},
+    });
+    await waitForSourceAsset(api, low.assetId, "needs_confirmation");
+
+    for (const [assetId, key] of [
+      [pending.assetId, "source-start-pending-reject-v1"],
+      [low.assetId, "source-start-quality-reject-v1"],
+    ] as const) {
+      const response = await api.inject({
+        method: "POST",
+        url: `/v1/source-assets/${assetId}/commands/start-recognition`,
+        headers: { "idempotency-key": key },
+        payload: { mode: "synthetic_demo", guardianConfirmed: true },
+      });
+      expect(response.statusCode).toBe(409);
+      expect(response.json<ApiErrorResponse>().error.code).toBe("SOURCE_ASSET_RECOGNITION_NOT_READY");
+      const [row] = await database.db.select().from(sourceAssets).where(eq(sourceAssets.id, assetId));
+      expect(row?.caseId).toBeNull();
+      const [record] = await database.db
+        .select()
+        .from(apiIdempotencyRecords)
+        .where(eq(apiIdempotencyRecords.idempotencyKey, key));
+      expect(record).toBeUndefined();
+    }
+
+    const bound = await initiate("source-start-bound-v1", pngBytes(1280, 960));
+    await api.inject({
+      method: "POST",
+      url: `/v1/source-assets/${bound.assetId}/commands/prepare`,
+      headers: { "idempotency-key": "source-start-bound-prepare-v1" },
+      payload: {},
+    });
+    await waitForSourceAsset(api, bound.assetId, "succeeded");
+    const firstStart = await api.inject({
+      method: "POST",
+      url: `/v1/source-assets/${bound.assetId}/commands/start-recognition`,
+      headers: { "idempotency-key": "source-start-bound-first-v1" },
+      payload: { mode: "synthetic_demo", guardianConfirmed: true },
+    });
+    expect(firstStart.statusCode).toBe(202);
+    const secondStart = await api.inject({
+      method: "POST",
+      url: `/v1/source-assets/${bound.assetId}/commands/start-recognition`,
+      headers: { "idempotency-key": "source-start-bound-second-v1" },
+      payload: { mode: "synthetic_demo", guardianConfirmed: true },
+    });
+    expect(secondStart.statusCode).toBe(409);
+    expect(secondStart.json<ApiErrorResponse>().error.code).toBe("SOURCE_ASSET_ALREADY_BOUND");
+
+    const rollbackAsset = await initiate("source-start-rollback-v1", pngBytes(1280, 960));
+    await api.inject({
+      method: "POST",
+      url: `/v1/source-assets/${rollbackAsset.assetId}/commands/prepare`,
+      headers: { "idempotency-key": "source-start-rollback-prepare-v1" },
+      payload: {},
+    });
+    await waitForSourceAsset(api, rollbackAsset.assetId, "succeeded");
+    const rollbackCaseId = uuidv7();
+    const rollbackKey = "source-start-rollback-enqueue-v1";
+    await expect(startSyntheticRecognitionIdempotent(database.db, {
+      assetId: rollbackAsset.assetId,
+      caseId: rollbackCaseId,
+      idempotencyKey: rollbackKey,
+      idempotencyRecordId: uuidv7(),
+      enqueueRunNext: async () => {
+        throw new Error("controlled enqueue failure");
+      },
+    })).rejects.toThrow("controlled enqueue failure");
+    const [rollbackRow] = await database.db.select().from(sourceAssets).where(eq(sourceAssets.id, rollbackAsset.assetId));
+    expect(rollbackRow?.caseId).toBeNull();
+    const [rollbackCase] = await database.db.select().from(cases).where(eq(cases.id, rollbackCaseId));
+    expect(rollbackCase).toBeUndefined();
+    const [rollbackRecord] = await database.db
+      .select()
+      .from(apiIdempotencyRecords)
+      .where(eq(apiIdempotencyRecords.idempotencyKey, rollbackKey));
+    expect(rollbackRecord).toBeUndefined();
+  }, 35_000);
 
   it("fails closed for missing bytes and requests confirmation for low resolution", async () => {
     await qualityWorker.stop();

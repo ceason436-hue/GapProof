@@ -1010,6 +1010,7 @@ export async function buildApi(options: BuildApiOptions) {
       const idempotencyKey = getIdempotencyKey(request);
       const result = await startSyntheticRecognitionIdempotent(options.database, {
         assetId: request.params.assetId,
+        caseId: uuidv7(),
         idempotencyKey,
         idempotencyRecordId: uuidv7(),
         enqueueRunNext: async (transaction, caseId) =>
