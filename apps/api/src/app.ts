@@ -112,6 +112,7 @@ import {
   enqueueReplanTransactional,
   enqueueRunNextIdempotent,
   enqueueSourceAssetQualityCheckIdempotent,
+  SYNTHETIC_PARSE_ASSET_ID,
   type JobQueue,
 } from "@gapproof/jobs";
 import {
@@ -1884,13 +1885,27 @@ export async function buildApi(options: BuildApiOptions) {
     },
     async (request, reply) => {
       const idempotencyKey = getIdempotencyKey(request);
+      const caseRow = await findCaseById(options.database, request.params.caseId);
+      if (caseRow === undefined) {
+        throw new ResourceNotFoundError("Case", request.params.caseId);
+      }
+      if (
+        caseRow.state === "awaiting_evidence" &&
+        (!caseRow.simulation || !caseRow.synthetic)
+      ) {
+        throw new ApiHttpError(
+          409,
+          "DEMO_CASE_REQUIRED",
+          "Fake parse-paper requires a synthetic simulation Case.",
+        );
+      }
       const queued = await enqueueRunNextIdempotent(
         options.database,
         options.queue,
         {
           caseId: request.params.caseId,
           expectedVersion: request.body.expectedVersion,
-          assetId: "asset-synthetic-paper-1",
+          assetId: SYNTHETIC_PARSE_ASSET_ID,
           traceId: traceId(request),
           idempotencyKey,
         },

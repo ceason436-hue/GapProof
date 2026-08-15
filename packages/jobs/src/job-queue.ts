@@ -25,6 +25,7 @@ export const RUN_NEXT_QUEUE = "case-run-next";
 export const RETEST_DUE_QUEUE = "retest.due";
 export const REPLAN_QUEUE = "case.replan";
 export const SOURCE_ASSET_QUALITY_CHECK_QUEUE = "source_asset.quality_check";
+export const SYNTHETIC_PARSE_ASSET_ID = "asset-synthetic-paper-1";
 
 export interface EnqueueRunNextInput extends RunNextJobData {
   readonly idempotencyKey: string;

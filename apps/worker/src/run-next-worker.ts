@@ -20,6 +20,7 @@ import {
   type ParsePaperAdapter,
 } from "@gapproof/tools";
 import { v7 as uuidv7 } from "uuid";
+import { assertSyntheticDemoParse } from "./run-next-guard.ts";
 
 export interface RunNextWorkerOptions {
   readonly database: Database;
@@ -307,6 +308,8 @@ export function createRunNextWorker(options: RunNextWorkerOptions) {
         if (caseRow.state !== "awaiting_evidence") {
           throw new Error(`RUN_NEXT_NOT_ALLOWED_FROM_${caseRow.state}`);
         }
+
+        assertSyntheticDemoParse(caseRow, job.data.assetId);
 
         const toolResult = await parsePaper.execute({
           toolCallId: `parse-paper:${job.id}`,

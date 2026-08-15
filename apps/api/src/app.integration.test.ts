@@ -674,7 +674,65 @@ describeWithDatabase("Fastify API and run-next worker", () => {
 
     const caseView = await waitForState(api, caseId, "awaiting_confirmation");
     expect(caseView.stateVersion).toBe(1);
+    const [evidence] = await database.db
+      .select()
+      .from(learningEvidenceEvents)
+      .where(eq(learningEvidenceEvents.caseId, caseId));
+    expect(evidence?.sourceType).toBe("fake_ocr");
+    expect(evidence?.sourceRef).toBe("asset-synthetic-paper-1");
+    expect((evidence?.payload as Record<string, unknown>).toolVersion).toBe(
+      "fake-parse-paper-v1",
+    );
   }, 15_000);
+
+  it("rejects non-demo Cases before fake OCR is enqueued", async () => {
+    const fixtures = [
+      { name: "synthetic-only", simulation: false, synthetic: true },
+      { name: "simulation-only", simulation: true, synthetic: false },
+      { name: "ordinary", simulation: false, synthetic: false },
+    ] as const;
+
+    for (const fixture of fixtures) {
+      const tenantId = uuidv7();
+      const studentId = uuidv7();
+      const caseId = uuidv7();
+      await database.db.insert(students).values({
+        id: studentId,
+        tenantId,
+        anonymousKey: `fake-ocr-guard:${fixture.name}:${caseId}`,
+      });
+      await database.db.insert(cases).values({
+        id: caseId,
+        tenantId,
+        studentId,
+        simulation: fixture.simulation,
+        synthetic: fixture.synthetic,
+      });
+
+      const response = await api.inject({
+        method: "POST",
+        url: `/v1/cases/${caseId}/commands/run-next`,
+        headers: { "idempotency-key": `fake-ocr-guard:${fixture.name}` },
+        payload: { expectedVersion: 0 },
+      });
+      expect(response.statusCode).toBe(409);
+      expect(response.json<ApiErrorResponse>().error.code).toBe(
+        "DEMO_CASE_REQUIRED",
+      );
+
+      const [unchanged] = await database.db
+        .select()
+        .from(cases)
+        .where(eq(cases.id, caseId));
+      expect(unchanged?.state).toBe("awaiting_evidence");
+      expect(unchanged?.stateVersion).toBe(0);
+      const evidence = await database.db
+        .select()
+        .from(learningEvidenceEvents)
+        .where(eq(learningEvidenceEvents.caseId, caseId));
+      expect(evidence).toHaveLength(0);
+    }
+  });
 
   it("enqueues only one job for concurrent duplicate run-next requests", async () => {
     const created = await api.inject({
