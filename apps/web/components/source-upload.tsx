@@ -364,18 +364,10 @@ export function SourceUpload({ studentId }: { studentId: string }) {
     await startIntent(intent);
   };
 
-  const reset = () => {
-    intentRef.current = null;
-    startIntentRef.current = null;
-    activeAbortRef.current?.abort("RESET");
-    setQualityPassed(false);
-    setGuardianConfirmed(false);
-    setStartRecognitionStatus("idle");
-    setStartRecognitionMessage("");
-    setRecognitionCaseId(null);
-    setFile(null);
-    setSafeState("idle", "请选择一张图片，再开始上传。支持 JPG、PNG 或 WebP，大小 1B–10MiB。");
-    if (inputRef.current) inputRef.current.value = "";
+  const openFilePicker = () => {
+    if (!inputRef.current) return;
+    inputRef.current.value = "";
+    inputRef.current.click();
   };
 
   const primaryLabel = status === "error" && intentRef.current?.assetId
@@ -394,14 +386,23 @@ export function SourceUpload({ studentId }: { studentId: string }) {
     <section className="upload-page" aria-labelledby="source-upload-title">
       <div className="title-row">
         <div>
-          <span className="status-chip">添加学习材料</span>
           <h1 id="source-upload-title">上传一张错题或作业图片</h1>
           <p>先把你愿意用于检查的图片交给系统；上传完成后不会自动开始识别或生成学习结论。</p>
         </div>
       </div>
       <div className="upload-layout">
         <article className="upload-card">
-          <div className="upload-picker-panel">
+          <input
+            ref={inputRef}
+            id="source-upload-input"
+            name="source-upload"
+            type="file"
+            accept={ACCEPTED_SOURCE_UPLOAD_TYPES.join(",")}
+            tabIndex={-1}
+            onChange={event => chooseFile(event.currentTarget.files?.[0] ?? null)}
+            aria-describedby={!file ? "source-upload-help" : undefined}
+          />
+          {!file ? <div className="upload-picker-panel" data-upload-picker>
             <label
               className="upload-picker"
               htmlFor="source-upload-input"
@@ -410,42 +411,29 @@ export function SourceUpload({ studentId }: { studentId: string }) {
               onKeyDown={event => {
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
-                  inputRef.current?.click();
+                  openFilePicker();
                 }
               }}
             >
               <span className="upload-picker-title">选择图片</span>
               <span className="upload-picker-detail">JPG、PNG、WebP · 1B–10MiB</span>
             </label>
-            <input
-              ref={inputRef}
-              id="source-upload-input"
-              name="source-upload"
-              type="file"
-              accept={ACCEPTED_SOURCE_UPLOAD_TYPES.join(",")}
-              tabIndex={-1}
-              onChange={event => chooseFile(event.currentTarget.files?.[0] ?? null)}
-              aria-describedby="source-upload-help"
-            />
             <p id="source-upload-help" className="upload-help">上传前请先遮盖姓名、学校、班级等不必要的个人信息。</p>
-          </div>
-          {file && currentValidation.ok ? <div className="selected-upload-preview" data-selected-upload>
-            {previewUrl ? <img src={previewUrl} alt="你刚刚选择的学习材料预览"/> : <div className="selected-upload-placeholder" aria-hidden="true"/>}
+          </div> : <div className="selected-upload-preview" data-selected-upload>
+            {currentValidation.ok && previewUrl ? <img src={previewUrl} alt="你刚刚选择的学习材料预览"/> : <div className="selected-upload-placeholder" aria-hidden="true"/>}
             <div><strong>已选择 1 张图片</strong><span>{file.type.replace("image/", "").toUpperCase()} · {file.size < 1024 * 1024 ? `${Math.max(1, Math.round(file.size / 1024))} KiB` : `${(file.size / 1024 / 1024).toFixed(1)} MiB`}</span><small>尚未上传；不显示本地文件名。</small></div>
-          </div> : null}
+          </div>}
           {file && currentValidation.ok ? <ol className="upload-journey-steps" aria-label="材料处理进度">{uploadJourneyLabels.map((label, index) => {
             const position = uploadJourneyPosition(status, startRecognitionStatus);
             return <li key={label} className={index < position ? "complete" : index === position ? "current" : "pending"} aria-current={index === position ? "step" : undefined}><span>{index < position ? "✓" : index + 1}</span><strong>{label}</strong></li>;
           })}</ol> : null}
           <UploadStatusMessage status={status} message={message}/>
-          <div className="upload-actions">
+          {file ? <div className="upload-actions">
             <button className="primary-blue" type="button" onClick={() => void startUpload()} disabled={!canSubmit}>
               {primaryLabel}
             </button>
-            {(status === "error" || status === "succeeded" || status === "needs_confirmation" || status === "failed")
-              ? <button className="secondary-button" type="button" onClick={reset}>重新选择图片</button>
-              : null}
-          </div>
+            <button className="secondary-button" type="button" onClick={openFilePicker} disabled={isBusy || startRecognitionStatus === "starting"}>更换图片</button>
+          </div> : null}
           {status === "succeeded"
             ? <div className="upload-success" data-upload-success><strong>图片基础检查通过</strong><span>识别尚未开始；不会自动生成学习结论。</span></div>
             : null}

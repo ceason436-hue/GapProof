@@ -9,7 +9,6 @@ function ConfigurationError({ error }: { error: WebConfigurationError }) {
   return <AppShell actionDisabled actionLabel="配置不可用">
     <section className="upload-page" aria-labelledby="upload-config-error" data-config-error={error.code}>
       <div className="title-row"><div>
-        <span className="status-chip error">上传暂不可用</span>
         <h1 id="upload-config-error">暂时无法准备上传</h1>
         <p>上传功能暂时没有准备好，请稍后再试。你的学习记录不会因此改变。</p>
       </div></div>

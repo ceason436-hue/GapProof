@@ -14,6 +14,7 @@ describe("CaseRecognitionReview component", () => {
     expect(html).toContain("体验识别内容");
     expect(html).toContain("不会读取上传图片中的文字");
     expect(html).toContain("不会保存为正式学习记录");
+    expect(html).not.toContain("识别确认");
     expect(html).not.toContain(caseId);
     expect(html).not.toContain("/materials/demo/review");
     expect(html).not.toContain("answerKey");

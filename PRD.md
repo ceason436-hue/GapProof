@@ -7,10 +7,10 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档状态 | Draft v0.1.33 |
+| 文档状态 | Draft v0.1.34 |
 | 产品名称 | 知隙 GapProof |
 | 文档角色 | 产品需求、业务流程、功能范围与验收标准 |
-| 当前阶段 | PUSH-026 已发布：Demo 栈 Web 就绪检查已与学生产品文案解耦，3000/4000 真实 API 预览稳定运行；PUSH-025 的 OCR smoke 与文案治理边界不变 |
+| 当前阶段 | PUSH-027 发布批次：首次使用/上传状态交互已收口；DeepSeek structured provider seam 默认关闭、未接 API/Worker/UI，未执行真实模型调用；真实 OCR 与学习效果边界不变 |
 | 产品形态 | Web 应用 |
 | 目标教材 | 上海教育出版社《义务教育教科书（五·四学制）英语 八年级上册》 |
 | 适用版本 | 目标教材以 ISBN、当前 PDF 哈希和内容快照锁定；版权页不可取得，版次、印次和册次保持未知 |
@@ -661,6 +661,7 @@ PROJECT_MASTER.md
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
+| 0.1.34 | 2026-08-16 | 收口学生端首次使用/上传状态交互与事实空状态文案；新增默认关闭、仅接受 synthetic/desensitized 输入的 DeepSeek structured provider seam 和显式 smoke CLI，未接 API/Worker/UI、未执行真实模型调用。同步 PROJECT_MASTER v0.1.42、TDD v0.3.35、DESIGN v0.2.32、PUSH-027；真实 OCR、真实个性化、学习效果和报告仍 unresolved/deferred |
 | 0.1.33 | 2026-08-16 | 修复 Demo 栈依赖已移除工程文案判断 Web 就绪的问题，改用稳定页面结构信号并恢复 3000/4000 真实 API 预览；同步 PROJECT_MASTER v0.1.41、TDD v0.3.34、DESIGN v0.2.31、PUSH-026，不改变真实 OCR、个性化、学生记录、学习效果或报告范围 |
 | 0.1.32 | 2026-08-16 | 完成授权脱敏材料的阿里云教育 OCR 真实开发态 smoke，调用链成功但结果为 `needs_confirmation`，未接上传/Case/API/Worker/UI；完成学生全路径产品文案和截图治理，内部工程术语不再默认可见，体验内容继续明确不保存为正式学习记录。同步 PROJECT_MASTER v0.1.40、TDD v0.3.33、DESIGN v0.2.30、PUSH-025；真实 OCR 产品接线、真实个性化、真实学生记录、学习效果与报告仍 unresolved/deferred |
 | 0.1.31 | 2026-08-16 | 接入阿里云官方 SDK 的 `RecognizeEduPaperOcr` 开发态 transport 与 `ParsePaperOutput` 归一化，新增 ignored `.env` 凭据入口和 synthetic/desensitized HTTPS smoke CLI。缺少可证明已轮换的新凭据及原创/脱敏可访问图片，未执行真实调用，也未接上传/Case/Worker/API/UI；同步 PROJECT_MASTER v0.1.39、TDD v0.3.32、DESIGN v0.2.29、PUSH-024。真实 OCR、真实学生记录、个性化、学习效果和报告仍 unresolved/deferred |

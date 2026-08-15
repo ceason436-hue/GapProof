@@ -93,7 +93,7 @@ export function TodayOverviewPanel({ overview }: { overview: TodayOverview }) {
 
 export function FirstUseToday() {
   return <AppShell actionHref="/diagnose" actionLabel="开始第一次检查"><section className="today-page" data-first-use-today>
-    <div className="title-row"><div><span className="status-chip">第一次使用</span><h1>从一次小检查开始</h1><p>上传一页错题，或先用 3 道题找到适合你的起点。</p></div></div>
+    <div className="title-row"><div><h1>从一次小检查开始</h1><p>上传一页错题，或先用 3 道题找到适合你的起点。</p></div></div>
     <div className="onboarding-grid">
       <article className="onboarding-main"><span className="eyebrow">推荐路径</span><h2>三步完成第一次检查</h2><ol><li><span className="step-number">1</span><div><strong>选择开始方式</strong><span>上传错题，或先做 3 道快速练习题。</span></div></li><li><span className="step-number">2</span><div><strong>核对题目内容</strong><span>逐项检查题干，发现问题可以自己修改。</span></div></li><li><span className="step-number">3</span><div><strong>开始针对性练习</strong><span>完成检查后，继续今天的练习和后续巩固。</span></div></li></ol><div className="button-row"><Link className="primary-blue" href="/materials/new">上传错题或作业</Link><Link className="ghost-link" href="/diagnose/quick-check">没有材料，先做 3 道题</Link></div></article>
       <aside className="prepare-card"><h2>体验说明</h2><ul><li>上传后由你决定是否继续，不会自动建立学习记录。</li><li>当前上传流程使用演示识别内容，不会读取图片里的题目。</li><li>三题体验只显示本次结果，不保存为正式学习记录。</li></ul><p>请先遮盖姓名、学校和班级等不必要信息。</p></aside>
@@ -222,7 +222,7 @@ function LiveError({ error }: { error: unknown }) {
     detail = "学习概览还没有准备好，请稍后刷新。";
   }
   return <AppShell actionDisabled actionLabel="等待配置">
-    <section className="today-page"><div className="title-row"><div><span className="status-chip error">暂时不可用</span><h1>{title}</h1><p>{detail}</p></div></div></section>
+    <section className="today-page"><div className="title-row"><div><h1>{title}</h1><p>{detail}</p></div></div></section>
   </AppShell>;
 }
 
@@ -232,7 +232,7 @@ export async function LiveToday() {
     const model = toTodayReadModel(response.data);
     if (!model.overview.hasStartedJourney) return <FirstUseToday/>;
     if (model.taskCount === 0 && model.current.kind === "none") return <AppShell actionHref="/diagnose" actionLabel="开始新的检查"><section className="today-page">
-      <div className="title-row"><div><span className="status-chip">今日完成</span><h1>今天的任务已完成</h1><p>做得不错。想继续时，可以开始一次新的检查。</p></div></div>
+      <div className="title-row"><div><h1>今天的任务已完成</h1><p>做得不错。想继续时，可以开始一次新的检查。</p></div></div>
       <article className="state-card"><div><h2>今天先到这里</h2><p>已有记录会保留；需要时可以上传新材料，或先做 3 道快速检查题。</p><div className="button-row"><Link className="primary-blue" href="/diagnose">开始新的检查</Link><Link className="ghost-link" href="/student/progress">查看已有进展</Link></div></div></article>
       <TodayOverviewPanel overview={model.overview}/>
     </section></AppShell>;
@@ -242,7 +242,7 @@ export async function LiveToday() {
       : model.current.kind === "contract_error" ? "当前任务不可用" : "暂无当前任务";
     return <AppShell actionDisabled actionLabel={actionLabel}>
       <section className="today-page">
-        <div className="title-row"><div><span className="status-chip">今日学习</span><h1>今天从这一项开始</h1><p>按自己的节奏完成，做完后再看看下一次复习安排。</p></div></div>
+        <div className="title-row"><div><h1>今天从这一项开始</h1><p>按自己的节奏完成，做完后再看看下一次复习安排。</p></div></div>
         <div className="live-today-grid">
           <div className="live-main-column">
             <CurrentPanel current={model.current} timeZone={model.timeZone}/>

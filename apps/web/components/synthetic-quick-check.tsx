@@ -46,12 +46,22 @@ export function SyntheticQuickCheck() {
     }
   };
 
+  const restart = () => {
+    submittingRef.current = false;
+    setAnswers({});
+    setResult(null);
+    setState("ready");
+    setMessage("选择每题答案后再提交；提交前不会评分。");
+  };
+
   return <section className="quick-check-panel" aria-labelledby="quick-check-title">
     <div className="synthetic-demo-banner"><strong>快速体验</strong><span>3 道原创练习题 · 结果不会保存为正式学习记录</span></div>
-    <header><span className="eyebrow">约 3 分钟</span><h1 id="quick-check-title">先做 3 道题，看看从哪里开始</h1><p>结果只反映这三道题的作答情况，不代表已经掌握，也不用于评价真实学习效果。</p></header>
+    <header><h1 id="quick-check-title">先做 3 道题，看看从哪里开始</h1><p>预计约 3 分钟。结果只反映这三道题的作答情况，不代表已经掌握，也不用于评价真实学习效果。</p></header>
     {view ? <form onSubmit={event => { event.preventDefault(); void submit(); }}>{view.questions.map((question, index) => <fieldset key={question.itemId} disabled={state === "submitting" || state === "success" || state === "network_unknown"}><legend><span>{index + 1}</span>{question.prompt}</legend><div className="quick-check-choices">{question.choices.map(choice => <label key={choice.id}><input type="radio" name={question.itemId} value={choice.id} checked={answers[question.itemId] === choice.id} onChange={() => setAnswers(current => ({ ...current, [question.itemId]: choice.id }))}/><span>{choice.label}</span></label>)}</div></fieldset>)}<button className="primary-blue" type="submit" disabled={!isComplete || state === "submitting" || state === "success" || state === "network_unknown"}>{state === "submitting" ? "正在评分" : state === "success" ? "已完成" : "提交 3 道题"}</button></form> : null}
     <p className={`quick-check-live ${state === "error" || state === "network_unknown" ? "error" : ""}`} aria-live={state === "error" || state === "network_unknown" ? "assertive" : "polite"} role={state === "error" || state === "network_unknown" ? "alert" : undefined} data-quick-check-state={state}>{message}</p>
     {result ? <article className="quick-check-result" data-quick-check-result><span className="status-chip">本次作答</span><h2>{result.correctCount} / {result.totalCount} 题正确</h2><p><strong>建议先复习：</strong>{findingLabels[result.finding]}</p><p>可以从这个知识点开始回顾，再用自己的错题做一次更完整的检查。</p><small>体验结果不会保存为正式学习记录，也不会生成报告。</small></article> : null}
-    <div className="quick-check-links"><Link className="secondary-button" href="/materials/new">改为上传材料</Link><Link className="ghost-link" href="/student/today">返回今日</Link></div>
+    {result
+      ? <div className="quick-check-links"><Link className="primary-blue" href="/materials/new">上传自己的错题继续</Link><button className="secondary-button" type="button" onClick={restart}>重新做 3 道题</button><Link className="ghost-link" href="/student/today">返回今日</Link></div>
+      : <div className="quick-check-links"><Link className="secondary-button" href="/materials/new">改为上传材料</Link><Link className="ghost-link" href="/student/today">返回今日</Link></div>}
   </section>;
 }

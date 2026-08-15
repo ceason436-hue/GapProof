@@ -248,10 +248,13 @@ const visitAndInspect = async (page, expectedStatus, {
   await page.goto(`${webOrigin}/materials/new`, { waitUntil: "networkidle" });
   assert(await page.getByRole("heading", { name: "上传一张错题或作业图片" }).count() === 1, "Default materials page did not render the upload UI.");
   assert(await page.getByText("真实上传会在后续阶段接入", { exact: false }).count() === 0, "Upload route still renders the F0 placeholder.");
+  assert(await page.locator("[data-upload-picker]").count() === 1, "Upload picker was missing before a file was selected.");
   await choose(page);
   await page.locator("[data-selected-upload]").waitFor({ timeout: 5_000 });
   assert(await page.locator("[data-selected-upload]").count() === 1, "Selected image state was not visible before upload.");
+  assert(await page.locator("[data-upload-picker]").count() === 0, "Large upload picker remained visible after selection.");
   assert(await page.getByText("已选择 1 张图片", { exact: true }).count() === 1, "Selected image count was not shown.");
+  assert(await page.getByRole("button", { name: "更换图片", exact: true }).isEnabled(), "Replace-image action was not available after selection.");
   assert(await page.getByText("选择图片", { exact: true }).count() >= 1 && await page.getByText("确认题目", { exact: true }).count() === 1, "Five-step upload journey was not shown.");
   assert(!(await page.locator("body").innerText()).includes(fileName), "Local filename leaked into the rendered page.");
   await page.getByRole("button", { name: "开始上传" }).click();

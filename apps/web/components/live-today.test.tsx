@@ -134,6 +134,7 @@ describe("FirstUseToday", () => {
     expect(html).toContain("没有材料，先做 3 道题");
     expect(html).toContain("当前上传流程使用演示识别内容");
     expect(html).toContain("不保存为正式学习记录");
+    expect(html).not.toContain("第一次使用");
     expect(html).not.toContain("服务端返回空任务列表");
     expect(html).not.toMatch(/合成 Demo|真实 API|Mock|Case/);
   });

@@ -71,6 +71,8 @@ try {
     await page.getByRole("button", { name: "提交 3 道题" }).dblclick();
     await page.locator("[data-quick-check-result]").waitFor();
     assert(await page.getByText("体验结果不会保存为正式学习记录，也不会生成报告。").count() === 1, "Stateless result boundary missing.");
+    assert(await page.getByRole("link", { name: "上传自己的错题继续", exact: true }).count() === 1, "Quick-check continuation action missing.");
+    assert(await page.getByRole("button", { name: "重新做 3 道题", exact: true }).count() === 1, "Quick-check restart action missing.");
     assert(posts.length === 1, `Double submit sent ${posts.length} POST requests.`);
     assert(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(posts[0]?.key ?? ""), "POST did not use UUIDv7 idempotency key.");
     assert(JSON.stringify(posts[0]?.body) === JSON.stringify({ answers: questions.map((question, index) => ({ itemId: question.itemId, selectedChoiceId: ["choice-written", "choice-went", "choice-was-written"][index] })) }), "POST body did not preserve the exact three choices.");

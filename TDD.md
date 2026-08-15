@@ -2,15 +2,15 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.34"
+version: "0.3.35"
 status: "DRAFT_FOR_IMPLEMENTATION"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.41"
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.33"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.42"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.34"
 ---
 
 # 知隙 GapProof 技术设计文档（TDD）
@@ -1220,7 +1220,7 @@ Serverless 很适合短 API 和自动扩容，但 OCR、多轮模型、报告、
 - `alibaba-ocr-official.ts` 使用官方 `@alicloud/ocr-api20210707@3.1.3` 调用 `RecognizeEduPaperOcr`：请求固定 `scan`、`JHighSchool_English`、`OutputOricoord:false`，SDK 自动重试关闭且连接/读取超时继承 adapter 边界。SDK 类型定义的 string `Data` 与官方示例 object 形态均经防御解析；有效 `prism_wordsInfo` 归一化为单页 `ParsePaperOutput`，无效结构 fail closed。`ocr:smoke` 只从 ignored `.env` 读取凭据、只接受 synthetic/desensitized HTTPS source，输出不含凭据、签名 URL 或 Provider 原始响应；当前未执行真实调用。
 - `bun run demo:stack` 可复现启动 Docker PostgreSQL、迁移/seed、API、Worker、Web 与 `.local/gapproof/uploads`；数据库默认显式使用 `127.0.0.1`，避免 Windows `localhost` 的 IPv4/IPv6 双监听歧义。Next dev 只允许启动脚本发现的本机 IPv4/localhost，不开放通配来源；签名 secret 每次运行随机生成且不输出。
 - `findLatestCaseEvidenceEventByType` 以 `occurred_at DESC, created_at DESC, UUIDv7 id DESC` 确定性选择最新证据，避免两次复测共享业务时钟时第二次 replan 误读第一次事件。
-- 当前证据为 169 条快速测试、59 条真实 PostgreSQL/API/Worker 集成测试、98 条 apps/web 测试、migration drift、上传与首次使用/三题检查浏览器 Fixture、双 TypeScript 严格类型检查、Next.js production build及隐私扫描通过。官方 SDK 开发路径没有生产路由，因此浏览器证据只证明现有 synthetic UI 未回归，不证明浏览器或 Worker 调用了阿里云；缺凭据 smoke 明确为 `not_executed`。
+- 当前证据为 190 条快速测试、55 条 tools focused、59 条真实 PostgreSQL/API/Worker 集成测试、98 条 apps/web 测试、migration drift、双 TypeScript 严格类型检查、Next.js production build、真实栈 smoke 和四张更新截图复核通过。上传与首次使用/三题检查 Playwright 在当前 Desktop 环境的浏览器进程启动握手阶段超时，页面未执行，不计为通过；既有已发布浏览器基线不因此改写。DeepSeek seam 默认关闭，仅接受 synthetic/desensitized 输入，未接 API/Worker/UI，真实模型 smoke 未执行；官方 OCR 开发路径同样没有生产路由。
 
 该快照不等于真实 OCR Phase A 完成：真实图片字节可上传到受控本地目录，前端可经监护确认显式创建/绑定同一合成 Case、读取/确认该 Case 的 synthetic extraction 并继续规则化学习路径；但真实 OCR、真实 AI 干预、真实题库、通知、报告与真实模型 Provider 仍未实现。上传字节不参与 Fake OCR；合成确认页与重排仅是规则化工程骨架，不是现实识别或个性化内容。
 
@@ -1612,6 +1612,7 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 
 | Push ID | 日期 | 分支 | 状态 | 提交摘要 | 主要内容 | 验证 |
 |---|---|---|---|---|---|---|
+| PUSH-027 | 2026-08-16 | `main` | `ready_to_push` | `feat: add bounded DeepSeek provider seam and refine student entry states` | 收口首次使用、上传选择后替换图片、事实空状态与学生可见文案；新增默认关闭的 DeepSeek structured adapter、环境配置和显式 smoke CLI。输入仅限 synthetic/desensitized，结果本地校验，未接 API/Worker/UI，未执行真实模型调用；未纳入授权 `reference/test-materials/` | 190 fast、55 tools focused、59 PostgreSQL/API/Worker integration、98 apps/web、双 TypeScript、Next production build、migration drift、真实栈 smoke、四张更新截图、`git diff --check` 与敏感信息/暂存范围审计通过；上传/onboarding Playwright 因当前 Desktop 浏览器启动握手超时 blocked，页面未执行；推送与远端 SHA 待本轮收口 |
 | PUSH-001 | 2026-08-14 | `main` | `pushed` | `feat: establish Phase A backend thin slice` | 建立首个 GitHub 基线：四份项目文档、Bun workspace、领域状态机、PostgreSQL/Drizzle、Fastify API、pg-boss Worker、fake OCR、识别确认、竞争性错因与等待确认小题闭环；同时纳入 Stitch 公开参考资产、教材/试题来源元数据、私有转换工具与 Git 隔离门禁 | 21 条快速测试、16 条真实数据库/API/Worker 集成测试及 TypeScript 严格类型检查通过；私有材料和生成目录未进入暂存区；远端 `main` 已核对为首个基线提交 |
 | PUSH-002 | 2026-08-14 | `main` | `pushed` | `docs: finalize GitHub version-management log` | 将首个基线推送成功状态回写 TDD，提升 PROJECT_MASTER/TDD 文档版本并对齐当前引用，形成可供后续窗口恢复的 GitHub 版本管理闭环 | 文档链接和版本引用检查通过；仅提交 PROJECT_MASTER/TDD，不夹带并行任务中的未提交文件；推送后核对本地与 `origin/main` 一致 |
 | PUSH-003 | 2026-08-15 | `main` | `pushed` | `docs: enforce pre-push TDD logging order` | 将“先更新 TDD Push Log，再使用一致的清晰摘要提交和推送，最后核对远端”写入 TDD 正式规则及 PROJECT_MASTER 新窗口接管规则 | 四文档职责与版本引用检查通过；仅提交 PROJECT_MASTER/TDD，不夹带并行任务中的未提交文件；推送后核对本地与 `origin/main` 一致 |
@@ -1640,6 +1641,11 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-026 | 2026-08-16 | `main` | `pushed` | `fix: decouple demo readiness from product copy` | Demo 栈 Web readiness 从已移除的“真实 API 模式”可见文案改为稳定 `today-page` 页面结构信号，防止产品文案治理后 90 秒误判并停止 API/Worker/Web 子进程 | root typecheck、`git diff --check`、Web 200、API Today 200 且含 overview、Demo 父进程持续存活、3000/4000 监听及生成残留精确清理通过；同轮推送后核对本地/远端 SHA 一致 |
 
 ## 27. 变更日志
+
+### v0.3.35 — 2026-08-16
+
+- 新增默认关闭的 DeepSeek structured adapter：只接受 synthetic/desensitized 输入，限制官方 endpoint、超时、token 预算和输出 Schema；原始响应、凭据与模型内部推理不进入 ToolResult。新增显式 `deepseek:smoke`，无 `--execute` 不外呼；本轮未执行真实模型调用，未接 API/Worker/UI。
+- 收口学生端首次使用/上传状态交互与事实空状态文案；190 fast、55 tools、59 integration、98 web、双 typecheck、Next build、migration drift、真实栈 smoke 与四张更新截图复核通过；上传/onboarding Playwright 因当前 Desktop 浏览器启动握手超时未执行页面，不计为通过。同步 PROJECT_MASTER v0.1.42、PRD v0.1.34、DESIGN v0.2.32 与 PUSH-027。
 
 ### v0.3.34 — 2026-08-16
 

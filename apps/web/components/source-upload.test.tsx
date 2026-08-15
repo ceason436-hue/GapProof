@@ -18,6 +18,7 @@ describe("SourceUpload component", () => {
     }));
     expect(html).toContain('id="source-upload-input"');
     expect(html).toContain('accept="image/jpeg,image/png,image/webp"');
+    expect(html).toContain("data-upload-picker");
     expect(html).toContain("请选择一张图片");
     expect(html).toContain("aria-live=\"polite\"");
     expect(html).not.toContain("图片基础检查通过");
@@ -27,5 +28,8 @@ describe("SourceUpload component", () => {
     expect(html).not.toContain("开始识别并继续");
     expect(html).not.toContain("合成 OCR 演示");
     expect(html).not.toContain("查看并确认识别内容");
+    expect(html).not.toContain("添加学习材料");
+    expect(html).not.toContain("更换图片");
+    expect(html).not.toContain("继续添加");
   });
 });

@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.31"
+version: "0.2.32"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "PUSH-026 已发布：Demo 预览就绪检查已与学生可见文案解耦，产品文案可继续治理而不影响 3000/4000 启动；OCR 与真实性边界不变"
+current_design_stage: "PUSH-027 发布批次：首次使用与上传选择后状态交互已收口，学生可见页面不依赖工程状态标签；OCR 与真实性边界不变"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -90,7 +90,7 @@ upstream_documents:
 
 **尚未完成**：三题检查仍是无记录的原创合成体验题，不是完整 5–8 题诊断、真实个性化或学习效果；默认关闭的阿里云 OCR 开发态路径虽已用授权脱敏材料完成一次真实 smoke，但结果仍需人工确认，且没有 UI 或生产接线。真实 Provider 页面前仍须冻结服务端 provider mode、处理告知/同意、监护确认、权威状态查询和删除事实；真实模糊度、方向、缺页与恶意文件检查，原图确认后 24h/主动删除、真实图片题目区域展示、学生/家长非空数据页面、Logo 紧裁/SVG/Favicon 与最终品牌规范尚未完成。异步报告本轮 deferred。
 
-**下一步**：真实 OCR UI 继续保持关闭；先核验 Provider 合同/训练政策并冻结服务端 consent/status/删除契约。只有这些事实可审计后，才新增与 synthetic 分离的阿里云处理告知、处理同意和监护确认界面。任何新字段不得从视觉稿或合成 Fixture 反推业务状态。
+**下一步**：真实 OCR UI 继续保持关闭；先核验 Provider 合同/训练政策并冻结服务端 consent/status/删除契约。DeepSeek structured seam 仅供服务端后续 bounded 接线，当前不在学生页面暴露模型状态。只有事实可审计后，才新增与 synthetic 分离的 Provider 处理告知、处理同意和监护确认界面。任何新字段不得从视觉稿或合成 Fixture 反推业务状态。
 
 ### 0.4 设计底线
 
@@ -1780,6 +1780,11 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 ---
 
 ## 22. 版本记录
+
+### v0.2.32 — 2026-08-16
+
+- 收口首次使用、上传选图后缩略图/替换动作、计划/进步/报告事实空状态和学生可见文案；继续清晰区分体验内容与正式学习记录。
+- DeepSeek structured provider seam 默认关闭且不在 UI 暴露；同步 PROJECT_MASTER v0.1.42、PRD v0.1.34、TDD v0.3.35 与 PUSH-027。
 
 ### v0.2.31 — 2026-08-16
 

@@ -12,6 +12,7 @@ describe("DemoRecognitionReview", () => {
     expect(html).toContain('for="demo-student-answer"');
     expect(html).toContain("请确认");
     expect(html).toContain("确认体验内容");
+    expect(html).not.toContain("识别结果确认");
     expect(html).toContain('aria-live="polite"');
     expect(html).not.toContain("/api/v1/");
     expect(html).not.toContain("assetId");

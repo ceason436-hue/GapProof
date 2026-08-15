@@ -321,7 +321,6 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
         <span>本次不会读取上传图片中的文字，也不会保存为正式学习记录</span>
       </div>
       <header className="case-review-heading">
-        <span className="status-chip">识别确认</span>
         <h1 id="case-review-title">查看并确认识别内容</h1>
         <p>请逐项核对题干，发现不准确的地方可以直接修改。这里不会显示答案或评分。</p>
       </header>

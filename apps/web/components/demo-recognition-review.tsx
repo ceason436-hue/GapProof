@@ -63,7 +63,6 @@ export function DemoRecognitionReview({ mode = "review" }: { mode?: DemoReviewMo
     <DemoBanner />
     <div className="demo-review-heading">
       <div>
-        <p className="eyebrow">识别结果确认</p>
         <h1 id="demo-review-title">确认图片中的内容</h1>
         <p>请检查预置内容，发现不准确的地方可以直接修改。本次体验不会保存为正式学习记录。</p>
       </div>
