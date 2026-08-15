@@ -11,6 +11,7 @@
     "screenshots:api": "node tests/real-api-visual-regression.mjs",
     "test:browser:d1": "node tests/d1-browser-fixture.mjs",
     "test:browser:upload": "node tests/source-upload-browser-fixture.mjs",
+    "test:browser:demo-review": "node tests/demo-review-browser-fixture.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

@@ -1,2 +1,18 @@
-import { RoutePlaceholder } from "@/components/route-placeholder";
-export default function ReviewPage() { return <RoutePlaceholder eyebrow="识别结果确认" title="确认图片中的内容" description="F0 不调用 OCR、不提交确认，也不根据示例生成学习结论。" nextHref="/student/today" nextLabel="返回今日"/>; }
+import { AppShell } from "@/components/app-shell";
+import { DemoRecognitionReview, type DemoReviewMode } from "@/components/demo-recognition-review";
+
+type ReviewPageProps = {
+  searchParams?: Promise<{ state?: string | string[] }>;
+};
+
+function resolveMode(state: string | string[] | undefined): DemoReviewMode {
+  const value = Array.isArray(state) ? state[0] : state;
+  return value === "empty" || value === "error" ? value : "review";
+}
+
+export default async function ReviewPage({ searchParams }: ReviewPageProps) {
+  const params: { state?: string | string[] } = searchParams ? await searchParams : {};
+  return <AppShell actionHref="/materials/new" actionLabel="重新上传材料">
+    <DemoRecognitionReview mode={resolveMode(params.state)} />
+  </AppShell>;
+}
