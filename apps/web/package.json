@@ -13,6 +13,7 @@
     "test:browser:d7": "node tests/d7-browser-fixture.mjs",
     "test:browser:guided-task": "node tests/guided-task-browser-fixture.mjs",
     "test:browser:upload": "node tests/source-upload-browser-fixture.mjs",
+    "test:browser:case-review": "node tests/same-case-review-browser-fixture.mjs",
     "test:browser:demo-review": "node tests/demo-review-browser-fixture.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"

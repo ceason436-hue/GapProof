@@ -6,6 +6,9 @@ import { SourceUpload } from "./source-upload";
 vi.mock("next/image", () => ({
   default: ({ alt }: { alt: string }) => createElement("img", { alt }),
 }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
 
 describe("SourceUpload component", () => {
   it("renders an accessible image picker and neutral initial state", () => {
@@ -22,5 +25,6 @@ describe("SourceUpload component", () => {
     expect(html).not.toContain("Bearer");
     expect(html).not.toContain("开始识别并创建案例");
     expect(html).not.toContain("合成 OCR 演示");
+    expect(html).not.toContain("查看并确认识别内容");
   });
 });

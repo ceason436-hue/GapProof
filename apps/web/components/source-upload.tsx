@@ -8,6 +8,7 @@ import {
   type SourceAssetProcessingView,
 } from "@gapproof/contracts";
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { apiPost, apiPut, ApiClientError } from "@/lib/api-client";
 import { createBrowserUuidV7 } from "@/lib/browser-uuidv7";
 import {
@@ -82,6 +83,7 @@ function UploadStatusMessage({ status, message }: { status: UploadStatus; messag
 }
 
 export function SourceUpload({ studentId }: { studentId: string }) {
+  const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const intentRef = useRef<UploadIntent | null>(null);
   const activeAbortRef = useRef<AbortController | null>(null);
@@ -93,6 +95,7 @@ export function SourceUpload({ studentId }: { studentId: string }) {
   const [guardianConfirmed, setGuardianConfirmed] = useState(false);
   const [startRecognitionStatus, setStartRecognitionStatus] = useState<StartRecognitionStatus>("idle");
   const [startRecognitionMessage, setStartRecognitionMessage] = useState("");
+  const [recognitionCaseId, setRecognitionCaseId] = useState<string | null>(null);
   const startIntentRef = useRef<ReturnType<typeof createSyntheticRecognitionIntent> | null>(null);
 
   useEffect(() => {
@@ -128,6 +131,7 @@ export function SourceUpload({ studentId }: { studentId: string }) {
     setGuardianConfirmed(false);
     setStartRecognitionStatus("idle");
     setStartRecognitionMessage("");
+    setRecognitionCaseId(null);
     setFile(nextFile);
     if (!nextFile) {
       setSafeState("idle", "请选择一张图片，再开始上传。支持 JPG、PNG 或 WebP，大小 1B–10MiB。");
@@ -179,6 +183,7 @@ export function SourceUpload({ studentId }: { studentId: string }) {
     try {
       const response = await startSyntheticRecognition(assetId, intent);
       if (response.data.assetId !== assetId) throw new Error("START_RECOGNITION_ASSET_MISMATCH");
+      setRecognitionCaseId(response.data.caseId);
       setStartRecognitionStatus("success");
       setStartRecognitionMessage(SYNTHETIC_RECOGNITION_SUCCESS);
     } catch (error) {
@@ -356,6 +361,7 @@ export function SourceUpload({ studentId }: { studentId: string }) {
     setGuardianConfirmed(false);
     setStartRecognitionStatus("idle");
     setStartRecognitionMessage("");
+    setRecognitionCaseId(null);
     setFile(null);
     setSafeState("idle", "请选择一张图片，再开始上传。支持 JPG、PNG 或 WebP，大小 1B–10MiB。");
     if (inputRef.current) inputRef.current.value = "";
@@ -453,6 +459,9 @@ export function SourceUpload({ studentId }: { studentId: string }) {
                 : null}
               {startRecognitionStatus === "success"
                 ? <p className="recognition-start-detail">{SYNTHETIC_RECOGNITION_SUCCESS_DETAIL}</p>
+                : null}
+              {startRecognitionStatus === "success" && recognitionCaseId
+                ? <button type="button" className="secondary-button recognition-review-link" onClick={() => router.push(`/materials/${recognitionCaseId}/review`)}>查看并确认识别内容</button>
                 : null}
               {startRecognitionStatus !== "success"
                 ? <a className="secondary-button recognition-return-link" href="/student/today">返回今日</a>
