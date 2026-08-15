@@ -2,15 +2,15 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.29"
+version: "0.3.30"
 status: "DRAFT_FOR_IMPLEMENTATION"
-last_updated: "2026-08-15"
+last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.36"
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.28"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.37"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.29"
 ---
 
 # 知隙 GapProof 技术设计文档（TDD）
@@ -1214,9 +1214,11 @@ Serverless 很适合短 API 和自动扩容，但 OCR、多轮模型、报告、
 - `/materials/demo/review` 是独立无网络合成页面，所有修改和“演示确认”只留在浏览器组件状态；受控 Fixture 断言零 `/api/v1` 请求并覆盖确认、空态、错误态和敏感内部字段缺席。它不消费上传 asset、不创建/推进 Case，与已实现的同一 Case `/materials/{caseId}/review` 严格分离。
 - 已冻结 `SyntheticExtractionView` 与 `GET /v1/cases/{caseId}/extraction`：只允许同一 Case 的 `awaiting_confirmation` 合成证据，返回 `stateVersion`、`recognitionSource:synthetic_fixture`、`uploadedAssetUsedForRecognition:false` 与公开题干，不暴露工具 warnings、答案键或内部置信度。确认仍使用既有 authoritative version、UUIDv7 幂等键、修正项越界校验与冲突保护。
 - `/materials/{caseId}/review` 以 1s→2s→3s 受控轮询读取同一 Case extraction；确认后依次调用 run-next、hypotheses、probe attempts 和下一次 run-next，导航到 Today guided。每个写入为独立 UUIDv7 意图；同 key/body 只重试一次未知结果，冲突先刷新再由用户重新确认，`NETWORK_UNKNOWN` 后锁定。
+- Today `overview.hasStartedJourney` 由服务端按学生是否存在未删除 Case 投影，前端据此区分首次使用与已有旅程但当前无任务。`GET /v1/quick-checks/synthetic` 仅返回 3 道 `synthetic_demo/original_fixture` 题目且不包含答案键；`POST /v1/quick-checks/synthetic/attempts` 使用 UUIDv7、同步 in-flight 锁和同 key/body 一次网络未知重试，服务端以私有答案确定性评分。结果强制 `learningRecordCreated:false`、`reportReady:false`，不创建 Case、学习证据或幂等数据库记录；最终未知后前端锁定，避免不确定请求被重复提交。
+- `/diagnose` 提供上传与三题合成检查双入口，`/diagnose/quick-check` 承载上述无记录体验；`/student/plan`、`/student/progress`、`/student/report` 只展示各自事实空状态，报告明确未开放。上传选图只在浏览器内生成缩略图和五步状态，不向 UI 暴露本地文件名、对象键、hash、token 或内部编号。
 - `bun run demo:stack` 可复现启动 Docker PostgreSQL、迁移/seed、API、Worker、Web 与 `.local/gapproof/uploads`；数据库默认显式使用 `127.0.0.1`，避免 Windows `localhost` 的 IPv4/IPv6 双监听歧义。Next dev 只允许启动脚本发现的本机 IPv4/localhost，不开放通配来源；签名 secret 每次运行随机生成且不输出。
 - `findLatestCaseEvidenceEventByType` 以 `occurred_at DESC, created_at DESC, UUIDv7 id DESC` 确定性选择最新证据，避免两次复测共享业务时钟时第二次 replan 误读第一次事件。
-- 当前证据为 140 条快速测试、58 条真实 PostgreSQL/API/Worker 集成测试、95 条 apps/web 测试、migration drift、上传/同一 Case review/guided/D1/D7/Demo 浏览器 Fixture、Mock/API/Demo 双视口、TypeScript 严格类型检查、Next.js production build、隐私扫描与真实栈烟测通过。
+- 当前证据为 146 条快速测试、59 条真实 PostgreSQL/API/Worker 集成测试、98 条 apps/web 测试、migration drift、上传/同一 Case review/Demo/guided/D1/D7/首次使用与三题检查浏览器 Fixture、普通与真实 API 双视口视觉回归、双 TypeScript 严格类型检查、Next.js production build、隐私扫描与真实栈烟测通过。
 
 该快照不等于真实 OCR Phase A 完成：真实图片字节可上传到受控本地目录，前端可经监护确认显式创建/绑定同一合成 Case、读取/确认该 Case 的 synthetic extraction 并继续规则化学习路径；但真实 OCR、真实 AI 干预、真实题库、通知、报告与真实模型 Provider 仍未实现。上传字节不参与 Fake OCR；合成确认页与重排仅是规则化工程骨架，不是现实识别或个性化内容。
 
@@ -1627,8 +1629,16 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-019 | 2026-08-15 | `main` | `pushed` | `feat: start synthetic recognition from inspected uploads` | 新增已检查 asset 的显式 `synthetic_demo` 启动契约/API：要求 `guardianConfirmed:true`，同事务创建并绑定唯一合成 Case、写幂等记录和排队 run-next；Job 固定 synthetic fixture，上传字节不参与 Fake OCR。source asset 自创建起保留期封顶 7 天；前端按钮、确认后 24h 缩短/主动删除、真实 OCR 仍未实现 | 131 条快速测试、57 条真实 PostgreSQL/API/Worker 集成测试、88 条 apps/web 测试、Drizzle migration drift、全仓及 web TypeScript、Next.js production build、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；同轮推送并核对本地/远端 SHA 一致 |
 | PUSH-020 | 2026-08-15 | `main` | `pushed` | `feat: complete explicit synthetic OCR acceptance flow` | 上传页仅在基础检查通过后显示监护确认与显式“开始识别并创建案例”；使用独立 UUIDv7、同 key/body 单次未知重试及最终锁定。成功仅声明合成 Case 已创建/识别已排队和上传图片未用于识别；不跳转旧 Demo、不泄露内部字段。按 DEC-OCR-ACCEPT-001 达到本轮项目本身初赛验收，真实 OCR/同一 Case 识别确认仍未实现 | 134 条快速测试、57 条真实 PostgreSQL/API/Worker 集成测试、91 条 apps/web 测试、Drizzle migration drift、上传/Demo/guided/D1/D7 浏览器 Fixture、Mock/API/Demo 及显式启动双视口、全仓及 web TypeScript、Next.js production build、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；同轮推送并核对本地/远端 SHA 一致 |
 | PUSH-021 | 2026-08-15 | `main` | `pushed` | `feat: complete same-case synthetic learning flow` | 发布同一 Case extraction 读取/修正/确认与诊断→guided→D1→D7 导航、`bun run demo:stack` 可复现真实 API 本地栈、局域网开发资源受限允许来源、`127.0.0.1` 数据库确定性，以及同时钟 replan 证据排序修复。真实字节只用于上传/基础检查，Fake OCR 仍使用 synthetic fixture；真实 OCR、删除策略和报告未提升 | 140 fast、58 PostgreSQL/API/Worker integration、95 apps/web、双 TypeScript、Next production build、migration drift、上传/同一 Case review/Demo/guided/D1/D7 浏览器 Fixture、Mock/API/真实 API 视觉、真实栈烟测、`git diff --check` 与敏感/隐私/暂存范围审计通过；代码批次已推至 `a0d1b79271355ec5b9aecbe81220c30edc64bbbe`，文档批次同轮推送后复核本地/远端一致 |
+| PUSH-022 | 2026-08-16 | `main` | `pushed` | `docs: record first-use diagnosis acceptance` | 发布真实 API Today 首次使用引导、上传/三题原创合成检查双入口、上传缩略图与五步状态、正确侧栏路由及计划/进步/报告事实空状态。三题检查固定不创建 Case、学习记录或报告；实现提交为 `647bf407abad7bc4ad788535d88b991600536ed9`。真实 OCR、真实个性化、真实学习效果、删除策略和异步报告未提升 | 146 fast、59 PostgreSQL/API/Worker integration、98 apps/web、双 TypeScript、Next production build、migration drift、上传/同一 Case review/Demo/guided/D1/D7/首次使用与三题检查 7 条浏览器主链、普通/真实 API 视觉、隐私扫描、真实栈烟测与暂存范围审计通过；本轮文档提交推送后核对本地 `main`、`origin/main` 与 GitHub refs 一致 |
 
 ## 27. 变更日志
+
+### v0.3.30 — 2026-08-16
+
+- 新增 Today `hasStartedJourney` 事实投影、首次使用双入口及不写记录的三题原创合成检查；公开契约固定不创建 Case、学习证据或报告，答案键只留在服务端。
+- 三题提交加入同步重复点击锁、UUIDv7、同 key/body 一次未知重试与最终锁定；上传缩略图/五步状态及学生侧栏事实空状态不暴露文件名或内部字段。
+- 146 fast、59 PostgreSQL/API/Worker integration、98 apps/web、双 TypeScript、Next production build、migration drift、7 条浏览器主链、双视觉回归、隐私扫描及真实栈烟测通过。
+- 同步 PROJECT_MASTER v0.1.37、PRD v0.1.29、DESIGN v0.2.27 与 PUSH-022；实现 SHA 为 `647bf407abad7bc4ad788535d88b991600536ed9`。真实 OCR、确认后 24h/主动删除、正式 30–50 页基准、派生留存、真实个性化/学习效果和异步报告保持 unresolved/deferred。
 
 ### v0.3.29 — 2026-08-15
 

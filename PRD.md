@@ -7,10 +7,10 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档状态 | Draft v0.1.28 |
+| 文档状态 | Draft v0.1.29 |
 | 产品名称 | 知隙 GapProof |
 | 文档角色 | 产品需求、业务流程、功能范围与验收标准 |
-| 当前阶段 | PUSH-021 已发布：真实 API 本地栈与同一 Case 合成识别确认、诊断、guided、D1、D7 可点击闭环完成；真实 OCR 与报告仍 unresolved/deferred |
+| 当前阶段 | PUSH-022 已发布：真实 API 首次使用引导、上传/三题合成检查双入口、上传状态可视化与学生侧栏事实空状态完成；真实 OCR、真实个性化与报告仍 unresolved/deferred |
 | 产品形态 | Web 应用 |
 | 目标教材 | 上海教育出版社《义务教育教科书（五·四学制）英语 八年级上册》 |
 | 适用版本 | 目标教材以 ISBN、当前 PDF 哈希和内容快照锁定；版权页不可取得，版次、印次和册次保持未知 |
@@ -252,6 +252,8 @@ MVP 基于用户确认且与当前教材 PDF 封底一致的教材 ISBN，并以
 ### 7.3 快速诊断流程
 
 没有试卷时，系统生成 5–8 道原创探针，覆盖候选技能。探针不追求考试完整性，只用于区分不同错因。
+
+当前 `[PROTOTYPE]` 为不写记录的三题体验切片：真实 API 返回 3 道 `original_fixture` 原创合成题，服务端用私有答案执行确定性规则评分；公开响应固定 `learningRecordCreated:false`、`reportReady:false`。它不创建 Case、不写学生学习结论，不等同于上述完整 5–8 题诊断、真实个性化或学习效果。
 
 示例：
 
@@ -500,6 +502,7 @@ Demo 界面或旁白必须明确区分：
 - `[PROTOTYPE]` ready D7 已复用同一 attempts 路由完成跨端安全作答与服务端确定性评分：Today 提交前读取权威 Case 版本，使用 UUIDv7、同 key/body 单次未知重试、冲突重新确认与未知结果锁定；通过进入 `repair_verified`，不会冒充 `report_ready`；失败按持久 `replan_count` 最多自动重排两次，再次失败进入 `support_required` 且不再入队。规则化合成内容不等于真实个性化或真实人工协助。
 - `[PROTOTYPE]` ready guided intervention 已可在 Today 勾选完整步骤并安全提交；使用权威 Case 版本、UUIDv7 幂等意图、冲突重新确认、独立 GET 恢复和网络未知锁定，完成后只声明安排 D+1，不声明掌握。
 - `[PROTOTYPE]` 学生端无参数入口走真实 API，只有显式 `?source=mock` 使用合成首页；Today overview、guided、ready D1/D7 安全作答和同一 Case review 均已通过受控浏览器门禁。写入使用共享 contracts、权威 Case 版本、UUIDv7、同 key/body 一次未知重试、冲突重新确认与 `NETWORK_UNKNOWN` 锁定；项目本身 P0 合成主闭环已完成，但不得称真实 OCR/真实学习闭环。
+- `[PROTOTYPE]` Today 以服务端 `hasStartedJourney` 区分无 Case 的首次使用与已有记录但当前无任务；首次使用页提供上传与三题合成检查双入口，不显示 Mock 任务。找原因、7 日计划、我的进步、学习报告均有真实路由和各自空状态；报告明确未开放。上传选择后显示有效缩略图与五步进度，但不显示本地文件名或内部存储事实。
 - `[PROTOTYPE]` 已实现 JPEG/PNG/WebP、1B–10MiB 的真实字节上传与基础检查；通过后页面要求监护确认并由精确“开始识别并创建案例”调用正式 API，原子创建/绑定同一合成 Demo Case并排队受守卫 Fake OCR。`GET /v1/cases/{caseId}/extraction` 与 `/materials/{caseId}/review` 随后读取、修正和确认同一 Case 的 synthetic fixture，并导航到既有诊断/干预。页面持续说明上传字节未用于识别，不返回对象键、token、内部文件名、hash、内部答案键或精确置信度；该能力不是生产 OSS、真实 OCR、真实个性化或学习效果。
 - `[PROTOTYPE]` Fake OCR 只允许 `simulation && synthetic` Demo Case，API 与 Worker 双重拒绝非 Demo 路径；同一 Case 确认写入沿用既有幂等和版本保护。独立 `/materials/demo/review` 仍保留为零网络 Fixture，不创建或推进 Case；真实 OCR Provider、真实图片区域展示和真实识别质量仍未实现。
 - 因此，以下验收项仍是完整 MVP 的目标，不因后端局部闭环而标记为 `[LIVE]`。
@@ -534,7 +537,7 @@ Demo 界面或旁白必须明确区分：
 - 学生能在首页理解今天做什么、为什么现在做、预计多久，以及下一次检查是什么；用语不得出现“探针”“学习证据”等内部术语。
 - 首页显示 7 天学习足迹、待确认事项、最近进展和下次检查；学习足迹的完成度使用蓝色深浅而非绿色，待确认与最近进展不把“已掌握”表述为绝对结论。
 - 本条为产品体验与设计验收要求；当前 F0/F1b、F1c ready D1 客户端作答、受控浏览器写入证据与真实 overview 已合并 `main`，无参数入口默认使用 API、Mock 仅显式启用；完整业务主流程尚未接通，功能完成仍需通过主流程、接口和测试验收。
-- 新用户首次进入今日页不得展示虚构的学习天数、进度、最近进展或下次检查；必须引导其进入第一次材料上传/快速检查，并在首次任务生成后切换到常规今日页。
+- 新用户首次进入今日页不得展示虚构的学习天数、进度、最近进展或下次检查；当前已由服务端 `hasStartedJourney:false` 驱动真实 API onboarding，明确提供材料上传与三题合成检查两条入口，并在存在 Case 后切换到已有旅程状态。
 
 ### 12.4 前端接口接入验收
 
@@ -656,6 +659,7 @@ PROJECT_MASTER.md
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
+| 0.1.29 | 2026-08-16 | 发布真实 API 首次使用 onboarding、上传/三题原创合成检查双入口、上传缩略图与五步状态、正确侧栏路由和计划/进步/报告事实空状态。快速检查固定不创建 Case、学习记录或报告；146 fast、59 integration、98 web 与完整门禁通过。同步 PROJECT_MASTER v0.1.37、TDD v0.3.30、DESIGN v0.2.27、PUSH-022；真实 OCR、真实个性化、学习效果、删除策略与异步报告仍 unresolved/deferred |
 | 0.1.28 | 2026-08-15 | 发布可复现真实 API 本地栈、同一 Case synthetic extraction 读取/修正/确认及诊断→guided→D1→D7 导航；修复局域网预览资源来源和同时钟 replan 证据确定性排序。140 fast、58 integration、95 web 与完整门禁通过；同步 PROJECT_MASTER v0.1.36、TDD v0.3.29、DESIGN v0.2.26、PUSH-021。真实 OCR、原图 24h/主动删除、30–50 页基准、派生留存和异步报告仍 unresolved/deferred |
 | 0.1.27 | 2026-08-15 | 发布上传页显式“开始识别并创建案例”、监护确认、合成/未使用上传图片披露、独立 UUIDv7 start intent、单次未知重试与锁定；成功仅表示合成 Case 创建/任务入队。按 DEC-OCR-ACCEPT-001 判定本轮项目本身初赛验收达到；同步 PROJECT_MASTER v0.1.35、TDD v0.3.28、DESIGN v0.2.25 与 PUSH-020。真实 OCR、同一 Case 识别确认、30–50 页基准、派生留存和异步报告仍 unresolved/deferred |
 | 0.1.26 | 2026-08-15 | 发布已检查 source asset 的显式 `synthetic_demo` 启动后端：要求监护确认，同事务创建/绑定唯一 Case、幂等排队受守卫 Fake OCR，上传字节不参与识别；原图保留期从上传起封顶 7 天。同步 PROJECT_MASTER v0.1.34、TDD v0.3.27、DESIGN v0.2.24 与 PUSH-019；前端按钮、识别确认后 24h 缩短/主动删除、真实 OCR、派生留存和异步报告仍未实现 |

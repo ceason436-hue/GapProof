@@ -2,10 +2,10 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.26"
+version: "0.2.27"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "PUSH-021 已发布：真实 API 本地栈与同一 Case 合成识别确认、诊断、guided、D1、D7 可点击闭环完成；真实 OCR 与报告仍 unresolved/deferred"
-last_updated: "2026-08-15"
+current_design_stage: "PUSH-022 已发布：真实 API 首次使用引导、上传/三题合成检查双入口、上传状态可视化与学生侧栏事实空状态完成；真实 OCR、真实个性化与报告仍 unresolved/deferred"
+last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
@@ -86,9 +86,9 @@ upstream_documents:
 
 ### 0.3.2 当前阶段与下一步
 
-**已完成**：学生端“今日”页桌面视觉结构与 Stitch V1.1 冻结裁切保持不变；默认 API、真实 Today overview、ready guided、D1、D7 安全作答均已通过门禁。`/materials/new` 已完成真实单图选择、上传、基础检查、监护确认与显式创建/绑定同一合成 Case；`/materials/{caseId}/review` 读取、修正和确认同一 Case 的 synthetic extraction，并继续诊断、确认小题、干预与 Today。写入使用权威 Case 版本、共享 contracts、UUIDv7、冲突重新确认和 `NETWORK_UNKNOWN` 锁定；合成 Mock 仅显式启用，独立 `/materials/demo/review` 仍是零网络 Fixture。
+**已完成**：学生端“今日”页桌面视觉结构与 Stitch V1.1 冻结裁切保持不变；默认 API、真实 Today overview、ready guided、D1、D7 安全作答均已通过门禁。服务端 `hasStartedJourney:false` 时显示真实首次使用引导，提供“上传材料”和“三题快速检查”两条入口；上传选择后显示缩略图、类型/大小与五步状态。`/diagnose`、`/diagnose/quick-check` 及 `/student/plan`、`/student/progress`、`/student/report` 已具备正确路由、侧栏选中态和事实空状态，报告明确未开放。`/materials/new` 已完成真实单图选择、上传、基础检查、监护确认与显式创建/绑定同一合成 Case；`/materials/{caseId}/review` 读取、修正和确认同一 Case 的 synthetic extraction，并继续诊断、确认小题、干预与 Today。写入使用权威 Case 版本、共享 contracts、UUIDv7、冲突重新确认和 `NETWORK_UNKNOWN` 锁定；合成 Mock 仅显式启用，独立 `/materials/demo/review` 仍是零网络 Fixture。
 
-**尚未完成**：真实模糊度、方向、缺页与恶意文件检查，阿里云真实 OCR、原图确认后 24h/主动删除、真实图片题目区域展示、其他学生/家长页面、Logo 紧裁/SVG/Favicon 与最终品牌规范。异步报告本轮 deferred。
+**尚未完成**：三题检查仍是无记录的原创合成 Fixture，不是完整 5–8 题诊断、真实个性化或学习效果；真实模糊度、方向、缺页与恶意文件检查，阿里云真实 OCR、原图确认后 24h/主动删除、真实图片题目区域展示、学生/家长非空数据页面、Logo 紧裁/SVG/Favicon 与最终品牌规范。异步报告本轮 deferred。
 
 **下一步**：项目本身 P0 合成纵向闭环已达到；暂停扩展并由用户选择 P1，优先候选为真实 OCR Provider Spike、原图删除/主动删除或现场 Demo 健康与故障恢复。任何新字段不得从视觉稿或合成 Fixture 反推业务状态。
 
@@ -612,6 +612,8 @@ Tab 规则：
 - 右侧改为“开始前你需要准备”卡：学习材料示例、预计耗时 5–8 分钟、隐私提示和“可以稍后补充材料”。不显示本周学习足迹矩阵、完成天数、稍后继续或下次检查。
 - 下方可保留两张浅色说明卡：`你会得到什么`（找到可能卡住的地方、安排短任务）和 `你可以随时暂停`。不使用绿色完成状态，不放“最近进展”。
 - 左侧导航仍显示五个入口，但“今日”保持蓝色选中；底部固定按钮文案为 `开始第一次检查`，与主卡进入同一流程。添加材料和快速检查也可从主卡进入。
+
+当前实现由服务端 `hasStartedJourney:false` 驱动该状态，主卡直接呈现两个清晰入口：上传材料进入 `/materials/new`，三题快速检查进入 `/diagnose/quick-check`。三题页持续标注“原创合成题、规则评分、不创建学习记录或报告”；提交中禁止重复点击，网络结果未知时锁定并提示稍后恢复。上传预览不得显示本地文件名，只显示有效缩略图、类型/大小和稳定的五步进度。
 
 首次进入页面的交互状态：
 
@@ -1778,6 +1780,13 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 ---
 
 ## 22. 版本记录
+
+### v0.2.27 — 2026-08-16
+
+- 发布真实 API 首次使用 onboarding：依据服务端 `hasStartedJourney` 呈现上传材料与三题合成检查双入口，不复用或虚构 Mock 学习数据。
+- 上传选图后显示有效缩略图、类型/大小和五步进度；`/diagnose`、计划、进步与报告使用正确侧栏路由和各自事实空状态，报告明确未开放。
+- 三题页持续披露原创合成 Fixture、规则评分及不创建 Case/学习记录/报告；重复提交与网络未知状态使用锁定反馈，不展示答案键、文件名、token、对象键、hash 或内部编号。
+- 同步 PROJECT_MASTER v0.1.37、PRD v0.1.29、TDD v0.3.30 与 PUSH-022；146 fast、59 integration、98 web、完整浏览器/视觉/构建门禁通过。真实 OCR、真实个性化、学习效果、删除策略与异步报告仍 unresolved/deferred。
 
 ### v0.2.26 — 2026-08-15
 
