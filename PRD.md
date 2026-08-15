@@ -7,10 +7,10 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档状态 | Draft v0.1.22 |
+| 文档状态 | Draft v0.1.23 |
 | 产品名称 | 知隙 GapProof |
 | 文档角色 | 产品需求、业务流程、功能范围与验收标准 |
-| 当前阶段 | PUSH-015 真实确定性图片基础检查闭环已通过最终门禁并发布；下一步继续 OCR/识别确认最小切片 |
+| 当前阶段 | PUSH-016 合成识别确认演示与 Fake OCR Demo 守卫已通过最终门禁并发布；真实识别接口仍待冻结 |
 | 产品形态 | Web 应用 |
 | 目标教材 | 上海教育出版社《义务教育教科书（五·四学制）英语 八年级上册》 |
 | 适用版本 | 目标教材以 ISBN、当前 PDF 哈希和内容快照锁定；版权页不可取得，版次、印次和册次保持未知 |
@@ -496,6 +496,7 @@ Demo 界面或旁白必须明确区分：
 - `[PROTOTYPE]` D+1 ready 任务现可通过共享 `POST /v1/tasks/{taskId}/attempts` 契约提交客观选择并由服务端私有答案确定性评分；通过时创建 D7 调度，失败时事务内入队异步重排。当前题目与重排内容仍为明确标记的合成 Fixture，不是现实题库或真实个性化效果。
 - `[PROTOTYPE]` 学生端“今日”页 F0 Mock、F1b 只读 API、F1c ready D1 客户端作答与真实 overview 已通过对应构建和自动化门禁；F1c 使用共享 attempts contracts、权威 Case 版本、UUIDv7 幂等意图和受控错误状态。受控 HTTP 浏览器 Fixture 已覆盖真实点击成功、`VERSION_CONFLICT` 重新确认与 `NETWORK_UNKNOWN` 锁定三条路径；无参数入口现走真实 API，只有显式 `?source=mock` 使用合成页面，但仍不能作为主闭环完成证据。
 - `[PROTOTYPE]` 已实现 JPEG/PNG/WebP、1B–10MiB 的真实字节上传与确定性图片基础检查闭环：`/materials/new` 计算 SHA-256，以 UUIDv7 固定一次上传/prepare 意图，经同源 API PUT 同一原始字节并读取异步状态；服务端校验归属、MIME/大小/hash，原子落盘后由 `source_asset.quality_check` Worker 重新读取并验证字节，解析 header/尺寸，将 `uploaded → queued → processing → succeeded/needs_confirmation/failed/retryable_error` 结果持久化。页面不显示对象键、token、内部 ID、文件名、hash 或 OCR 内容。该能力仅是本地 Demo 存储与 `image-header-v1` 检查器，不是生产 S3、完整模糊/方向/缺页检测、OCR、识别确认、Case 创建或真实学习效果；真实 AI 干预、完整 7 日计划、D+7 作答与评分、可执行的失败重排上限、学生/家长报告及前端主闭环仍未实现。
+- `[PROTOTYPE]` 遗留 Fake OCR 只允许 `simulation && synthetic` 的 Demo Case，API 与 Worker 双重拒绝非 Demo 路径。`/materials/demo/review` 是明确标注的无网络合成识别确认演示：允许本地修正和记录演示确认，提供空态/错误态，但不调用 `/api/v1`、不启动 OCR、不创建或推进 Case、不生成学习结论。真实上传到 Case 的绑定、识别结果读取 DTO 与确认写入仍未实现。
 - 因此，以下验收项仍是完整 MVP 的目标，不因后端局部闭环而标记为 `[LIVE]`。
 
 ### 12.1 主流程验收
@@ -650,6 +651,7 @@ PROJECT_MASTER.md
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
+| 0.1.23 | 2026-08-15 | 发布受 `simulation && synthetic` 双重守卫的遗留 Fake OCR 与 `/materials/demo/review` 无网络合成识别确认演示；浏览器 Fixture 证明零 `/api/v1`、本地确认、空/错态和脱敏边界。明确不是真实 OCR、上传到 Case 绑定或学习效果；同步 PROJECT_MASTER v0.1.31、TDD v0.3.24、DESIGN v0.2.21 与 PUSH-016，D7/报告/重排产品决策继续暂停 |
 | 0.1.22 | 2026-08-15 | 发布真实确定性图片基础检查闭环：prepare/status contracts、幂等异步 Job、存储字节复核、JPEG/PNG/WebP header/尺寸解析、质量状态持久化及受控前端轮询；明确不是 OCR/完整图片质量模型/生产 S3/学习效果，D7/报告/重排产品决策继续暂停；同步 PROJECT_MASTER v0.1.30、TDD v0.3.23、DESIGN v0.2.20 与 PUSH-015 |
 | 0.1.21 | 2026-08-15 | 发布真实图片字节上传最小闭环：共享 contracts、幂等创建、短期 HMAC token、本地目录原子落盘、前端 SHA-256/UUIDv7/受控重试与脱敏成功状态；明确不是生产 S3/OCR/学习效果，D7/报告/完整闭环仍未完成；同步 PROJECT_MASTER v0.1.29、TDD v0.3.22、DESIGN v0.2.19 与 PUSH-014 |
 | 0.1.20 | 2026-08-15 | Today 默认入口切换为真实 API、Mock 仅显式启用；新增 source_assets 数据/迁移基础但未实现真实上传，D7/报告/完整闭环仍未完成；同步 PROJECT_MASTER v0.1.28、TDD v0.3.21、DESIGN v0.2.18 与 PUSH-013 |

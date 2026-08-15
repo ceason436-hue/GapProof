@@ -2,15 +2,15 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.23"
+version: "0.3.24"
 status: "DRAFT_FOR_IMPLEMENTATION"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.30"
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.22"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.31"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.23"
 ---
 
 # 知隙 GapProof 技术设计文档（TDD）
@@ -1205,8 +1205,10 @@ Serverless 很适合短 API 和自动扩容，但 OCR、多轮模型、报告、
 - 已实现任务详情、Today `timeZone/currentTaskId/overview` 与 guided/D1/D7 判别联合；`currentTaskId` 仅选择 ready D1/guided，overview 为真实只读投影，D7 在 attempts 未实现前保持只读。
 - 已实现 D1 `POST /v1/tasks/{taskId}/attempts`：私有 `exact-choice-v1` 评分、`retest_evaluated(kind=d1)`、D7 144h + 12h 调度、失败事务内 `case.replan` Job、Worker 异步合成干预骨架，以及迁移 `0005_flawless_omega_flight.sql`。幂等重放、并发去重、乐观锁、事务回滚与公开响应脱敏均有测试。
 - 已实现 `app.source_assets`、冻结 `asset_type/asset_processing_status` 与 0006/0007 migrations；共享上传/prepare/status contracts、幂等 API、HMAC 短期 token、同源内容 PUT、本地目录 StorageAdapter、`source_asset.quality_check` Worker 与前端 `/materials/new` 已形成真实字节上传和确定性图片基础检查闭环。数据库保存必要对象元数据、质量 JSON 与更新时间，文件名不入库，公开响应不暴露对象键/token/文件名/hash/OCR 内容；本地目录适配器与 `image-header-v1` 不是生产 S3、完整图片质量模型或 OCR，也不创建 Case 或学习结论。
+- 遗留 `run-next` Fake OCR 现只允许 `simulation=true && synthetic=true` 的 Demo Case：API 在入队前拒绝，Worker 在执行前再次拒绝；非 Demo 返回 `DEMO_CASE_REQUIRED` 且不入队、不写证据。该路径仍是固定合成 asset 的 `fake_ocr` / `fake-parse-paper-v1`，不是 OCR Provider。
+- `/materials/demo/review` 是独立无网络合成页面，所有修改和“演示确认”只留在浏览器组件状态；受控 Fixture 断言零 `/api/v1` 请求并覆盖确认、空态、错误态和敏感内部字段缺席。它不消费上传 asset、不创建/推进 Case，也不替代待冻结的 extraction read DTO 与确认写入接口。
 - F0 Mock、F1b 只读 API、F1c ready D1 客户端作答与真实 overview 已完成对应技术门禁并合并 `main`；无参数入口默认使用 API，Mock 仅显式启用。F1c 消费共享 contracts、权威 Case 版本和 UUIDv7 幂等意图，受控 HTTP 浏览器 Fixture 已验证同源 POST、成功脱敏回显、冲突重新确认和网络未知锁定。
-- 当前证据为 116 条快速测试通过、49 条真实 PostgreSQL/API/Worker 集成测试连续两轮通过、70 条 apps/web 测试通过、migration drift、Mock/API/图片检查双视口、图片检查与 D1 浏览器 Fixture、TypeScript 严格类型检查和 Next.js production build 通过。
+- 当前证据为 121 条快速测试、50 条真实 PostgreSQL/API/Worker 集成测试、73 条 apps/web 测试、migration drift、Mock/API/Demo 双视口、Demo/上传/D1 浏览器 Fixture、TypeScript 严格类型检查和 Next.js production build 通过。
 
 该快照不等于 Phase A 完成：真实图片字节虽可上传到受控本地目录，但生产对象存储、真实 OCR/识别确认、真实 AI 干预、真实题库、D7 作答评分、可执行的重排上限和差异化真实重排内容、通知、报告、真实模型 Provider 和上传到修复证明的完整端到端 Playwright Demo 仍未实现。
 
@@ -1604,8 +1606,15 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-013 | 2026-08-15 | `main` | `pushed` | `feat: default Today to API and persist source asset metadata` | Today 无参数入口默认进入真实 API、Mock 仅由 `?source=mock` 显式启用；新增 `app.source_assets`、冻结枚举与 0006 migration，只存对象元数据/所有权/保留期/处理状态，不含文件字节、OCR 文本或答案；真实上传/StorageAdapter/D7/报告仍未完成 | 85 条快速测试、44 条真实 PostgreSQL/API/Worker 集成测试、56 条 apps/web 测试、Drizzle migration drift、Mock/API 双视口、D1 浏览器 Fixture、全仓 TypeScript、Next.js production build、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；须在同轮推送并核对本地/远端 SHA 一致 |
 | PUSH-014 | 2026-08-15 | `main` | `pushed` | `feat: upload source asset bytes safely` | 冻结上传 contracts；实现幂等创建、10 分钟 HMAC token、同源原始字节 PUT、实际 MIME/大小/hash 校验、本地目录原子落盘与 `pending_upload → uploaded`；`/materials/new` 使用 SHA-256、UUIDv7 和同 key/token 单次未知结果重试，成功页明确识别尚未开始。仅为本地 Demo StorageAdapter，不是生产 S3/OCR/学习效果；D7/报告/重排产品决策继续暂停 | 96 条快速测试、46 条真实 PostgreSQL/API/Worker 集成测试（Today 时间 fixture 确定性修复后连续两轮通过）、62 条 apps/web 测试、Drizzle migration drift、Mock/API 双视口、上传与 D1 浏览器 Fixture、上传双视口截图、全仓 TypeScript、Next.js production build、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；同轮推送并核对本地/远端 SHA 一致 |
 | PUSH-015 | 2026-08-15 | `main` | `pushed` | `feat: inspect uploaded source images safely` | 冻结 prepare/status/quality/job contracts；实现幂等 `source_asset.quality_check`、Worker 存储读取与 size/hash 复核、JPEG/PNG/WebP header/尺寸解析、guarded 状态和 0007 migration；前端复用 UUIDv7 意图、受控轮询并显示脱敏质量状态。仅为确定性基础检查，不是 OCR/完整图片质量模型/生产 S3/学习效果；D7/报告/重排产品决策继续暂停 | 116 条快速测试、49 条真实 PostgreSQL/API/Worker 集成测试连续两轮、70 条 apps/web 测试、Drizzle migration drift、Mock/API/图片检查双视口、图片检查与 D1 浏览器 Fixture、全仓 TypeScript、Next.js production build、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；同轮推送并核对本地/远端 SHA 一致 |
+| PUSH-016 | 2026-08-15 | `main` | `pushed` | `feat: guard and demonstrate synthetic recognition review` | 遗留 Fake OCR 仅允许 `simulation && synthetic` Demo Case，API/Worker 双重守卫；新增 `/materials/demo/review` 无网络合成识别确认演示、本地编辑/确认、空态和错误态。仍为 `fake_ocr` 与合成页面，不是真实 OCR、上传到 Case 绑定、识别写入或学习效果；D7/报告/重排产品决策继续暂停 | 121 条快速测试、50 条真实 PostgreSQL/API/Worker 集成测试、73 条 apps/web 测试、Drizzle migration drift、Demo/上传/D1 浏览器 Fixture、Mock/API/Demo 双视口、全仓 TypeScript、Next.js production build、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；同轮推送并核对本地/远端 SHA 一致 |
 
 ## 27. 变更日志
+
+### v0.3.24 — 2026-08-15
+
+- 将遗留 Fake OCR 的 `run-next` 路径限定到 `simulation && synthetic` Demo Case，并在 API 入队前与 Worker 执行时双重守卫；保持 `fake_ocr` / `fake-parse-paper-v1` 的事实标签。
+- 登记 `/materials/demo/review` 无网络合成页面及其零 `/api/v1` 浏览器证据；本地编辑/确认不消费上传 asset、不写 Case、不生成学习结论。
+- 同步 PROJECT_MASTER v0.1.31、PRD v0.1.23、DESIGN v0.2.21 与 PUSH-016；121 fast、50 integration、73 apps/web、migration drift、Mock/API/Demo 视觉、Demo/上传/D1 浏览器 Fixture、全仓 TypeScript 与 Next build 通过。
 
 ### v0.3.23 — 2026-08-15
 
