@@ -7,10 +7,10 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档状态 | Draft v0.1.21 |
+| 文档状态 | Draft v0.1.22 |
 | 产品名称 | 知隙 GapProof |
 | 文档角色 | 产品需求、业务流程、功能范围与验收标准 |
-| 当前阶段 | PUSH-014 真实图片字节上传闭环已通过最终门禁并发布；下一步继续上传后的识别/OCR 最小切片 |
+| 当前阶段 | PUSH-015 真实确定性图片基础检查闭环已通过最终门禁，待同轮推送；下一步继续 OCR/识别确认最小切片 |
 | 产品形态 | Web 应用 |
 | 目标教材 | 上海教育出版社《义务教育教科书（五·四学制）英语 八年级上册》 |
 | 适用版本 | 目标教材以 ISBN、当前 PDF 哈希和内容快照锁定；版权页不可取得，版次、印次和册次保持未知 |
@@ -246,7 +246,7 @@ MVP 基于用户确认且与当前教材 PDF 封底一致的教材 ISBN，并以
 5. 系统展示“识别到了什么”，再进入诊断。
 6. 比赛 Demo 中，复杂识别情况允许回退到预置结果，但必须明确标识为 Demo 回退。
 
-当前 `[PROTOTYPE]` 只完成上述流程的“选择图片并安全上传字节”前置段：JPEG/PNG/WebP、1B–10MiB，浏览器计算 SHA-256，经短期授权 PUT 原始字节；成功后明确显示“上传完成，识别尚未开始”。图片质量检查、OCR、低置信确认与诊断仍未接通，不得因上传成功宣称已识别或已形成学习结论。
+当前 `[PROTOTYPE]` 已完成上述流程的“选择图片、安全上传字节、确定性基础检查”前置段：JPEG/PNG/WebP、1B–10MiB，浏览器计算 SHA-256，经短期授权 PUT 原始字节；异步 Worker 重新校验存储字节大小/hash，并解析图片 header/尺寸，识别 MIME 不匹配、截断/非法图片、超过 1 亿像素及低于 640×480 的低分辨率。它不检测真实模糊度、方向或缺页，也未接入 OCR、低置信识别确认与诊断；不得因基础检查通过宣称已识别或已形成学习结论。
 
 ### 7.3 快速诊断流程
 
@@ -495,7 +495,7 @@ Demo 界面或旁白必须明确区分：
 - `[PROTOTYPE]` D+1 任务通过事务内 `retest.due` 延迟 Job 和生产 Worker 到期激活；Demo 可在受环境开关保护的虚拟时钟接口中按 Case 快进。到期仅把任务从 `scheduled` 改为 `ready`，Case 仍为 `d1_scheduled`、mastery 仍为 `pending_retest`。
 - `[PROTOTYPE]` D+1 ready 任务现可通过共享 `POST /v1/tasks/{taskId}/attempts` 契约提交客观选择并由服务端私有答案确定性评分；通过时创建 D7 调度，失败时事务内入队异步重排。当前题目与重排内容仍为明确标记的合成 Fixture，不是现实题库或真实个性化效果。
 - `[PROTOTYPE]` 学生端“今日”页 F0 Mock、F1b 只读 API、F1c ready D1 客户端作答与真实 overview 已通过对应构建和自动化门禁；F1c 使用共享 attempts contracts、权威 Case 版本、UUIDv7 幂等意图和受控错误状态。受控 HTTP 浏览器 Fixture 已覆盖真实点击成功、`VERSION_CONFLICT` 重新确认与 `NETWORK_UNKNOWN` 锁定三条路径；无参数入口现走真实 API，只有显式 `?source=mock` 使用合成页面，但仍不能作为主闭环完成证据。
-- `[PROTOTYPE]` 已实现 JPEG/PNG/WebP、1B–10MiB 的真实字节上传最小闭环：`/materials/new` 计算 SHA-256，以 UUIDv7 固定一次上传意图，经同源 API 创建短期授权并 PUT 同一原始字节；服务端校验学生/Case 归属、MIME/大小/hash，将字节原子写入受控本地目录并把 `source_assets` 从 `pending_upload` 更新为 `uploaded`。文件名不入库，公开响应和成功页不显示对象键、token、内部 ID 或文件名。该能力仅是本地 Demo 存储，不是生产 S3、OCR、识别确认、Case 创建或真实学习效果；真实 AI 干预、完整 7 日计划、D+7 作答与评分、可执行的失败重排上限、学生/家长报告及前端主闭环仍未实现。
+- `[PROTOTYPE]` 已实现 JPEG/PNG/WebP、1B–10MiB 的真实字节上传与确定性图片基础检查闭环：`/materials/new` 计算 SHA-256，以 UUIDv7 固定一次上传/prepare 意图，经同源 API PUT 同一原始字节并读取异步状态；服务端校验归属、MIME/大小/hash，原子落盘后由 `source_asset.quality_check` Worker 重新读取并验证字节，解析 header/尺寸，将 `uploaded → queued → processing → succeeded/needs_confirmation/failed/retryable_error` 结果持久化。页面不显示对象键、token、内部 ID、文件名、hash 或 OCR 内容。该能力仅是本地 Demo 存储与 `image-header-v1` 检查器，不是生产 S3、完整模糊/方向/缺页检测、OCR、识别确认、Case 创建或真实学习效果；真实 AI 干预、完整 7 日计划、D+7 作答与评分、可执行的失败重排上限、学生/家长报告及前端主闭环仍未实现。
 - 因此，以下验收项仍是完整 MVP 的目标，不因后端局部闭环而标记为 `[LIVE]`。
 
 ### 12.1 主流程验收
@@ -650,6 +650,7 @@ PROJECT_MASTER.md
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
+| 0.1.22 | 2026-08-15 | 发布真实确定性图片基础检查闭环：prepare/status contracts、幂等异步 Job、存储字节复核、JPEG/PNG/WebP header/尺寸解析、质量状态持久化及受控前端轮询；明确不是 OCR/完整图片质量模型/生产 S3/学习效果，D7/报告/重排产品决策继续暂停；同步 PROJECT_MASTER v0.1.30、TDD v0.3.23、DESIGN v0.2.20 与 PUSH-015 |
 | 0.1.21 | 2026-08-15 | 发布真实图片字节上传最小闭环：共享 contracts、幂等创建、短期 HMAC token、本地目录原子落盘、前端 SHA-256/UUIDv7/受控重试与脱敏成功状态；明确不是生产 S3/OCR/学习效果，D7/报告/完整闭环仍未完成；同步 PROJECT_MASTER v0.1.29、TDD v0.3.22、DESIGN v0.2.19 与 PUSH-014 |
 | 0.1.20 | 2026-08-15 | Today 默认入口切换为真实 API、Mock 仅显式启用；新增 source_assets 数据/迁移基础但未实现真实上传，D7/报告/完整闭环仍未完成；同步 PROJECT_MASTER v0.1.28、TDD v0.3.21、DESIGN v0.2.18 与 PUSH-013 |
 | 0.1.19 | 2026-08-15 | 合并 Today overview 的共享契约、真实只读 API 投影与前端消费；空目标/空进展不造数、缺失 overview 不回退 Mock，默认入口仍为 Mock、D7/报告/完整闭环未完成；同步 PROJECT_MASTER v0.1.27、TDD v0.3.20、DESIGN v0.2.17 与 PUSH-012 |

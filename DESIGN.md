@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.19"
+version: "0.2.20"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "PUSH-014 真实图片上传页面已通过最终门禁并发布；下一步继续上传后的识别/OCR 最小切片"
+current_design_stage: "PUSH-015 真实确定性图片基础检查页面已通过最终门禁，待同轮推送；下一步继续 OCR/识别确认最小切片"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -86,11 +86,11 @@ upstream_documents:
 
 ### 0.3.2 当前阶段与下一步
 
-**已完成**：学生端“今日”页的桌面视觉结构、颜色角色、主要卡片层级和关键静态内容已确定；F0/F1b、F1c 及真实 Today overview 已完成对应构建和自动化门禁。F1c 只为服务端当前 ready D1 增加安全作答，使用权威 Case 版本、共享 contracts 和 UUIDv7 幂等意图；受控 HTTP 浏览器 Fixture 已覆盖成功、冲突和网络未知三条真实页面交互路径。无参数入口现展示服务端 7 日足迹、nullable 周目标、待确认数、脱敏进展与下次检查；合成 Mock 仅显式启用。`/materials/new` 已完成真实单图选择、校验、上传与中性成功状态，并通过 1440×900/1366×768 截图及浏览器 Fixture。
+**已完成**：学生端“今日”页的桌面视觉结构、颜色角色、主要卡片层级和关键静态内容已确定；F0/F1b、F1c 及真实 Today overview 已完成对应构建和自动化门禁。F1c 只为服务端当前 ready D1 增加安全作答，使用权威 Case 版本、共享 contracts 和 UUIDv7 幂等意图；受控 HTTP 浏览器 Fixture 已覆盖成功、冲突和网络未知三条真实页面交互路径。无参数入口现展示服务端 7 日足迹、nullable 周目标、待确认数、脱敏进展与下次检查；合成 Mock 仅显式启用。`/materials/new` 已完成真实单图选择、校验、上传、异步基础检查与中性成功/需确认/失败状态，并通过 1440×900/1366×768 截图及浏览器 Fixture。
 
-**尚未完成**：上传后的图片质量检查、OCR/识别确认页面写入；其他学生 P0 页面、家长端页面、Logo 紧裁/SVG/Favicon 与最终品牌规范、完整交互原型。D7 作答、报告及其页面仍未实现。
+**尚未完成**：真实模糊度、方向、缺页与恶意文件检查，OCR/识别确认页面写入；其他学生 P0 页面、家长端页面、Logo 紧裁/SVG/Favicon 与最终品牌规范、完整交互原型。D7 作答、报告及其页面仍未实现。
 
-**下一步**：从已发布的上传完成状态推进图片质量/OCR/识别确认的下一最小切片；D7 继续只读。任何新字段须先由共享 contracts 与 TDD 冻结，不从视觉稿或 Fixture 反推业务状态。
+**下一步**：从已验证的图片基础检查状态推进 OCR/识别确认的下一最小切片；D7 继续只读。任何新字段须先由共享 contracts 与 TDD 冻结，不从视觉稿或 Fixture 反推业务状态。
 
 ### 0.4 设计底线
 
@@ -480,7 +480,7 @@ Tab 规则：
 
 **主操作**：“检查图片内容”。
 
-当前 `[PROTOTYPE]` 页面只开放单张 JPEG/PNG/WebP、1B–10MiB 的“开始上传”。上传期间锁定重复提交；成功状态只显示“上传完成，识别尚未开始，不会自动生成学习结论”，并允许重新选择。页面不得显示短期 token、对象键、内部 asset ID 或服务端文件名；当前还不能展示“检查图片内容”为可执行操作。
+当前 `[PROTOTYPE]` 页面开放单张 JPEG/PNG/WebP、1B–10MiB 的“开始上传”。上传期间锁定重复提交；上传后自动进入基础检查，依次展示 preparing/queued/processing，并在 30 秒内按 1s→2s→3s 读取权威状态；隐藏或离页停止轮询。低分辨率等确定性原因进入需确认，失败/可重试/超时均有中性恢复文案；成功只显示“图片基础检查通过，识别尚未开始，不会自动生成学习结论”，并允许重新选择。页面不得显示短期 token、对象键、内部 asset ID、服务端文件名、hash、OCR 文本或置信度；当前还不能进入 `/materials/:id/review` 或展示 OCR 结果。
 
 **错误文案示例**：
 
@@ -1640,7 +1640,7 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 
 ### 18.0 当前设计基线
 
-- `[PROTOTYPE]` 学生端“今日”页桌面视觉基线已选定，规范见 5.6.1；前端 F0/F1b、F1c ready D1 客户端作答、真实 overview 及受控 HTTP 浏览器 Fixture 已完成对应门禁并合并 `main`。`/materials/new` 也已形成真实单图字节上传和脱敏成功状态，并有双视口截图与浏览器交互证据；识别/OCR 尚未开始，因此仍无上传到修复证明的完整端到端页面写入证据。
+- `[PROTOTYPE]` 学生端“今日”页桌面视觉基线已选定，规范见 5.6.1；前端 F0/F1b、F1c ready D1 客户端作答、真实 overview 及受控 HTTP 浏览器 Fixture 已完成对应门禁并合并 `main`。`/materials/new` 也已形成真实单图字节上传、异步确定性基础检查和脱敏结果状态，并有双视口截图与浏览器交互证据；OCR/识别确认尚未开始，因此仍无上传到修复证明的完整端到端页面写入证据。
 - `[PLANNED]` 其余学生 P0 页面、家长端 P0 页面和评委最小演示页仍需在同一视觉系统下完成设计。
 - 任何后续页面必须沿用：连续白色顶部框架、`#0036FF` 的导航/进度角色、`#B5F800` 的行动/积极变化角色、自然学生用语、单一主操作和轻量立体感。
 
@@ -1770,6 +1770,12 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 ---
 
 ## 22. 版本记录
+
+### v0.2.20 — 2026-08-15
+
+- `/materials/new` 在真实上传后加入 preparing/queued/processing/needs_confirmation/succeeded/retryable_error/failed/timeout 状态，隐藏/离页停止轮询；成功文案固定为“图片基础检查通过，识别尚未开始”。
+- 浏览器 Fixture 覆盖 prepare/GET 状态链、直接 processing/final、低分辨率、失败/可重试、POST/PUT/GET 网络未知、30 秒超时、隐藏取消、无效文件及同 key/body/token/bytes 重试；新增 1440×900 与 1366×768 基础检查成功截图。
+- 公开 UI 不显示 asset ID、token、对象键、文件名、hash、OCR 文本或置信度；保持 Stitch V1.1 深色卡书本越界裁切不变。同步 PROJECT_MASTER v0.1.30、PRD v0.1.22、TDD v0.3.23 与 PUSH-015；D7/报告/重排产品决策继续暂停。
 
 ### v0.2.19 — 2026-08-15
 

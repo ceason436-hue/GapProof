@@ -2,15 +2,15 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.22"
+version: "0.3.23"
 status: "DRAFT_FOR_IMPLEMENTATION"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.29"
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.21"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.30"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.22"
 ---
 
 # 知隙 GapProof 技术设计文档（TDD）
@@ -908,6 +908,8 @@ demo      合成 Case 和虚拟时钟，仅 Demo 环境
 
 `[PROTOTYPE]` 当前最小实现使用 `SourceAssetStorage` 与 `LocalDirectorySourceAssetStorage`，只有同时配置 `GAPPROOF_UPLOAD_DIR` 和 `GAPPROOF_UPLOAD_SIGNING_SECRET` 才启用。`POST /v1/source-assets/uploads` 要求 `Idempotency-Key`，对学生及可选 Case 做归属校验，创建 `pending_upload` 元数据并返回 10 分钟 HMAC-SHA256 上传 token；token 绑定 asset/student/hash/size/MIME/expiry。浏览器随后经同源 `/api/v1/source-assets/{assetId}/content` PUT 原始字节，API 使用 `x-gapproof-upload-token`、常量时间签名校验及实际 MIME/大小/hash 校验，受控目录以完整临时文件的原子硬链接落盘，再将元数据标记为 `uploaded`。相同字节的重复 PUT 幂等；内容不匹配保持 `pending_upload` 可重试。该目录适配器只用于本地 Demo，不等同于生产 S3、恶意文件扫描、OCR 或完整删除工作流。
 
+`[PROTOTYPE]` 上传完成后，`POST /v1/source-assets/{assetId}/commands/prepare` 以空 DTO 和 `Idempotency-Key` 将 `uploaded` 原子推进为 `queued`，事务内向 `source_asset.quality_check` 发送仅含 `{assetId}` 的稳定 ID Job；重放或在 queued/processing/final 状态使用其他 key 都只返回权威状态，不重复入队。Worker 必须配置非空 `GAPPROOF_UPLOAD_DIR`，否则在数据库/队列启动前以 `WORKER_NOT_CONFIGURED` fail fast。Worker 从受控目录重新读取字节并核对 size/SHA-256，解析 JPEG SOF、PNG IHDR、WebP VP8/VP8L/VP8X header 与尺寸；MIME 不匹配、截断/非法图片、超过 1 亿像素、存储缺失/不匹配进入受控失败，宽或高低于 640×480 进入 `needs_confirmation`，其余进入 `succeeded`。`GET /v1/source-assets/{assetId}` 只公开 stage/status、声明 MIME、大小和 `image-header-v1` 质量事实，不公开对象键、token、文件名、hash、OCR 文本或置信度。该检查不等同于模糊度、方向、缺页、恶意文件扫描或 OCR。
+
 ## 13. 后台任务、调度与主动性
 
 ### 13.1 选择 pg-boss
@@ -919,7 +921,7 @@ pg-boss 运行在 PostgreSQL 上，适合初期的 OCR、模型、报告、D+1/D
 ### 13.2 Job 规则
 
 - Job payload 只放 ID 和版本，不放大段隐私文本或图片。
-- Queue 按能力划分：`ocr.parse`、`agent.advance`、`knowledge.embed`、`report.render`、`retest.due`、`privacy.delete`。
+- Queue 按能力划分：当前已实现 `source_asset.quality_check`、`case-run-next`、`case.replan`、`retest.due`；规划中的 `ocr.parse`、`knowledge.embed`、`report.render`、`privacy.delete` 只有在对应能力实现时才能启用。
 - 每个 Job 有业务幂等键、超时、有限重试、退避和死信队列。
 - Provider 429/5xx 为可重试；Schema 错误、权限拒绝和无授权来源通常不可盲重试。
 - 到期复测创建应用内任务；MVP 不自动对外发送通知。
@@ -1202,9 +1204,9 @@ Serverless 很适合短 API 和自动扩容，但 OCR、多轮模型、报告、
 - 新增 `Clock/SystemClock/FixedClock`、`RetestDueJobData { caseId, taskId }`、`app.demo_clocks`、`demo_clock_advanced` 与迁移 `packages/db/drizzle/0004_goofy_vindicator.sql`；虚拟时钟按 Case 隔离、带版本并受环境开关保护。
 - 已实现任务详情、Today `timeZone/currentTaskId/overview` 与 guided/D1/D7 判别联合；`currentTaskId` 仅选择 ready D1/guided，overview 为真实只读投影，D7 在 attempts 未实现前保持只读。
 - 已实现 D1 `POST /v1/tasks/{taskId}/attempts`：私有 `exact-choice-v1` 评分、`retest_evaluated(kind=d1)`、D7 144h + 12h 调度、失败事务内 `case.replan` Job、Worker 异步合成干预骨架，以及迁移 `0005_flawless_omega_flight.sql`。幂等重放、并发去重、乐观锁、事务回滚与公开响应脱敏均有测试。
-- 已实现 `app.source_assets`、冻结 `asset_type/asset_processing_status` 与迁移 `0006_source_assets.sql`；共享 contracts、幂等创建 API、HMAC 短期 token、同源内容 PUT、本地目录 StorageAdapter 与前端 `/materials/new` 已形成真实字节上传最小闭环。数据库仍只保存对象元数据，文件名不入库，公开响应不暴露对象键/token/文件名；本地目录适配器不是生产 S3，也不启动 OCR、Case 或学习结论。
+- 已实现 `app.source_assets`、冻结 `asset_type/asset_processing_status` 与 0006/0007 migrations；共享上传/prepare/status contracts、幂等 API、HMAC 短期 token、同源内容 PUT、本地目录 StorageAdapter、`source_asset.quality_check` Worker 与前端 `/materials/new` 已形成真实字节上传和确定性图片基础检查闭环。数据库保存必要对象元数据、质量 JSON 与更新时间，文件名不入库，公开响应不暴露对象键/token/文件名/hash/OCR 内容；本地目录适配器与 `image-header-v1` 不是生产 S3、完整图片质量模型或 OCR，也不创建 Case 或学习结论。
 - F0 Mock、F1b 只读 API、F1c ready D1 客户端作答与真实 overview 已完成对应技术门禁并合并 `main`；无参数入口默认使用 API，Mock 仅显式启用。F1c 消费共享 contracts、权威 Case 版本和 UUIDv7 幂等意图，受控 HTTP 浏览器 Fixture 已验证同源 POST、成功脱敏回显、冲突重新确认和网络未知锁定。
-- 当前证据为 96 条快速测试通过、46 条真实 PostgreSQL/API/Worker 集成测试通过、62 条 apps/web 测试通过、migration drift、Mock/API 双视口、上传与 D1 浏览器 Fixture、TypeScript 严格类型检查和 Next.js production build 通过。
+- 当前证据为 116 条快速测试通过、49 条真实 PostgreSQL/API/Worker 集成测试连续两轮通过、70 条 apps/web 测试通过、migration drift、Mock/API/图片检查双视口、图片检查与 D1 浏览器 Fixture、TypeScript 严格类型检查和 Next.js production build 通过。
 
 该快照不等于 Phase A 完成：真实图片字节虽可上传到受控本地目录，但生产对象存储、真实 OCR/识别确认、真实 AI 干预、真实题库、D7 作答评分、可执行的重排上限和差异化真实重排内容、通知、报告、真实模型 Provider 和上传到修复证明的完整端到端 Playwright Demo 仍未实现。
 
@@ -1341,7 +1343,7 @@ source_assets(id uuidv7 PK, tenant_id uuidv7 NOT NULL, student_id uuidv7 NULL, c
   object_key text UNIQUE NOT NULL, sha256 char(64) NOT NULL, mime_type text NOT NULL,
   byte_size bigint NOT NULL, asset_type asset_type NOT NULL, retention_until timestamptz NULL,
   processing_status asset_processing_status NOT NULL, created_at timestamptz NOT NULL,
-  deleted_at timestamptz NULL)
+  quality jsonb NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz NULL)
 
 learning_evidence_events(id uuidv7 PK, tenant_id uuidv7 NOT NULL, student_id uuidv7 NOT NULL,
   case_id uuidv7 NOT NULL, event_type evidence_event_type NOT NULL, source_type text NOT NULL,
@@ -1601,8 +1603,15 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-012 | 2026-08-15 | `main` | `pushed` | `feat: project factual Today overview` | 合并 Today overview 共享 contracts、PostgreSQL 只读投影、API 必返字段和显式 API 页面；展示连续 7 个学生本地日、`weeklyGoal:null`、真实待确认数、最多两条脱敏进展与最早 scheduled D1/D7 检查；缺失 overview 不回退 Mock，默认入口仍为 Mock，D7/报告/完整闭环仍未完成 | 82 条快速测试、42 条真实 PostgreSQL/API/Worker 集成测试、53 条 apps/web 测试、D1 浏览器 Fixture、API 双视口视觉回归、全仓 TypeScript、Next.js production build、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；须在同轮推送并核对本地/远端 SHA 一致 |
 | PUSH-013 | 2026-08-15 | `main` | `pushed` | `feat: default Today to API and persist source asset metadata` | Today 无参数入口默认进入真实 API、Mock 仅由 `?source=mock` 显式启用；新增 `app.source_assets`、冻结枚举与 0006 migration，只存对象元数据/所有权/保留期/处理状态，不含文件字节、OCR 文本或答案；真实上传/StorageAdapter/D7/报告仍未完成 | 85 条快速测试、44 条真实 PostgreSQL/API/Worker 集成测试、56 条 apps/web 测试、Drizzle migration drift、Mock/API 双视口、D1 浏览器 Fixture、全仓 TypeScript、Next.js production build、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；须在同轮推送并核对本地/远端 SHA 一致 |
 | PUSH-014 | 2026-08-15 | `main` | `pushed` | `feat: upload source asset bytes safely` | 冻结上传 contracts；实现幂等创建、10 分钟 HMAC token、同源原始字节 PUT、实际 MIME/大小/hash 校验、本地目录原子落盘与 `pending_upload → uploaded`；`/materials/new` 使用 SHA-256、UUIDv7 和同 key/token 单次未知结果重试，成功页明确识别尚未开始。仅为本地 Demo StorageAdapter，不是生产 S3/OCR/学习效果；D7/报告/重排产品决策继续暂停 | 96 条快速测试、46 条真实 PostgreSQL/API/Worker 集成测试（Today 时间 fixture 确定性修复后连续两轮通过）、62 条 apps/web 测试、Drizzle migration drift、Mock/API 双视口、上传与 D1 浏览器 Fixture、上传双视口截图、全仓 TypeScript、Next.js production build、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；同轮推送并核对本地/远端 SHA 一致 |
+| PUSH-015 | 2026-08-15 | `main` | `pushed` | `feat: inspect uploaded source images safely` | 冻结 prepare/status/quality/job contracts；实现幂等 `source_asset.quality_check`、Worker 存储读取与 size/hash 复核、JPEG/PNG/WebP header/尺寸解析、guarded 状态和 0007 migration；前端复用 UUIDv7 意图、受控轮询并显示脱敏质量状态。仅为确定性基础检查，不是 OCR/完整图片质量模型/生产 S3/学习效果；D7/报告/重排产品决策继续暂停 | 116 条快速测试、49 条真实 PostgreSQL/API/Worker 集成测试连续两轮、70 条 apps/web 测试、Drizzle migration drift、Mock/API/图片检查双视口、图片检查与 D1 浏览器 Fixture、全仓 TypeScript、Next.js production build、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；同轮推送并核对本地/远端 SHA 一致 |
 
 ## 27. 变更日志
+
+### v0.3.23 — 2026-08-15
+
+- 冻结 `PrepareSourceAssetRequest`、prepare union、processing/quality 与 identifier-only Job contracts；实现 API 幂等入队/权威查询、`source_asset.quality_check` Worker、存储读取和 guarded 状态迁移。
+- 新增 0007 migration 保存质量 JSON 与 `updated_at`；`image-header-v1` 只做真实字节 size/hash、JPEG/PNG/WebP header/尺寸、MIME、像素上限及低分辨率检查，不声称 OCR、模糊度/方向/缺页检测或恶意文件扫描。
+- 同步 PROJECT_MASTER v0.1.30、PRD v0.1.22、DESIGN v0.2.20 与 PUSH-015；116 fast、49 integration 连续两轮、70 apps/web、migration drift、Mock/API/图片检查视觉、图片检查与 D1 浏览器 Fixture、全仓 TypeScript 与 Next build 通过。
 
 ### v0.3.22 — 2026-08-15
 

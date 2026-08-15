@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.29"
+version: "0.1.30"
 status: "ACTIVE"
-current_stage: "项目本身初赛验收冲刺；PUSH-014 真实图片字节上传闭环已通过最终门禁并发布，下一步继续上传后的识别/OCR 最小切片"
+current_stage: "项目本身初赛验收冲刺；PUSH-015 真实确定性图片基础检查闭环已通过最终门禁，待同轮推送；下一步继续 OCR/识别确认最小切片"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -143,7 +143,7 @@ next_action:
 
 `[FACT]` GOAI 无界应用赛道参赛手册列出的初赛截止日期为 2026-08-16；具体当天截止时刻、入口、文件大小及后续通知仍须在官网、提交系统或官方群再次核对。
 
-`[DECISION]` 当前处于：**项目本身初赛验收冲刺；学生端“今日”页默认入口已接入真实 API 的 ready D1 客户端作答与真实概览投影。`/materials/new` 的 JPEG/PNG/WebP 真实字节上传已通过 PUSH-014 门禁并发布：浏览器计算 SHA-256、以 UUIDv7 固定一次意图、经同源 API 创建短期上传授权并 PUT 原始字节，服务端校验 MIME/大小/hash 后原子写入受控本地目录并更新 `source_assets`；这不是生产 S3、OCR、识别或学习效果。D7 作答、识别确认、报告及上传到修复证明的完整业务闭环仍未完成。下一步继续上传后的识别/OCR 最小切片，D7 与重排/报告未决策边界保持暂停**。
+`[DECISION]` 当前处于：**项目本身初赛验收冲刺；学生端“今日”页默认入口已接入真实 API 的 ready D1 客户端作答与真实概览投影。`/materials/new` 已在真实字节上传后接入异步、确定性的图片基础检查：服务端重新校验存储字节大小/hash，解析 JPEG/PNG/WebP 头与尺寸，检查 MIME 不匹配、截断/非法图片、1 亿像素上限和低于 640×480 的低分辨率，并以 guarded 状态持久化；浏览器只展示脱敏状态与质量原因。该能力不是模糊度/方向/缺页检测、恶意文件扫描、生产 S3、OCR、识别或学习效果。D7 作答、识别确认、报告及上传到修复证明的完整业务闭环仍未完成。下一步继续 OCR/识别确认最小切片，D7 与重排/报告未决策边界保持暂停**。
 
 ### 1.2 已完成
 
@@ -177,7 +177,7 @@ next_action:
 - `[RESULT]` 已实现 `GET /v1/tasks/{taskId}` 与 `POST /v1/tasks/{taskId}/attempts` 的 D1 客观复测最小切片。服务端用私有答案执行 `exact-choice-v1`：通过时原子完成 D1、追加 `retest_evaluated { kind:"d1", passed:true }`，并按 `evaluatedAt + 144h` 创建 D7、再给出 12 小时窗口；失败时原子进入 `replan_required` 并入队 `case.replan`，由 Worker 异步生成合成干预骨架。公开响应不含答案键，幂等、并发与乐观锁已有测试覆盖。
 - `[RESULT]` Today contracts 已扩展为服务端学生 `timeZone`、`currentTaskId: uuid | null` 与 guided/D1/D7 判别联合；只有服务端判定的 ready D1 或 guided 任务可成为当前任务。F1c 对 ready D1 使用共享 attempts contracts、权威 Case 版本和 UUIDv7 幂等意图提交；D7 在 attempts 未实现前保持只读。
 - `[RESULT]` Today API 现始终返回真实只读 `overview`：学生时区下连续 7 日完成数、明确目标或 `null`、待确认数、最多两条脱敏进展与最早 scheduled D1/D7 检查。显式 API 页面严格消费该投影，缺失时受控报错且不回退 Mock；当前数据库没有权威周目标，因此 API 返回 `weeklyGoal:null`，不得从任务或视觉稿推断。
-- `[RESULT]` PostgreSQL `app.source_assets` 与 0006 migration 保存对象键、SHA-256、MIME、大小、所有权/保留期及处理状态，不保存文件字节、OCR 文本或答案。共享上传 contracts、Fastify 创建/内容 PUT、HMAC 短期授权、受控目录 `StorageAdapter` 与 `/materials/new` 已形成受测的真实字节上传最小闭环；仅在同时配置上传目录和签名密钥时启用，文件名只参与请求校验、不入库，公开响应不含对象键、token 或文件名。当前实现是本地 Demo 存储，不是生产 S3，也不会自动启动 OCR、创建 Case 或形成学习结论。
+- `[RESULT]` PostgreSQL `app.source_assets` 与 0006/0007 migrations 保存对象键、SHA-256、MIME、大小、所有权/保留期、处理状态、确定性质量结果与更新时间，不保存文件字节、OCR 文本或答案。共享上传/prepare/status contracts、Fastify 创建/内容 PUT/prepare/读取、HMAC 短期授权、受控目录 `StorageAdapter`、`source_asset.quality_check` Worker 与 `/materials/new` 已形成受测的真实字节上传和图片基础检查闭环；Worker 从存储重新读取并验证字节，解析 JPEG/PNG/WebP header/尺寸，公开响应不含对象键、token、文件名、hash 或 OCR 内容。当前实现是本地 Demo 存储与 `image-header-v1` 检查器，不是生产 S3、完整图片质量模型、OCR，也不会创建 Case 或形成学习结论。
 
 ### 1.3 尚未完成或尚未验证
 
@@ -186,7 +186,7 @@ next_action:
 - `[PLANNED]` 尚未建立 30–40 个技能节点及 12 个深度节点的图谱 V0.1。
 - `[PLANNED]` 尚未制作比赛用原创模拟试卷、合成学生轨迹和独立金标集。
 - `[PLANNED]` 尚未确认至少一位英语教育背景人员能否短时抽检核心金标内容。
-- `[PROTOTYPE]` 已建立最小后端 Thin Slice，并完成真实图片字节上传、确定性干预生成、今日任务查询、干预提交、D+1 调度/到期/客观评分及失败后的异步重排骨架；尚未形成从上传识别到报告的完整端到端 Demo。真实 OCR/识别确认、真实 AI 干预、真实题库、D7 作答评分、可执行的重排上限、真实个性化重排内容、通知和报告仍未实现。
+- `[PROTOTYPE]` 已建立最小后端 Thin Slice，并完成真实图片字节上传、确定性图片 header/尺寸质量检查、确定性干预生成、今日任务查询、干预提交、D+1 调度/到期/客观评分及失败后的异步重排骨架；尚未形成从 OCR 识别到报告的完整端到端 Demo。真实 OCR/识别确认、真实 AI 干预、真实题库、D7 作答评分、可执行的重排上限、真实个性化重排内容、通知和报告仍未实现。
 - `[PROTOTYPE]` 学生端“今日”页 F0 Mock、F1b 只读 API、F1c ready D1 客户端作答及真实概览投影已完成对应技术门禁；受控 HTTP 浏览器 Fixture 已证明成功、冲突和网络未知三条交互边界。默认入口现为 API，只有显式 `?source=mock` 使用合成页面；业务主闭环仍未完成，其余学生 P0 页面、家长端页面和评委最小页仍未完成。
 - `[PLANNED]` 尚未完成正式 500 字简介、初赛 PPT、视频、README、数据卡、依赖清单和合规一页纸。
 - `[PLANNED]` 尚未产生可报告的工程评测结果或真实学生学习效果。
@@ -2024,11 +2024,11 @@ review_date:
 | DEC-028 | MVP Agent 固定为六节点 LangGraph.js 图 | accepted | 新增节点必须更新图版本、Schema 和 Golden Cases |
 | DEC-029 | 所有工具先完成接口、Schema、Mock 和错误处理；verify_item/schedule_retest 做 MVP 最小实现 | accepted | 工具边界或 Provider 能力变化 |
 | DEC-030 | escalate_human 先创建待处理记录；analyze_speech/score_writing 暂缓真实能力 | accepted | 真实人工、语音或写作试点启动 |
-| DEC-031 | UUIDv7 + PostgreSQL 16+，完整表结构和删除策略以 TDD v0.3.22 为准 | accepted | 数据规模、扩展支持或合规要求变化 |
+| DEC-031 | UUIDv7 + PostgreSQL 16+，完整表结构和删除策略以 TDD v0.3.23 为准 | accepted | 数据规模、扩展支持或合规要求变化 |
 | DEC-032 | TDD 详细 API 路由为唯一正式接口 | accepted | API 版本升级或新客户端边界产生 |
 | DEC-033 | 杭州阿里云单区域联网 Docker Compose，真实 Provider 演示，Mock 仅测试/故障注入 | accepted | 比赛网络、并发、合规或可用性要求变化 |
 | DEC-034 | DeepSeek `deepseek-v4-flash`、MiniMax `minimax-m3`、腾讯混元 Embedding 作为当前模型配置 | accepted | 账号权限、供应商模型版本或评测结果变化 |
-| DEC-035 | 学生端“今日”页桌面视觉基线已选定；使用 `#0036FF` 导航/进度与 `#B5F800` 行动/积极变化，完整规范以 DESIGN v0.2.19 为准 | accepted | 真实前端实现、可用性测试或品牌资产定稿产生反证 |
+| DEC-035 | 学生端“今日”页桌面视觉基线已选定；使用 `#0036FF` 导航/进度与 `#B5F800` 行动/积极变化，完整规范以 DESIGN v0.2.20 为准 | accepted | 真实前端实现、可用性测试或品牌资产定稿产生反证 |
 | DEC-036 | 新用户今日页先完成第一次检查，不显示虚构的足迹、进展或下次检查；首次任务生成后切换常规今日页 | accepted | onboarding 实测或产品范围变化 |
 | DEC-037 | 目标教材 ISBN 为 `978-7-5720-3630-9`；配套练习 `978-7-5720-3519-7` 不纳入 MVP | accepted | 版权页或出版社正式材料产生冲突 |
 | DEC-038 | 购买教材/试题及完整转换文本保持本地私有并排除 Git；仓库只保存元数据、处理器和项目原创/合成内容 | accepted | 取得可归档的明确再分发许可且完成权利复核 |
@@ -2052,7 +2052,7 @@ review_date:
 | 初赛 PPT | `[PLANNED]` | 8–10 页覆盖评分项 | 原型/图表 |
 | 原创模拟试卷 | `[PLANNED]` | 来源自有、已知根因、许可清楚 | 技能示例 |
 | 合成 Case | `[PROTOTYPE]` | 已完成 1 个原创合成 Case 及低置信、复测失败重排、D+7 成功分支；仍需扩充同题同错不同根因与回归集 | 数据 Schema/教材映射 |
-| 学生“今日”页视觉基线 | `[PROTOTYPE]` | 已选定 Stitch 桌面稿；F0/F1b、F1c ready D1 客户端作答、受控 HTTP 浏览器 Fixture 与真实概览投影已合并 `main` 并通过技术门禁；默认入口为 API，合成 Mock 仅显式启用，完整业务写入闭环未完成 | DESIGN v0.2.19 |
+| 学生“今日”页视觉基线 | `[PROTOTYPE]` | 已选定 Stitch 桌面稿；F0/F1b、F1c ready D1 客户端作答、受控 HTTP 浏览器 Fixture 与真实概览投影已合并 `main` 并通过技术门禁；默认入口为 API，合成 Mock 仅显式启用，完整业务写入闭环未完成 | DESIGN v0.2.20 |
 | 其余学生/家长关键页设计 | `[PLANNED]` | 覆盖主闭环并遵循今日页设计准则 | 视觉基线 |
 | 可点击 Thin Slice | `[PLANNED]` | 上传到修复证明全链路 | 设计/开发 |
 | 数据与合规页 | `[PLANNED]` | 类型、来源、授权、脱敏、删除、边界 | 数据选择 |
@@ -2111,6 +2111,12 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.30 — 2026-08-15
+
+- 冻结并实现上传后的异步图片基础检查：prepare/status DTO、幂等 `source_asset.quality_check` Job、存储字节大小/hash 复核、JPEG/PNG/WebP header/尺寸解析、低分辨率/非法/不匹配状态与 0007 migration。
+- `/materials/new` 复用同一 UUIDv7 意图提交 prepare，按 1s→2s→3s 在 30 秒内读取权威状态；隐藏/离页停止轮询，成功只声明“图片基础检查通过，识别尚未开始”，不泄露内部 ID、token、对象键、文件名、hash 或 OCR 内容。
+- 116 fast、49 integration（连续两轮）、70 apps/web、migration drift、Mock/API/图片检查视觉、图片检查与 D1 浏览器 Fixture、全仓 TypeScript 与 Next build 通过；同步 PRD v0.1.22、TDD v0.3.23、DESIGN v0.2.20 与 PUSH-015。该能力不是 OCR、完整图片质量模型、生产 S3 或学习效果；D7/报告/重排产品决策继续暂停。
 
 ### v0.1.29 — 2026-08-15
 
