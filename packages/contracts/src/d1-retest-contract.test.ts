@@ -7,6 +7,7 @@ import {
   D1RetestAttemptViewSchema,
   LearningTaskViewSchema,
   SubmitD1RetestAttemptRequestSchema,
+  StartSyntheticRecognitionRequestSchema,
   TodayTasksViewSchema,
 } from "./api.ts";
 
@@ -32,6 +33,20 @@ const baseTask = {
 };
 
 describe("D1 retest HTTP contracts", () => {
+  it("requires explicit synthetic mode and guardian confirmation", () => {
+    expect(Value.Check(StartSyntheticRecognitionRequestSchema, {
+      mode: "synthetic_demo",
+      guardianConfirmed: true,
+    })).toBe(true);
+    expect(Value.Check(StartSyntheticRecognitionRequestSchema, {
+      mode: "synthetic_demo",
+      guardianConfirmed: false,
+    })).toBe(false);
+    expect(Value.Check(StartSyntheticRecognitionRequestSchema, {
+      mode: "synthetic_demo",
+    })).toBe(false);
+  });
+
   it("freezes the server-side actionable task type tie-break order", () => {
     expect(CURRENT_ACTIONABLE_TASK_TYPE_PRIORITY).toEqual([
       "d1_retest",

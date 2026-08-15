@@ -41,6 +41,7 @@ export interface InitiateSourceAssetUploadInput {
   readonly byteSize: number;
   readonly sha256: string;
   readonly tenantId: string;
+  readonly createdAt?: Date;
 }
 
 function sameUploadIntent(
@@ -108,6 +109,8 @@ export async function initiateSourceAssetUpload(
   }
 
   const assetId = input.assetId;
+  const createdAt = input.createdAt ?? new Date();
+  const retentionUntil = new Date(createdAt.getTime() + 7 * 24 * 60 * 60 * 1_000);
   const objectKey = `source-assets/${input.tenantId}/${input.studentId}/${assetId}`;
   const values: NewSourceAssetRow = {
     id: assetId,
@@ -119,6 +122,8 @@ export async function initiateSourceAssetUpload(
     mimeType: input.mimeType,
     byteSize: input.byteSize,
     assetType: "student_upload",
+    createdAt,
+    retentionUntil,
   };
 
   try {

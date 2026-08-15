@@ -17,6 +17,7 @@ import type {
   InitiatedSourceAssetUploadView,
   LearningTaskView,
   SourceAssetProcessingView,
+  StartSyntheticRecognitionView,
   TaskCompletionView,
   TodayTasksView,
   UploadedSourceAssetView,
@@ -464,6 +465,8 @@ describeWithDatabase("Fastify API and run-next worker", () => {
       .from(sourceAssets)
       .where(eq(sourceAssets.id, firstBody.data.assetId));
     expect(storedAsset?.processingStatus).toBe("uploaded");
+    expect(storedAsset?.createdAt.toISOString()).toBe(fixedNow);
+    expect(storedAsset?.retentionUntil?.toISOString()).toBe("2026-08-22T00:00:00.000Z");
     expect(await readFile(uploadStorage.pathFor(storedAsset!.id, storedAsset!.objectKey))).toEqual(bytes);
 
     const replayedPut = await api.inject({
@@ -598,6 +601,105 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     expect(inspected).not.toHaveProperty("token");
     expect(inspected).not.toHaveProperty("fileName");
     expect(inspected).not.toHaveProperty("ocrText");
+  });
+
+  it("starts synthetic recognition from a passed upload without using its bytes", async () => {
+    const created = await api.inject({
+      method: "POST",
+      url: "/v1/cases",
+      headers: { "idempotency-key": "source-start-recognition-student-v1" },
+      payload: { entry: "synthetic_demo" },
+    });
+    const studentId = created.json<ApiResponse<CaseView>>().data.studentId;
+    const bytes = pngBytes(1280, 960);
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    const initiated = await api.inject({
+      method: "POST",
+      url: "/v1/source-assets/uploads",
+      headers: { "idempotency-key": "source-start-recognition-upload-v1" },
+      payload: {
+        studentId,
+        caseId: null,
+        fileName: "worksheet.png",
+        mimeType: "image/png",
+        byteSize: bytes.byteLength,
+        sha256,
+      },
+    });
+    const upload = initiated.json<ApiResponse<InitiatedSourceAssetUploadView>>().data;
+    await api.inject({
+      method: "PUT",
+      url: upload.upload.path.replace("/api", ""),
+      headers: { "x-gapproof-upload-token": upload.upload.token, "content-type": "image/png" },
+      payload: bytes,
+    });
+    await api.inject({
+      method: "POST",
+      url: `/v1/source-assets/${upload.assetId}/commands/prepare`,
+      headers: { "idempotency-key": "source-start-recognition-prepare-v1" },
+      payload: {},
+    });
+    const inspected = await waitForSourceAsset(api, upload.assetId, "succeeded");
+    expect(inspected.quality?.status).toBe("passed");
+
+    const startRequest = {
+      method: "POST" as const,
+      url: `/v1/source-assets/${upload.assetId}/commands/start-recognition`,
+      headers: { "idempotency-key": "source-start-recognition-v1" },
+      payload: { mode: "synthetic_demo", guardianConfirmed: true },
+    };
+    const [started, concurrent] = await Promise.all([
+      api.inject(startRequest),
+      api.inject(startRequest),
+    ]);
+    const startedBody = started.json<ApiResponse<StartSyntheticRecognitionView>>();
+    expect([started.statusCode, concurrent.statusCode].sort()).toEqual([200, 202]);
+    expect(startedBody.data).toMatchObject({
+      assetId: upload.assetId,
+      state: "awaiting_evidence",
+      stateVersion: 0,
+      recognitionMode: "synthetic_demo",
+      recognitionSource: "synthetic_fixture",
+      uploadedAssetUsedForRecognition: false,
+      processingStatus: "queued",
+    });
+    expect(startedBody.jobId).toBeTruthy();
+    expect(concurrent.json<ApiResponse<StartSyntheticRecognitionView>>().data).toEqual(startedBody.data);
+    expect(concurrent.json<ApiResponse<StartSyntheticRecognitionView>>().jobId).toBe(startedBody.jobId);
+    expect(JSON.stringify(startedBody)).not.toContain("guardian");
+    const replay = await api.inject(startRequest);
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json<ApiResponse<StartSyntheticRecognitionView>>().data).toEqual(startedBody.data);
+    expect(replay.json<ApiResponse<StartSyntheticRecognitionView>>().jobId).toBe(startedBody.jobId);
+    const reusedIntent = await api.inject({
+      ...startRequest,
+      url: "/v1/source-assets/0198b111-1111-7000-8000-000000000099/commands/start-recognition",
+    });
+    expect(reusedIntent.statusCode).toBe(409);
+    expect(reusedIntent.json<ApiErrorResponse>().error.code).toBe("IDEMPOTENCY_KEY_REUSED");
+
+    const completed = await waitForState(api, startedBody.data.caseId, "awaiting_confirmation");
+    expect(completed.synthetic).toBe(true);
+    const [boundAsset] = await database.db.select().from(sourceAssets).where(eq(sourceAssets.id, upload.assetId));
+    expect(boundAsset?.caseId).toBe(startedBody.data.caseId);
+    expect(boundAsset?.processingStatus).toBe("succeeded");
+    expect(boundAsset?.retentionUntil?.toISOString()).toBe("2026-08-22T00:00:00.000Z");
+    const events = await database.db.select().from(learningEvidenceEvents).where(eq(learningEvidenceEvents.caseId, startedBody.data.caseId));
+    const evidence = events.find(({ eventType }) => eventType === "evidence_ingested");
+    expect(evidence).toMatchObject({ sourceType: "fake_ocr", sourceRef: "asset-synthetic-paper-1" });
+    expect(JSON.stringify(evidence?.payload)).not.toContain(upload.assetId);
+    expect(JSON.stringify(evidence?.payload)).not.toContain("source-assets/");
+  }, 35_000);
+
+  it("requires guardian confirmation at the synthetic recognition contract boundary", async () => {
+    const response = await api.inject({
+      method: "POST",
+      url: "/v1/source-assets/0198b111-1111-7000-8000-000000000001/commands/start-recognition",
+      headers: { "idempotency-key": "source-start-recognition-guardian-required-v1" },
+      payload: { mode: "synthetic_demo" },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json<ApiErrorResponse>().error.code).toBe("SCHEMA_INVALID");
   });
 
   it("fails closed for missing bytes and requests confirmation for low resolution", async () => {

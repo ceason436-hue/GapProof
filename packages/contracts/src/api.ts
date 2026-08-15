@@ -116,6 +116,30 @@ export type PrepareSourceAssetRequest = Static<
   typeof PrepareSourceAssetRequestSchema
 >;
 
+export const StartSyntheticRecognitionRequestSchema = Type.Object({
+  mode: Type.Literal("synthetic_demo"),
+  guardianConfirmed: Type.Literal(true),
+}, { additionalProperties: false });
+
+export type StartSyntheticRecognitionRequest = Static<
+  typeof StartSyntheticRecognitionRequestSchema
+>;
+
+export const StartSyntheticRecognitionViewSchema = Type.Object({
+  assetId: Type.String({ format: "uuid" }),
+  caseId: Type.String({ format: "uuid" }),
+  state: Type.Literal("awaiting_evidence"),
+  stateVersion: Type.Literal(0),
+  recognitionMode: Type.Literal("synthetic_demo"),
+  recognitionSource: Type.Literal("synthetic_fixture"),
+  uploadedAssetUsedForRecognition: Type.Literal(false),
+  processingStatus: Type.Literal("queued"),
+}, { additionalProperties: false });
+
+export type StartSyntheticRecognitionView = Static<
+  typeof StartSyntheticRecognitionViewSchema
+>;
+
 export const SourceAssetInspectionProcessingStatusSchema = Type.Union([
   Type.Literal("uploaded"),
   Type.Literal("queued"),

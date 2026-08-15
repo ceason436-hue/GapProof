@@ -1,12 +1,14 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 
 import type { Database } from "./client.ts";
 import {
   apiIdempotencyRecords,
   cases,
   learningEvidenceEvents,
+  sourceAssets,
   students,
 } from "./schema.ts";
+import { v7 as uuidv7 } from "uuid";
 
 export class ResourceNotFoundError extends Error {
   readonly code = "RESOURCE_NOT_FOUND";
@@ -15,6 +17,153 @@ export class ResourceNotFoundError extends Error {
     super(`${resource} ${id} was not found.`);
     this.name = "ResourceNotFoundError";
   }
+}
+
+export class SyntheticRecognitionNotReadyError extends Error {
+  readonly code = "SOURCE_ASSET_RECOGNITION_NOT_READY";
+
+  constructor(message = "The source asset is not ready for synthetic recognition.") {
+    super(message);
+    this.name = "SyntheticRecognitionNotReadyError";
+  }
+}
+
+export class SourceAssetAlreadyBoundError extends Error {
+  readonly code = "SOURCE_ASSET_ALREADY_BOUND";
+
+  constructor() {
+    super("The source asset is already bound to a Case.");
+    this.name = "SourceAssetAlreadyBoundError";
+  }
+}
+
+export class SyntheticRecognitionIdempotencyKeyReusedError extends Error {
+  readonly code = "IDEMPOTENCY_KEY_REUSED";
+
+  constructor() {
+    super("The idempotency key was already used for another recognition asset.");
+    this.name = "SyntheticRecognitionIdempotencyKeyReusedError";
+  }
+}
+
+const START_RECOGNITION_SCOPE = "source_asset_start_recognition";
+
+export interface StartSyntheticRecognitionInput {
+  readonly assetId: string;
+  readonly idempotencyKey: string;
+  readonly idempotencyRecordId: string;
+  readonly enqueueRunNext: (
+    transaction: Parameters<Parameters<Database["transaction"]>[0]>[0],
+    caseId: string,
+  ) => Promise<string>;
+}
+
+function isPassedQuality(value: unknown): boolean {
+  return typeof value === "object" && value !== null &&
+    !Array.isArray(value) && "status" in value && value.status === "passed";
+}
+
+async function findStartRecognitionRecord(
+  database: Pick<Database, "select">,
+  idempotencyKey: string,
+) {
+  const [record] = await database
+    .select({ resourceId: apiIdempotencyRecords.resourceId, jobId: apiIdempotencyRecords.jobId })
+    .from(apiIdempotencyRecords)
+    .where(and(
+      eq(apiIdempotencyRecords.scope, START_RECOGNITION_SCOPE),
+      eq(apiIdempotencyRecords.idempotencyKey, idempotencyKey),
+    ))
+    .limit(1);
+  return record;
+}
+
+export async function startSyntheticRecognitionIdempotent(
+  database: Database,
+  input: StartSyntheticRecognitionInput,
+) {
+  return database.transaction(async (transaction) => {
+    const existing = await findStartRecognitionRecord(transaction, input.idempotencyKey);
+    if (existing !== undefined && existing.resourceId !== input.assetId) {
+      throw new SyntheticRecognitionIdempotencyKeyReusedError();
+    }
+
+    const [asset] = await transaction
+      .select()
+      .from(sourceAssets)
+      .where(eq(sourceAssets.id, input.assetId))
+      .for("update")
+      .limit(1);
+    if (asset === undefined) throw new ResourceNotFoundError("Source asset", input.assetId);
+
+    const lockedExisting = existing ?? await findStartRecognitionRecord(transaction, input.idempotencyKey);
+    if (lockedExisting !== undefined) {
+      if (lockedExisting.resourceId !== input.assetId) throw new SyntheticRecognitionIdempotencyKeyReusedError();
+      if (asset.caseId === null || lockedExisting.jobId === null) {
+        throw new Error("The synthetic recognition idempotency record is incomplete.");
+      }
+      const existingCase = await findCaseById(transaction, asset.caseId);
+      if (existingCase === undefined) throw new ResourceNotFoundError("Case", asset.caseId);
+      return { asset, case: existingCase, jobId: lockedExisting.jobId, replayed: true } as const;
+    }
+
+    if (
+      asset.deletedAt !== null ||
+      asset.studentId === null ||
+      asset.caseId !== null ||
+      asset.assetType !== "student_upload" ||
+      asset.processingStatus !== "succeeded" ||
+      !isPassedQuality(asset.quality)
+    ) {
+      if (asset.caseId !== null) throw new SourceAssetAlreadyBoundError();
+      throw new SyntheticRecognitionNotReadyError();
+    }
+
+    const [student] = await transaction
+      .select()
+      .from(students)
+      .where(eq(students.id, asset.studentId))
+      .limit(1);
+    if (
+      student === undefined ||
+      student.status === "deleted" ||
+      student.deletedAt !== null ||
+      student.tenantId !== asset.tenantId
+    ) {
+      throw new SyntheticRecognitionNotReadyError("The source asset student ownership is invalid.");
+    }
+
+    const caseId = uuidv7();
+    const [createdCase] = await transaction
+      .insert(cases)
+      .values({
+        id: caseId,
+        tenantId: asset.tenantId,
+        studentId: student.id,
+        title: "合成 OCR 演示",
+        simulation: true,
+        synthetic: true,
+      })
+      .returning();
+    if (createdCase === undefined) throw new Error("The synthetic recognition Case was not created.");
+
+    const [boundAsset] = await transaction
+      .update(sourceAssets)
+      .set({ caseId, updatedAt: new Date() })
+      .where(and(eq(sourceAssets.id, asset.id), isNull(sourceAssets.caseId)))
+      .returning();
+    if (boundAsset === undefined) throw new SourceAssetAlreadyBoundError();
+
+    const jobId = await input.enqueueRunNext(transaction, caseId);
+    await transaction.insert(apiIdempotencyRecords).values({
+      id: input.idempotencyRecordId,
+      scope: START_RECOGNITION_SCOPE,
+      idempotencyKey: input.idempotencyKey,
+      resourceId: asset.id,
+      jobId,
+    });
+    return { asset: boundAsset, case: createdCase, jobId, replayed: false } as const;
+  });
 }
 
 export interface CreateSyntheticCaseInput {

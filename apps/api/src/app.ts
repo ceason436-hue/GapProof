@@ -55,6 +55,10 @@ import {
   type SourceAssetIdParams,
   PrepareSourceAssetRequestSchema,
   type PrepareSourceAssetRequest,
+  StartSyntheticRecognitionRequestSchema,
+  type StartSyntheticRecognitionRequest,
+  StartSyntheticRecognitionViewSchema,
+  type StartSyntheticRecognitionView,
   SourceAssetPrepareQueuedViewSchema,
   type SourceAssetPrepareQueuedView,
   SourceAssetPrepareViewSchema,
@@ -78,6 +82,7 @@ import {
   findLatestCaseEvidenceEventByType,
   findStudentById,
   findSourceAssetById,
+  startSyntheticRecognitionIdempotent,
   findUploadStudentAndCase,
   initiateSourceAssetUpload,
   markSourceAssetUploaded,
@@ -97,6 +102,9 @@ import {
   DemoClockVersionConflictError,
   ResourceNotFoundError,
   SourceAssetIdempotencyKeyReusedError,
+  SourceAssetAlreadyBoundError,
+  SyntheticRecognitionIdempotencyKeyReusedError,
+  SyntheticRecognitionNotReadyError,
   SourceAssetNotUploadedError,
   VersionConflictError,
 } from "@gapproof/db";
@@ -115,6 +123,7 @@ import {
   enqueueReplanTransactional,
   enqueueRunNextIdempotent,
   enqueueSourceAssetQualityCheckIdempotent,
+  enqueueRunNextTransactional,
   SYNTHETIC_PARSE_ASSET_ID,
   type JobQueue,
 } from "@gapproof/jobs";
@@ -669,6 +678,17 @@ export async function buildApi(options: BuildApiOptions) {
       statusCode = 409;
       code = error.code;
       message = error.message;
+    } else if (
+      error instanceof SyntheticRecognitionIdempotencyKeyReusedError ||
+      error instanceof SourceAssetAlreadyBoundError
+    ) {
+      statusCode = 409;
+      code = error.code;
+      message = error.message;
+    } else if (error instanceof SyntheticRecognitionNotReadyError) {
+      statusCode = 409;
+      code = error.code;
+      message = error.message;
     } else if (error instanceof DemoClockVersionConflictError) {
       statusCode = 409;
       code = error.code;
@@ -796,6 +816,7 @@ export async function buildApi(options: BuildApiOptions) {
         byteSize: request.body.byteSize,
         sha256: request.body.sha256,
         tenantId: ownership.student.tenantId,
+        createdAt: clock.now(),
       });
       const expiresAt = Date.now() + 10 * 60 * 1000;
       const token = createSourceAssetUploadToken(
@@ -965,6 +986,54 @@ export async function buildApi(options: BuildApiOptions) {
       const asset = await findSourceAssetById(options.database, request.params.assetId);
       if (asset === undefined || asset.deletedAt !== null) throw new ResourceNotFoundError("Source asset", request.params.assetId);
       return success(request, sourceAssetProcessingView(asset));
+    },
+  );
+
+  api.post<{
+    Params: SourceAssetIdParams;
+    Body: StartSyntheticRecognitionRequest;
+  }>(
+    "/v1/source-assets/:assetId/commands/start-recognition",
+    {
+      schema: {
+        params: SourceAssetIdParamsSchema,
+        body: StartSyntheticRecognitionRequestSchema,
+        response: {
+          200: apiResponseSchema(StartSyntheticRecognitionViewSchema),
+          202: apiResponseSchema(StartSyntheticRecognitionViewSchema),
+          "4xx": ApiErrorResponseSchema,
+          500: ApiErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const idempotencyKey = getIdempotencyKey(request);
+      const result = await startSyntheticRecognitionIdempotent(options.database, {
+        assetId: request.params.assetId,
+        idempotencyKey,
+        idempotencyRecordId: uuidv7(),
+        enqueueRunNext: async (transaction, caseId) =>
+          enqueueRunNextTransactional(transaction, options.queue, {
+            jobId: uuidv7(),
+            caseId,
+            expectedVersion: 0,
+            assetId: SYNTHETIC_PARSE_ASSET_ID,
+            traceId: traceId(request),
+          }),
+      });
+      const data: StartSyntheticRecognitionView = {
+        assetId: result.asset.id,
+        caseId: result.case.id,
+        state: "awaiting_evidence",
+        stateVersion: 0,
+        recognitionMode: "synthetic_demo",
+        recognitionSource: "synthetic_fixture",
+        uploadedAssetUsedForRecognition: false,
+        processingStatus: "queued",
+      };
+      return reply
+        .status(result.replayed ? 200 : 202)
+        .send(success(request, data, result.jobId));
     },
   );
 
