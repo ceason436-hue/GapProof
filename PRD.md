@@ -10,7 +10,7 @@
 | 文档状态 | Draft v0.1.34 |
 | 产品名称 | 知隙 GapProof |
 | 文档角色 | 产品需求、业务流程、功能范围与验收标准 |
-| 当前阶段 | PUSH-027 发布批次：首次使用/上传状态交互已收口；DeepSeek structured provider seam 默认关闭、未接 API/Worker/UI，未执行真实模型调用；真实 OCR 与学习效果边界不变 |
+| 当前阶段 | PUSH-027 已发布：首次使用/上传状态交互已收口；DeepSeek structured provider seam 默认关闭、未接 API/Worker/UI，未执行真实模型调用；真实 OCR 与学习效果边界不变 |
 | 产品形态 | Web 应用 |
 | 目标教材 | 上海教育出版社《义务教育教科书（五·四学制）英语 八年级上册》 |
 | 适用版本 | 目标教材以 ISBN、当前 PDF 哈希和内容快照锁定；版权页不可取得，版次、印次和册次保持未知 |
