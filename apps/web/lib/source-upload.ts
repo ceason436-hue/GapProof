@@ -1,7 +1,9 @@
 import { Value } from "@sinclair/typebox/value";
 import {
   InitiateSourceAssetUploadRequestSchema,
+  PrepareSourceAssetRequestSchema,
   type InitiateSourceAssetUploadRequest,
+  type PrepareSourceAssetRequest,
 } from "@gapproof/contracts";
 import { ensureContractFormats } from "./contract-formats";
 
@@ -47,6 +49,15 @@ export function buildSourceAssetUploadRequest(
   ensureContractFormats();
   if (!Value.Check(InitiateSourceAssetUploadRequestSchema, request)) {
     throw new Error("UPLOAD_REQUEST_INVALID");
+  }
+  return request;
+}
+
+export function buildSourceAssetPrepareRequest(): PrepareSourceAssetRequest {
+  const request: PrepareSourceAssetRequest = {};
+  ensureContractFormats();
+  if (!Value.Check(PrepareSourceAssetRequestSchema, request)) {
+    throw new Error("PREPARE_REQUEST_INVALID");
   }
   return request;
 }

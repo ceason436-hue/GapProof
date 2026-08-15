@@ -16,6 +16,8 @@ describe("SourceUpload component", () => {
     expect(html).toContain('accept="image/jpeg,image/png,image/webp"');
     expect(html).toContain("请选择一张图片");
     expect(html).toContain("aria-live=\"polite\"");
+    expect(html).not.toContain("图片基础检查通过");
+    expect(html).not.toContain("OCR");
     expect(html).not.toContain("objectKey");
     expect(html).not.toContain("Bearer");
   });

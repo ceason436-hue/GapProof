@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildSourceAssetUploadRequest,
+  buildSourceAssetPrepareRequest,
   MAX_SOURCE_UPLOAD_BYTES,
   sha256Hex,
   validateSourceUploadFile,
@@ -36,5 +37,9 @@ describe("source upload client helpers", () => {
       byteSize: 2048,
       sha256: "a".repeat(64),
     });
+  });
+
+  it("builds the empty prepare body from the shared contract", () => {
+    expect(buildSourceAssetPrepareRequest()).toEqual({});
   });
 });
