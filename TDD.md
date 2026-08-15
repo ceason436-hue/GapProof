@@ -2,15 +2,15 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.25"
+version: "0.3.26"
 status: "DRAFT_FOR_IMPLEMENTATION"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.32"
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.24"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.33"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.25"
 ---
 
 # 知隙 GapProof 技术设计文档（TDD）
@@ -1598,6 +1598,7 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 6. Push Log 描述该次推送包含的功能/文档提交；Git commit SHA、作者和精确时间以远端 Git 历史为准，避免为记录提交自身 SHA 形成递归修改。
 7. 新建前端/后端执行任务默认显式指定 `gpt-5.6-luna` 与 `high` 推理强度；新建协调/文档治理任务默认显式指定 `gpt-5.6-sol` 与 `medium` 推理强度。后续迁移与版本继续继承，偏离时必须记录用户指令、主机能力或安全恢复原因。
 8. 本协调目标中的初赛验收只评估项目本身的代码、契约、交互、测试、数据/隐私边界与可复现性；简介、PPT/PDF、视频、报名、提交系统及其他参赛材料不计入完成条件。
+9. 用户已为本项目选择 Codex“完全访问”；后续前端、后端、协调/文档治理版本在平台实际授予的权限内直接完成常规核验、项目文件读写、分支/工作树、构建/测试、精确暂存、提交与既定远端推送，不重复请求批准。平台强制拦截时使用同权限范围内等价安全路径并记录；不得借此绕过安全政策、扩大切片或执行未明确要求的破坏性操作。
 
 | Push ID | 日期 | 分支 | 状态 | 提交摘要 | 主要内容 | 验证 |
 |---|---|---|---|---|---|---|
@@ -1618,8 +1619,16 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-015 | 2026-08-15 | `main` | `pushed` | `feat: inspect uploaded source images safely` | 冻结 prepare/status/quality/job contracts；实现幂等 `source_asset.quality_check`、Worker 存储读取与 size/hash 复核、JPEG/PNG/WebP header/尺寸解析、guarded 状态和 0007 migration；前端复用 UUIDv7 意图、受控轮询并显示脱敏质量状态。仅为确定性基础检查，不是 OCR/完整图片质量模型/生产 S3/学习效果；D7/报告/重排产品决策继续暂停 | 116 条快速测试、49 条真实 PostgreSQL/API/Worker 集成测试连续两轮、70 条 apps/web 测试、Drizzle migration drift、Mock/API/图片检查双视口、图片检查与 D1 浏览器 Fixture、全仓 TypeScript、Next.js production build、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；同轮推送并核对本地/远端 SHA 一致 |
 | PUSH-016 | 2026-08-15 | `main` | `pushed` | `feat: guard and demonstrate synthetic recognition review` | 遗留 Fake OCR 仅允许 `simulation && synthetic` Demo Case，API/Worker 双重守卫；新增 `/materials/demo/review` 无网络合成识别确认演示、本地编辑/确认、空态和错误态。仍为 `fake_ocr` 与合成页面，不是真实 OCR、上传到 Case 绑定、识别写入或学习效果；D7/报告/重排产品决策继续暂停 | 121 条快速测试、50 条真实 PostgreSQL/API/Worker 集成测试、73 条 apps/web 测试、Drizzle migration drift、Demo/上传/D1 浏览器 Fixture、Mock/API/Demo 双视口、全仓 TypeScript、Next.js production build、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；同轮推送并核对本地/远端 SHA 一致 |
 | PUSH-017 | 2026-08-15 | `main` | `pushed` | `feat: complete guided tasks and cap retest replans` | 合并 guided 安全完成、ready D7 服务端评分、`repair_verified`、持久两次差异化重排与 `support_required` 封顶；同步五项最终产品决策与严格 `report_ready`。D7 前端、真实 OCR、显式创建 Case/启动识别、异步报告仍未实现；规则内容仍为合成骨架 | 126 条快速测试、54 条真实 PostgreSQL/API/Worker 集成测试、81 条 apps/web 测试、Drizzle migration drift、guided/D1/上传/Demo 浏览器 Fixture、Mock/API/Demo 双视口、全仓 TypeScript、Next.js production build、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；同轮推送并核对本地/远端 SHA 一致 |
+| PUSH-018 | 2026-08-15 | `main` | `pushed` | `feat: submit D7 retests safely from Today` | 合并 ready D7 前端安全作答、权威 Case `stateVersion`、UUIDv7、同 key/body 单次未知重试、冲突刷新后重新确认与 `NETWORK_UNKNOWN` 锁定；只显示 `repair_verified` / `replan_required` / `support_required` 中性结果，不开放报告。同步四主文档与完全访问长期治理；显式创建 Case/启动识别、真实 OCR 与异步报告仍未实现 | 130 条快速测试、54 条真实 PostgreSQL/API/Worker 集成测试、88 条 apps/web 测试、Drizzle migration drift、D7/D1/guided/上传/Demo 浏览器 Fixture、Mock/API/Demo 双视口、全仓及 web TypeScript、Next.js production build、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；同轮推送并核对本地/远端 SHA 一致 |
 
 ## 27. 变更日志
+
+### v0.3.26 — 2026-08-15
+
+- 接入 Today ready D7 前端 attempts：共享 D7 schema、权威 Case 版本、UUIDv7 幂等意图、POST 同 key/body 一次未知/可重试结果重试、冲突刷新后重新确认及未知结果锁定。
+- 三种结果仅消费服务端 `repair_verified`、`replan_required`、`support_required`；UI 不返回答案键、评分方法、内部 ID 或报告状态。受控 HTTP Fixture 覆盖成功、冲突和网络未知；API 双视口新增 current D7 正常态。
+- 130 fast、54 PostgreSQL/API/Worker integration、88 apps/web、Drizzle migration drift、D7/D1/guided/上传/Demo 浏览器 Fixture、Mock/API/Demo 双视口、双 TypeScript 与 Next production build 通过。
+- 同步 PROJECT_MASTER v0.1.33、PRD v0.1.25、DESIGN v0.2.23 与 PUSH-018；登记完全访问长期治理。显式创建 Case/启动识别、真实 OCR、30–50 页基准、派生数据留存与异步报告仍 unresolved/deferred。
 
 ### v0.3.25 — 2026-08-15
 

@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.22"
+version: "0.2.23"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "PUSH-017 guided 完成与 D7/两次重排封顶已通过门禁待发布；D7 前端作答与显式识别创建 Case 仍待实现"
+current_design_stage: "PUSH-018 D7 前端安全作答已通过门禁待发布；显式识别创建 Case 仍待实现"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -86,11 +86,11 @@ upstream_documents:
 
 ### 0.3.2 当前阶段与下一步
 
-**已完成**：学生端“今日”页的桌面视觉结构、颜色角色、主要卡片层级和关键静态内容已确定；默认 API、真实 Today overview、ready guided 安全完成与 ready D1 作答已完成对应构建和自动化门禁。两类写入均使用权威 Case 版本、共享 contracts 和 UUIDv7 幂等意图；guided Fixture 额外覆盖 Case GET 失败恢复、冲突重新确认与网络未知锁定。无参数入口展示服务端 7 日足迹、nullable 周目标、待确认数、脱敏进展与下次检查；合成 Mock 仅显式启用。`/materials/new` 已完成真实单图选择、校验、上传、异步基础检查；`/materials/demo/review` 是持久 Demo 标记的无网络合成识别确认演示。服务端 D7 评分和两次重排封顶已有证据，但前端 D7 仍只读。
+**已完成**：学生端“今日”页的桌面视觉结构、颜色角色、主要卡片层级和关键静态内容已确定；默认 API、真实 Today overview、ready guided、ready D1 与 ready D7 安全作答已完成对应构建和自动化门禁。写入均使用权威 Case 版本、共享 contracts 和 UUIDv7 幂等意图；D7 Fixture 覆盖成功、冲突重新确认与两次未知结果锁定。无参数入口展示服务端 7 日足迹、nullable 周目标、待确认数、脱敏进展与下次检查；合成 Mock 仅显式启用。`/materials/new` 已完成真实单图选择、校验、上传、异步基础检查；`/materials/demo/review` 是持久 Demo 标记的无网络合成识别确认演示。
 
-**尚未完成**：真实模糊度、方向、缺页与恶意文件检查，上传 asset 到 Case 的显式绑定/启动识别、OCR 结果读取与确认写入；其他学生 P0 页面、家长端页面、Logo 紧裁/SVG/Favicon 与最终品牌规范、完整交互原型。D7 后端可评分但前端作答仍未实现；异步报告本轮 deferred。
+**尚未完成**：真实模糊度、方向、缺页与恶意文件检查，上传 asset 到 Case 的显式绑定/启动识别、OCR 结果读取与确认写入；其他学生 P0 页面、家长端页面、Logo 紧裁/SVG/Favicon 与最终品牌规范、完整交互原型。异步报告本轮 deferred。
 
-**下一步**：先接入 D7 前端安全作答，再冻结“开始识别并创建案例”的独立幂等意图、asset↔Case 绑定、识别结果读取 DTO 与确认写入契约。任何新字段不得从视觉稿或合成 Fixture 反推业务状态。
+**下一步**：冻结并实现“开始识别并创建案例”的独立幂等意图、asset↔Case 绑定、识别结果读取 DTO 与确认写入契约。任何新字段不得从视觉稿或合成 Fixture 反推业务状态。
 
 ### 0.4 设计底线
 
@@ -1776,6 +1776,13 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 ---
 
 ## 22. 版本记录
+
+### v0.2.23 — 2026-08-15
+
+- 发布 Today ready D7 安全作答面板：选择、同步、提交中、冲突、未知结果锁定及 `repair_verified` / `replan_required` / `support_required` 三种结果均使用自然语言，不显示答案键、评分方法或内部 ID。
+- 新增 D7 受控浏览器成功/冲突/网络未知证据及 API current D7 双视口截图；Stitch“今日-最终确认版V1.1”、固定壳层与深色卡书本越界裁切保持不变。
+- 通过只称“第 7 天新题检查已通过/修复验证已有证据”，不称报告 ready、永久掌握或真实学习效果；封顶态只建议老师或家长协助，不暗示已接真实人工服务。
+- 同步 PROJECT_MASTER v0.1.33、PRD v0.1.25、TDD v0.3.26 与 PUSH-018；下一步为显式“开始识别并创建案例”，真实 OCR 与异步报告仍后置。
 
 ### v0.2.22 — 2026-08-15
 

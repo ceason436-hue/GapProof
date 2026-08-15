@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.32"
+version: "0.1.33"
 status: "ACTIVE"
-current_stage: "项目本身初赛验收冲刺；PUSH-017 引导任务完成与 D7/两次重排封顶已通过门禁待发布；D7 前端作答和显式识别创建 Case 仍待实现"
+current_stage: "项目本身初赛验收冲刺；PUSH-018 D7 前端安全作答已通过门禁待发布；显式识别创建 Case 仍待实现"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -131,6 +131,7 @@ next_action:
 - 迁移保持选择性：只替换达到阈值或漂移的任务，健康任务继续使用；仅协调任务自身触发阈值时才迁移控制面。新任务从最新 Git 锚点创建，不携带旧全文上下文。
 - 协调迁移时只更新同一个 heartbeat target，并停止旧协调的持续目标/自动续跑；不得复制 heartbeat。执行任务不创建独立长期目标。
 - 新建前端或后端执行任务时默认显式使用 `gpt-5.6-luna`、`high` 推理强度；新建协调/文档治理任务时默认显式使用 `gpt-5.6-sol`、`medium` 推理强度。仅在用户另行指定、目标主机不支持或安全恢复需要时偏离，并在交接中记录原因；该规则适用于后续版本与选择性迁移。
+- 用户已在 Codex 客户端为本项目选择“完全访问”；当前及后续前端、后端、协调/文档治理版本在平台实际授予的权限内，常规只读核验、分支/工作树操作、项目文件读写、构建/测试、精确暂存、提交与既定远端推送直接执行，不重复请求用户批准。若某条路径仍被平台强制拦截，改用同权限范围内的等价安全路径并如实记录；本规则不绕过平台安全政策，不扩大任务范围，也不授权未明确要求的破坏性操作或外部主体权限。
 - 本协调目标中的“初赛验收标准”只评估项目本身的代码、契约、交互、测试、数据/隐私边界与可复现性；作品简介、PPT/PDF、视频、报名、提交系统和其他参赛材料不属于本任务的完成条件。竞赛材料可继续作为项目事实记录，但不进入本协调任务的派工与验收门槛。
 
 ---
@@ -143,7 +144,7 @@ next_action:
 
 `[FACT]` GOAI 无界应用赛道参赛手册列出的初赛截止日期为 2026-08-16；具体当天截止时刻、入口、文件大小及后续通知仍须在官网、提交系统或官方群再次核对。
 
-`[DECISION]` 当前处于：**项目本身初赛验收冲刺；学生端“今日”页默认入口已接入真实 API，ready guided 与 D1 均有受控提交，服务端已实现 D7 客观复测、最多两次规则化合成重排和 `support_required` 封顶。D7 前端作答仍未接入。当前初赛项目验收允许使用醒目标注的合成 OCR Demo；真实阿里云 OCR 后置。图片基础检查后必须由用户显式执行“开始识别并创建案例”，该真实 Case/OCR 写入契约尚未冻结或实现。异步报告不属于本轮项目验收；`report_ready` 仅保留“报告已生成、有权威引用且当前可读”的严格语义**。
+`[DECISION]` 当前处于：**项目本身初赛验收冲刺；学生端“今日”页默认入口已接入真实 API，ready guided、D1 与 D7 均有受控提交；D7 客观复测通过仅显示 `repair_verified` 中性结果，失败最多两次规则化合成重排后进入 `support_required`。当前初赛项目验收允许使用醒目标注的合成 OCR Demo；真实阿里云 OCR 后置。图片基础检查后必须由用户显式执行“开始识别并创建案例”，该真实 Case/OCR 写入契约尚未冻结或实现。异步报告不属于本轮项目验收；`report_ready` 仅保留“报告已生成、有权威引用且当前可读”的严格语义**。
 
 ### 1.2 已完成
 
@@ -187,7 +188,7 @@ next_action:
 - `[PLANNED]` 尚未建立 30–40 个技能节点及 12 个深度节点的图谱 V0.1。
 - `[PLANNED]` 尚未制作比赛用原创模拟试卷、合成学生轨迹和独立金标集。
 - `[PLANNED]` 尚未确认至少一位英语教育背景人员能否短时抽检核心金标内容。
-- `[PROTOTYPE]` 已建立最小后端 Thin Slice，并完成真实图片字节上传、确定性图片 header/尺寸质量检查、受 Demo 守卫的 Fake OCR、无网络合成识别确认演示、确定性干预生成、guided/D1 前端提交、D1/D7 后端评分及两次规则化重排封顶；尚未形成从真实 OCR 识别到修复证明的完整端到端 Demo。显式 Case/OCR 启动、识别读取/确认写入、真实 AI 干预、真实题库、D7 前端、真实个性化内容与通知仍未实现；异步报告本轮 deferred。
+- `[PROTOTYPE]` 已建立最小后端 Thin Slice，并完成真实图片字节上传、确定性图片 header/尺寸质量检查、受 Demo 守卫的 Fake OCR、无网络合成识别确认演示、确定性干预生成、guided/D1/D7 前端安全提交、D1/D7 后端评分及两次规则化重排封顶；尚未形成从真实 OCR 识别到修复证明的完整端到端 Demo。显式 Case/OCR 启动、识别读取/确认写入、真实 AI 干预、真实题库、真实个性化内容与通知仍未实现；异步报告本轮 deferred。
 - `[PROTOTYPE]` 学生端“今日”页 F0 Mock、F1b 只读 API、F1c ready D1 客户端作答及真实概览投影已完成对应技术门禁；受控 HTTP 浏览器 Fixture 已证明成功、冲突和网络未知三条交互边界。默认入口现为 API，只有显式 `?source=mock` 使用合成页面；业务主闭环仍未完成，其余学生 P0 页面、家长端页面和评委最小页仍未完成。
 - `[PLANNED]` 尚未完成正式 500 字简介、初赛 PPT、视频、README、数据卡、依赖清单和合规一页纸。
 - `[PLANNED]` 尚未产生可报告的工程评测结果或真实学生学习效果。
@@ -2025,11 +2026,11 @@ review_date:
 | DEC-028 | MVP Agent 固定为六节点 LangGraph.js 图 | accepted | 新增节点必须更新图版本、Schema 和 Golden Cases |
 | DEC-029 | 所有工具先完成接口、Schema、Mock 和错误处理；verify_item/schedule_retest 做 MVP 最小实现 | accepted | 工具边界或 Provider 能力变化 |
 | DEC-030 | escalate_human 先创建待处理记录；analyze_speech/score_writing 暂缓真实能力 | accepted | 真实人工、语音或写作试点启动 |
-| DEC-031 | UUIDv7 + PostgreSQL 16+，完整表结构和删除策略以 TDD v0.3.25 为准 | accepted | 数据规模、扩展支持或合规要求变化 |
+| DEC-031 | UUIDv7 + PostgreSQL 16+，完整表结构和删除策略以 TDD v0.3.26 为准 | accepted | 数据规模、扩展支持或合规要求变化 |
 | DEC-032 | TDD 详细 API 路由为唯一正式接口 | accepted | API 版本升级或新客户端边界产生 |
 | DEC-033 | 杭州阿里云单区域联网 Docker Compose，真实 Provider 演示，Mock 仅测试/故障注入 | accepted | 比赛网络、并发、合规或可用性要求变化 |
 | DEC-034 | DeepSeek `deepseek-v4-flash`、MiniMax `minimax-m3`、腾讯混元 Embedding 作为当前模型配置 | accepted | 账号权限、供应商模型版本或评测结果变化 |
-| DEC-035 | 学生端“今日”页桌面视觉基线已选定；使用 `#0036FF` 导航/进度与 `#B5F800` 行动/积极变化，完整规范以 DESIGN v0.2.22 为准 | accepted | 真实前端实现、可用性测试或品牌资产定稿产生反证 |
+| DEC-035 | 学生端“今日”页桌面视觉基线已选定；使用 `#0036FF` 导航/进度与 `#B5F800` 行动/积极变化，完整规范以 DESIGN v0.2.23 为准 | accepted | 真实前端实现、可用性测试或品牌资产定稿产生反证 |
 | DEC-036 | 新用户今日页先完成第一次检查，不显示虚构的足迹、进展或下次检查；首次任务生成后切换常规今日页 | accepted | onboarding 实测或产品范围变化 |
 | DEC-037 | 目标教材 ISBN 为 `978-7-5720-3630-9`；配套练习 `978-7-5720-3519-7` 不纳入 MVP | accepted | 版权页或出版社正式材料产生冲突 |
 | DEC-038 | 购买教材/试题及完整转换文本保持本地私有并排除 Git；仓库只保存元数据、处理器和项目原创/合成内容 | accepted | 取得可归档的明确再分发许可且完成权利复核 |
@@ -2058,7 +2059,7 @@ review_date:
 | 初赛 PPT | `[PLANNED]` | 8–10 页覆盖评分项 | 原型/图表 |
 | 原创模拟试卷 | `[PLANNED]` | 来源自有、已知根因、许可清楚 | 技能示例 |
 | 合成 Case | `[PROTOTYPE]` | 已完成 1 个原创合成 Case 及低置信、复测失败重排、D+7 成功分支；仍需扩充同题同错不同根因与回归集 | 数据 Schema/教材映射 |
-| 学生“今日”页视觉基线 | `[PROTOTYPE]` | 已选定 Stitch 桌面稿；默认 API、真实概览、guided 完成与 ready D1 客户端作答已通过技术门禁，合成 Mock 仅显式启用；D7 后端已可评分但前端作答仍待接入 | DESIGN v0.2.22 |
+| 学生“今日”页视觉基线 | `[PROTOTYPE]` | 已选定 Stitch 桌面稿；默认 API、真实概览及 guided、ready D1、ready D7 安全作答已通过技术门禁，合成 Mock 仅显式启用；冻结书本越界裁切保持不变 | DESIGN v0.2.23 |
 | 其余学生/家长关键页设计 | `[PLANNED]` | 覆盖主闭环并遵循今日页设计准则 | 视觉基线 |
 | 可点击 Thin Slice | `[PLANNED]` | 上传到修复证明全链路 | 设计/开发 |
 | 数据与合规页 | `[PLANNED]` | 类型、来源、授权、脱敏、删除、边界 | 数据选择 |
@@ -2117,6 +2118,13 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.33 — 2026-08-15
+
+- 合并 Today ready D7 安全作答：提交前读取权威 Case `stateVersion`，一次明确意图使用 UUIDv7，同 key/body 仅重试一次未知/可重试结果；`VERSION_CONFLICT` 刷新后要求重新确认，第二次未知后以 `NETWORK_UNKNOWN` 锁定。
+- 结果只按服务端显示 `repair_verified`、`replan_required` 或 `support_required`；通过不称报告 ready，失败不称真实个性化或已接人工服务。D7 受控浏览器 Fixture 覆盖成功、冲突与网络未知，API 双视口保持 Stitch V1.1 深色卡书本越界裁切。
+- 130 fast、54 PostgreSQL/API/Worker integration、88 apps/web、migration drift、D7/D1/guided/上传/Demo 浏览器 Fixture、Mock/API/Demo 双视口、双 TypeScript 与 Next production build 通过。
+- 登记后续前端、后端与协调/文档治理版本继承用户已授予的完全访问权限，常规项目动作不重复审批；不绕过平台安全或扩大破坏性权限。同步 PRD v0.1.25、TDD v0.3.26、DESIGN v0.2.23 与 PUSH-018。真实 OCR、显式创建 Case/启动识别、30–50 页基准、派生数据留存和异步报告仍保持 unresolved/deferred。
 
 ### v0.1.32 — 2026-08-15
 

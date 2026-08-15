@@ -7,10 +7,10 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档状态 | Draft v0.1.24 |
+| 文档状态 | Draft v0.1.25 |
 | 产品名称 | 知隙 GapProof |
 | 文档角色 | 产品需求、业务流程、功能范围与验收标准 |
-| 当前阶段 | PUSH-017 guided 完成与 D7/两次重排封顶已通过门禁待发布；D7 前端作答与显式识别创建 Case 仍待实现 |
+| 当前阶段 | PUSH-018 D7 前端安全作答已通过门禁待发布；显式识别创建 Case 仍待实现 |
 | 产品形态 | Web 应用 |
 | 目标教材 | 上海教育出版社《义务教育教科书（五·四学制）英语 八年级上册》 |
 | 适用版本 | 目标教材以 ISBN、当前 PDF 哈希和内容快照锁定；版权页不可取得，版次、印次和册次保持未知 |
@@ -497,10 +497,10 @@ Demo 界面或旁白必须明确区分：
 - `[PROTOTYPE]` Worker 可从 `intervention_ready` 生成 3 步/8 分钟的确定性最小干预任务并进入 `intervention_active`；学生可通过正式接口读取今日任务并提交完整步骤。提交后系统原子创建 24 小时后的 D+1 复测任务、进入 `d1_scheduled`，但 mastery 仅为 `pending_retest`。
 - `[PROTOTYPE]` D+1 任务通过事务内 `retest.due` 延迟 Job 和生产 Worker 到期激活；Demo 可在受环境开关保护的虚拟时钟接口中按 Case 快进。到期仅把任务从 `scheduled` 改为 `ready`，Case 仍为 `d1_scheduled`、mastery 仍为 `pending_retest`。
 - `[PROTOTYPE]` D+1 ready 任务现可通过共享 `POST /v1/tasks/{taskId}/attempts` 契约提交客观选择并由服务端私有答案确定性评分；通过时创建 D7 调度，失败时事务内入队异步重排。当前题目与重排内容仍为明确标记的合成 Fixture，不是现实题库或真实个性化效果。
-- `[PROTOTYPE]` ready D7 已复用同一 attempts 路由完成服务端确定性评分：通过进入 `repair_verified`，不会冒充 `report_ready`；失败按持久 `replan_count` 最多自动重排两次，策略依次为“更换讲解表达与练习形式”和“下探一个前置技能并加入示例”，再次失败进入 `support_required` 且不再入队。D7 前端作答仍未实现；规则化合成内容不等于真实个性化或真实人工协助。
+- `[PROTOTYPE]` ready D7 已复用同一 attempts 路由完成跨端安全作答与服务端确定性评分：Today 提交前读取权威 Case 版本，使用 UUIDv7、同 key/body 单次未知重试、冲突重新确认与未知结果锁定；通过进入 `repair_verified`，不会冒充 `report_ready`；失败按持久 `replan_count` 最多自动重排两次，再次失败进入 `support_required` 且不再入队。规则化合成内容不等于真实个性化或真实人工协助。
 - `[PROTOTYPE]` ready guided intervention 已可在 Today 勾选完整步骤并安全提交；使用权威 Case 版本、UUIDv7 幂等意图、冲突重新确认、独立 GET 恢复和网络未知锁定，完成后只声明安排 D+1，不声明掌握。
-- `[PROTOTYPE]` 学生端“今日”页 F0 Mock、F1b 只读 API、F1c ready D1 客户端作答与真实 overview 已通过对应构建和自动化门禁；F1c 使用共享 attempts contracts、权威 Case 版本、UUIDv7 幂等意图和受控错误状态。受控 HTTP 浏览器 Fixture 已覆盖真实点击成功、`VERSION_CONFLICT` 重新确认与 `NETWORK_UNKNOWN` 锁定三条路径；无参数入口现走真实 API，只有显式 `?source=mock` 使用合成页面，但仍不能作为主闭环完成证据。
-- `[PROTOTYPE]` 已实现 JPEG/PNG/WebP、1B–10MiB 的真实字节上传与确定性图片基础检查闭环：`/materials/new` 计算 SHA-256，以 UUIDv7 固定一次上传/prepare 意图，经同源 API PUT 同一原始字节并读取异步状态；服务端校验归属、MIME/大小/hash，原子落盘后由 `source_asset.quality_check` Worker 验证字节并持久化质量状态。页面不显示对象键、token、内部 ID、文件名、hash 或 OCR 内容。该能力仅是本地 Demo 存储与 `image-header-v1` 检查器，不是生产 S3、完整图片质量模型、OCR、识别确认、Case 创建或真实学习效果；显式创建 Case/启动识别、D7 前端和完整上传到修复证明主闭环仍未实现。
+- `[PROTOTYPE]` 学生端“今日”页 F0 Mock、F1b API、F1c ready D1 与 ready D7 客户端作答及真实 overview 已通过对应构建和自动化门禁；D1/D7 使用共享 attempts contracts、权威 Case 版本、UUIDv7 幂等意图和受控错误状态。D7 受控 HTTP 浏览器 Fixture 已覆盖真实点击成功、`VERSION_CONFLICT` 重新确认与 `NETWORK_UNKNOWN` 锁定三条路径；无参数入口现走真实 API，只有显式 `?source=mock` 使用合成页面，但显式创建 Case/启动识别尚未完成，因此仍不能作为完整主闭环完成证据。
+- `[PROTOTYPE]` 已实现 JPEG/PNG/WebP、1B–10MiB 的真实字节上传与确定性图片基础检查闭环：`/materials/new` 计算 SHA-256，以 UUIDv7 固定一次上传/prepare 意图，经同源 API PUT 同一原始字节并读取异步状态；服务端校验归属、MIME/大小/hash，原子落盘后由 `source_asset.quality_check` Worker 验证字节并持久化质量状态。页面不显示对象键、token、内部 ID、文件名、hash 或 OCR 内容。该能力仅是本地 Demo 存储与 `image-header-v1` 检查器，不是生产 S3、完整图片质量模型、OCR、识别确认、Case 创建或真实学习效果；显式创建 Case/启动识别和完整上传到修复证明主闭环仍未实现。
 - `[PROTOTYPE]` 遗留 Fake OCR 只允许 `simulation && synthetic` 的 Demo Case，API 与 Worker 双重拒绝非 Demo 路径。`/materials/demo/review` 是明确标注的无网络合成识别确认演示：允许本地修正和记录演示确认，提供空态/错误态，但不调用 `/api/v1`、不启动 OCR、不创建或推进 Case、不生成学习结论。真实上传到 Case 的绑定、识别结果读取 DTO 与确认写入仍未实现。
 - 因此，以下验收项仍是完整 MVP 的目标，不因后端局部闭环而标记为 `[LIVE]`。
 
@@ -545,7 +545,7 @@ Demo 界面或旁白必须明确区分：
 - 确认小题提交具有未选择、已选择、提交中、已接收、冲突、失败六种 UI 状态。成功后使用中性“已收到，正在准备下一步”反馈，不把诊断探针包装成考试分数，也不显示内部答案键或评分映射。
 - 当前确认小题、Today、任务详情、干预提交及 D1 `POST /v1/tasks/{taskId}/attempts` 均已具备共享请求/响应 Schema。前端只可消费 `@gapproof/contracts`，不得自行补写任务字段、答案、掌握结论或服务端未返回的首页事实。
 - D+1 的 `scheduled → ready` 由服务端到期 Worker 或 Demo 虚拟时钟产生；学生端不得自行倒计时改状态。`ready` 只表示允许进入复测；只有服务端返回的 D1 attempt 结果才能表示本次通过/失败，且 D1 通过只进入 `d7_scheduled`，不得提前宣称已经掌握。
-- Today 的 `currentTaskId` 为服务端权威 `uuid | null`；当前可行动的 ready D1、ready D7 或 ready guided 任务可被引用，scheduled、completed 或无任务时为 `null`。前端不得从数组顺序猜测替代任务；当前 D7 前端仍只读，须由后续切片接入共享 attempts 契约。
+- Today 的 `currentTaskId` 为服务端权威 `uuid | null`；当前可行动的 ready D1、ready D7 或 ready guided 任务可被引用，scheduled、completed 或无任务时为 `null`。前端不得从数组顺序猜测替代任务；ready D7 已接入共享 attempts 契约，scheduled/completed D7 与“下次检查”卡仍只读。
 - Today 的 `overview` 由服务端始终提供：恰好 7 个截至学生本地“今天”的连续日期及完成任务数、真实周目标或 `null`、未删除待确认 Case 数、最多两条脱敏进展，以及最早 scheduled D1/D7 检查。当前无权威周目标存储，因此返回 `weeklyGoal:null`；显式 API 页面缺失该字段时必须受控报错，不得回退 Mock 或推断百分比。
 - 干预提交必须恰好覆盖任务全部步骤；提交中禁用重复操作，`INVALID_INPUT` 保留已选步骤，`INVALID_TASK_STATE` 刷新今日任务并解释任务已变化，`VERSION_CONFLICT` 只自动刷新一次，不自动重复写入。
 
@@ -656,6 +656,7 @@ PROJECT_MASTER.md
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
+| 0.1.25 | 2026-08-15 | 发布 Today ready D7 安全作答、权威 Case 版本、UUIDv7、同 key/body 单次未知重试、冲突重新确认、`NETWORK_UNKNOWN` 锁定及三种服务端结果中性文案；不开放报告、不宣称真实个性化/人工服务。同步 PROJECT_MASTER v0.1.33、TDD v0.3.26、DESIGN v0.2.23 与 PUSH-018；显式创建 Case/启动识别、真实 OCR、30–50 页基准、派生数据留存和异步报告仍 unresolved/deferred |
 | 0.1.24 | 2026-08-15 | 发布 guided 安全完成与服务端 D7 客观评分、两次规则化重排及 `support_required` 封顶；确认合成 OCR 可满足本轮项目验收、显式开始识别/创建 Case、阿里云处理与未成年人边界、严格 `report_ready` 和异步报告 deferred。D7 前端、真实 OCR、30–50 页基准、派生数据留存仍未完成；同步 PROJECT_MASTER v0.1.32、TDD v0.3.25、DESIGN v0.2.22 与 PUSH-017 |
 | 0.1.23 | 2026-08-15 | 发布受 `simulation && synthetic` 双重守卫的遗留 Fake OCR 与 `/materials/demo/review` 无网络合成识别确认演示；浏览器 Fixture 证明零 `/api/v1`、本地确认、空/错态和脱敏边界。明确不是真实 OCR、上传到 Case 绑定或学习效果；同步 PROJECT_MASTER v0.1.31、TDD v0.3.24、DESIGN v0.2.21 与 PUSH-016，D7/报告/重排产品决策继续暂停 |
 | 0.1.22 | 2026-08-15 | 发布真实确定性图片基础检查闭环：prepare/status contracts、幂等异步 Job、存储字节复核、JPEG/PNG/WebP header/尺寸解析、质量状态持久化及受控前端轮询；明确不是 OCR/完整图片质量模型/生产 S3/学习效果，D7/报告/重排产品决策继续暂停；同步 PROJECT_MASTER v0.1.30、TDD v0.3.23、DESIGN v0.2.20 与 PUSH-015 |
