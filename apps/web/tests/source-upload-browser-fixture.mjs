@@ -83,6 +83,8 @@ const statusSequences = {
   timeout: ["processing"],
   cancel: ["processing"],
   "prepare-network-unknown": ["queued", "processing", "succeeded"],
+  "prepare-processing": ["processing", "succeeded"],
+  "prepare-final": ["succeeded"],
   "post-network-unknown": ["queued", "processing", "succeeded"],
   "put-network-unknown": ["queued", "processing", "succeeded"],
 };
@@ -137,7 +139,12 @@ const fixtureServer = createServer(async (request, response) => {
       request.socket.destroy();
       return;
     }
-    json(response, 200, envelope({ assetId, stage: "image_quality_check", processingStatus: "queued" }));
+    const prepareResponse = scenario === "prepare-processing"
+      ? inspectionView("processing")
+      : scenario === "prepare-final"
+        ? inspectionView("succeeded")
+        : { assetId, stage: "image_quality_check", processingStatus: "queued" };
+    json(response, 200, envelope(prepareResponse));
     return;
   }
   if (request.method === "GET" && request.url === backendInspectionPath) {
@@ -200,7 +207,7 @@ const resetFixtureState = currentScenario => {
   puts.length = 0;
   gets.length = 0;
 };
-const visitAndInspect = async (page, expectedStatus, expectedPreparePosts = 1) => {
+const visitAndInspect = async (page, expectedStatus, expectedPreparePosts = 1, expectedGets = 1) => {
   await page.goto(`${webOrigin}/materials/new`, { waitUntil: "networkidle" });
   assert(await page.getByRole("heading", { name: "上传一张错题或作业图片" }).count() === 1, "Default materials page did not render the upload UI.");
   assert(await page.getByText("真实上传会在后续阶段接入", { exact: false }).count() === 0, "Upload route still renders the F0 placeholder.");
@@ -215,7 +222,8 @@ const visitAndInspect = async (page, expectedStatus, expectedPreparePosts = 1) =
   assert(posts.length === 1, `Expected one upload POST, observed ${posts.length}.`);
   assert(preparePosts.length === expectedPreparePosts, `Expected ${expectedPreparePosts} prepare POST requests, observed ${preparePosts.length}.`);
   assert(puts.length === 1, `Expected one PUT request, observed ${puts.length}.`);
-  assert(gets.length >= 1 || expectedStatus === "error", "Inspection did not read the server status.");
+  assert(gets.length >= expectedGets, `Expected at least ${expectedGets} inspection GET requests, observed ${gets.length}.`);
+  if (expectedGets === 0) assert(gets.length === 0, "Terminal prepare response triggered an unnecessary GET.");
   assert(uuidV7Pattern.test(posts[0].idempotencyKey ?? ""), "Upload intent did not use UUIDv7.");
   assert(preparePosts.every(post => post.idempotencyKey === posts[0].idempotencyKey), "Prepare changed the upload intent idempotency key.");
   assert(preparePosts.every(post => JSON.stringify(post.body) === "{}"), "Prepare body was not the exact empty shared DTO.");
@@ -241,12 +249,14 @@ try {
 
   const browser = await chromium.launch({ channel: "msedge", headless: true });
   try {
-    for (const [currentScenario, expectedStatus, expectedPreparePosts] of [
+    for (const [currentScenario, expectedStatus, expectedPreparePosts, expectedGets] of [
       ["success", "succeeded", 1],
       ["low-resolution", "needs_confirmation", 1],
       ["failed", "failed", 1],
       ["retryable", "retryable_error", 1],
       ["prepare-network-unknown", "succeeded", 2],
+      ["prepare-processing", "succeeded", 1, 1],
+      ["prepare-final", "succeeded", 1, 0],
       ["get-network-unknown", "succeeded", 1],
       ["post-network-unknown", "succeeded", 1],
       ["put-network-unknown", "succeeded", 1],
@@ -258,7 +268,7 @@ try {
         const path = new URL(request.url()).pathname;
         if (path.startsWith("/api/v1/")) browserPaths.push(path);
       });
-      const visibleText = await visitAndInspect(page, expectedStatus, expectedPreparePosts);
+      const visibleText = await visitAndInspect(page, expectedStatus, expectedPreparePosts, expectedGets ?? 1);
       if (currentScenario === "success") {
         assert(visibleText.includes("图片基础检查通过，识别尚未开始"), "Success UI did not show the neutral inspection result.");
         await mkdir(screenshots, { recursive: true });

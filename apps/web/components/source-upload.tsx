@@ -2,7 +2,7 @@
 
 import {
   InitiatedSourceAssetUploadViewSchema,
-  SourceAssetPrepareQueuedViewSchema,
+  SourceAssetPrepareViewSchema,
   UploadedSourceAssetViewSchema,
   type InitiatedSourceAssetUploadView,
   type SourceAssetProcessingView,
@@ -17,7 +17,11 @@ import {
   sha256Hex,
   validateSourceUploadFile,
 } from "@/lib/source-upload";
-import { pollSourceAssetInspection, sourceInspectionMessage } from "@/lib/source-inspection";
+import {
+  isTerminalSourceInspectionStatus,
+  pollSourceAssetInspection,
+  sourceInspectionMessage,
+} from "@/lib/source-inspection";
 import { AppShell } from "./app-shell";
 
 type UploadStatus =
@@ -192,14 +196,21 @@ export function SourceUpload({ studentId }: { studentId: string }) {
       setSafeState("preparing", "上传完成，正在准备图片检查。");
       const prepared = await apiPost(
         `/api/v1/source-assets/${intent.assetId}/commands/prepare`,
-        SourceAssetPrepareQueuedViewSchema,
+        SourceAssetPrepareViewSchema,
         buildSourceAssetPrepareRequest(),
         intent.idempotencyKey,
         signal,
       );
       if (prepared.data.assetId !== intent.assetId) throw new Error("SOURCE_INSPECTION_ASSET_MISMATCH");
-      setSafeState("queued", "图片检查已排队，可以稍后回来查看。");
-      await inspectIntent(intent, signal);
+      if (prepared.data.processingStatus === "queued") {
+        setSafeState("queued", "图片检查已排队，可以稍后回来查看。");
+        await inspectIntent(intent, signal);
+      } else {
+        showInspectionView(prepared.data);
+        if (!isTerminalSourceInspectionStatus(prepared.data.processingStatus)) {
+          await inspectIntent(intent, signal);
+        }
+      }
     } catch (error) {
       if (!mountedRef.current) return;
       if (signal.aborted) {

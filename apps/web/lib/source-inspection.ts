@@ -61,7 +61,7 @@ export async function pollSourceAssetInspection({
     onView?.(view);
     if (isTerminalSourceInspectionStatus(view.processingStatus)) return view;
 
-    const delay = SOURCE_INSPECTION_POLL_DELAYS_MS[Math.min(delayIndex, SOURCE_INSPECTION_POLL_DELAYS_MS.length - 1)];
+    const delay = SOURCE_INSPECTION_POLL_DELAYS_MS[Math.min(delayIndex, SOURCE_INSPECTION_POLL_DELAYS_MS.length - 1)] ?? 3_000;
     delayIndex += 1;
     await sleep(delay, signal);
     elapsedMilliseconds += delay;
@@ -89,7 +89,9 @@ export function sourceInspectionMessage(view: SourceAssetProcessingView): string
       return "正在检查图片。";
     case "needs_confirmation": {
       const reason = view.quality?.reasons[0];
-      return reason ? qualityReasonMessages[reason] : "这张图片需要你确认后才能继续。";
+      return reason
+        ? qualityReasonMessages[reason] ?? "这张图片需要你确认后才能继续。"
+        : "这张图片需要你确认后才能继续。";
     }
     case "succeeded":
       return "图片基础检查通过，识别尚未开始。";

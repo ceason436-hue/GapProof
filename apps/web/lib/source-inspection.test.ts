@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
-import type { SourceAssetProcessingView } from "@gapproof/contracts";
+import { Value } from "@sinclair/typebox/value";
+import {
+  SourceAssetPrepareViewSchema,
+  type SourceAssetProcessingView,
+} from "@gapproof/contracts";
 import {
   pollSourceAssetInspection,
   sourceAssetInspectionPath,
   sourceInspectionMessage,
 } from "./source-inspection";
+import { ensureContractFormats } from "./contract-formats";
 
 const assetId = "0198c111-1111-7000-8000-000000000002";
 const baseView = (processingStatus: SourceAssetProcessingView["processingStatus"]): SourceAssetProcessingView => ({
@@ -17,6 +22,8 @@ const baseView = (processingStatus: SourceAssetProcessingView["processingStatus"
 });
 
 describe("source inspection client helpers", () => {
+  ensureContractFormats();
+
   it("uses the same-origin asset status path", () => {
     expect(sourceAssetInspectionPath(assetId)).toBe(`/api/v1/source-assets/${assetId}`);
   });
@@ -73,5 +80,20 @@ describe("source inspection client helpers", () => {
       },
     })).toContain("分辨率偏低");
     expect(sourceInspectionMessage(baseView("succeeded"))).toBe("图片基础检查通过，识别尚未开始。");
+    expect(sourceInspectionMessage(baseView("needs_confirmation"))).toBe("这张图片需要你确认后才能继续。");
+  });
+
+  it("accepts a final processing response through the prepare response union", () => {
+    expect(Value.Check(SourceAssetPrepareViewSchema, {
+      ...baseView("succeeded"),
+      quality: {
+        status: "passed",
+        detectedMimeType: "image/png",
+        width: 1200,
+        height: 900,
+        reasons: [],
+        checkerVersion: "image-header-v1",
+      },
+    })).toBe(true);
   });
 });
