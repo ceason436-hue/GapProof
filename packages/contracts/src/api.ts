@@ -107,6 +107,82 @@ export type UploadedSourceAssetView = Static<
   typeof UploadedSourceAssetViewSchema
 >;
 
+export const PrepareSourceAssetRequestSchema = Type.Object(
+  {},
+  { additionalProperties: false },
+);
+
+export type PrepareSourceAssetRequest = Static<
+  typeof PrepareSourceAssetRequestSchema
+>;
+
+export const SourceAssetInspectionProcessingStatusSchema = Type.Union([
+  Type.Literal("uploaded"),
+  Type.Literal("queued"),
+  Type.Literal("processing"),
+  Type.Literal("needs_confirmation"),
+  Type.Literal("succeeded"),
+  Type.Literal("retryable_error"),
+  Type.Literal("failed"),
+]);
+
+export const SourceAssetQualityReasonSchema = Type.Union([
+  Type.Literal("low_resolution"),
+  Type.Literal("mime_mismatch"),
+  Type.Literal("invalid_or_truncated_image"),
+  Type.Literal("pixel_limit_exceeded"),
+  Type.Literal("stored_bytes_mismatch"),
+  Type.Literal("stored_bytes_missing"),
+]);
+
+export const SourceAssetQualityCheckSchema = Type.Object({
+  status: Type.Union([
+    Type.Literal("passed"),
+    Type.Literal("needs_confirmation"),
+    Type.Literal("failed"),
+  ]),
+  detectedMimeType: Type.Union([StudentUploadMimeTypeSchema, Type.Null()]),
+  width: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+  height: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+  reasons: Type.Array(SourceAssetQualityReasonSchema, { uniqueItems: true }),
+  checkerVersion: Type.Literal("image-header-v1"),
+}, { additionalProperties: false });
+
+export type SourceAssetQualityCheck = Static<
+  typeof SourceAssetQualityCheckSchema
+>;
+
+export const SourceAssetPrepareQueuedViewSchema = Type.Object({
+  assetId: Type.String({ format: "uuid" }),
+  stage: Type.Literal("image_quality_check"),
+  processingStatus: Type.Literal("queued"),
+}, { additionalProperties: false });
+
+export type SourceAssetPrepareQueuedView = Static<
+  typeof SourceAssetPrepareQueuedViewSchema
+>;
+
+export const SourceAssetProcessingViewSchema = Type.Object({
+  assetId: Type.String({ format: "uuid" }),
+  stage: Type.Literal("image_quality_check"),
+  processingStatus: SourceAssetInspectionProcessingStatusSchema,
+  mimeType: StudentUploadMimeTypeSchema,
+  byteSize: Type.Integer({ minimum: 1, maximum: 10_485_760 }),
+  quality: Type.Union([SourceAssetQualityCheckSchema, Type.Null()]),
+}, { additionalProperties: false });
+
+export type SourceAssetProcessingView = Static<
+  typeof SourceAssetProcessingViewSchema
+>;
+
+export const SourceAssetQualityCheckJobDataSchema = Type.Object({
+  assetId: Type.String({ format: "uuid" }),
+}, { additionalProperties: false });
+
+export type SourceAssetQualityCheckJobData = Static<
+  typeof SourceAssetQualityCheckJobDataSchema
+>;
+
 export const CaseViewSchema = Type.Object({
   id: Type.String({ format: "uuid" }),
   studentId: Type.String({ format: "uuid" }),
