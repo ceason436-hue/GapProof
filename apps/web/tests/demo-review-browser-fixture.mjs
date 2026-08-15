@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdir, resolve } from "node:fs/promises";
+import { access, mkdir, readFile, resolve, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,6 +7,12 @@ import { chromium } from "playwright";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const screenshots = resolve(webRoot, "screenshots");
+const nextEnvPath = resolve(webRoot, "next-env.d.ts");
+const nextEnvBefore = await readFile(nextEnvPath);
+const generatedAgentFiles = [resolve(webRoot, "AGENTS.md"), resolve(webRoot, "CLAUDE.md")];
+const agentFileExisted = new Map(await Promise.all(generatedAgentFiles.map(async path => {
+  try { await access(path); return [path, true]; } catch { return [path, false]; }
+})));
 const webPort = process.env.DEMO_REVIEW_FIXTURE_WEB_PORT ?? "3104";
 const webOrigin = `http://127.0.0.1:${webPort}`;
 const nextBin = createRequire(import.meta.url).resolve("next/dist/bin/next");
@@ -64,7 +70,7 @@ try {
       await screenshotPage.goto(`${webOrigin}/materials/demo/review`, { waitUntil: "networkidle" });
       await screenshotPage.evaluate(() => {
         const banner = document.createElement("div");
-        banner.textContent = "受控 Fixture · 合成 bytes";
+        banner.textContent = "受控 Fixture · 合成页面";
         Object.assign(banner.style, {
           position: "fixed", right: "12px", bottom: "10px", zIndex: "99",
           padding: "6px 10px", borderRadius: "999px", background: "#111318",
@@ -82,4 +88,6 @@ try {
 } finally {
   if (webServer.exitCode === null) webServer.kill();
   await webServerExit;
+  await writeFile(nextEnvPath, nextEnvBefore);
+  await Promise.all(generatedAgentFiles.map(path => agentFileExisted.get(path) ? undefined : rm(path, { force: true })));
 }
