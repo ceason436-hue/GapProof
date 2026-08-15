@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.40"
+version: "0.1.41"
 status: "ACTIVE"
-current_stage: "PUSH-025 已发布：授权脱敏材料的阿里云教育 OCR 开发态 smoke 已真实调用成功并返回 needs_confirmation；学生全路径产品文案完成治理，但真实 OCR 尚未接上传/API/Worker/UI，真实个性化与报告仍 unresolved/deferred"
+current_stage: "PUSH-026 已发布：Demo 栈 Web 就绪检查已与学生产品文案解耦，3000/4000 真实 API 预览稳定运行；PUSH-025 的 OCR smoke 与文案治理边界不变"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -164,7 +164,7 @@ next_action:
 - `[DECISION]` 已确定后台多 Agent、前台单一 AI 学习教练的产品形态。
 - `[DECISION]` 已确定苏格拉底脚手架、学习证据图谱和延迟迁移验证为核心设计。
 - `[RESULT]` 已在 Stitch 中选定学生端“今日”页桌面高保真视觉基线；F0、F1b 与 F1c 已通过相应构建和自动化门禁。F1c 的受控 HTTP 浏览器 Fixture 已覆盖 ready D1 成功、`VERSION_CONFLICT` 与 `NETWORK_UNKNOWN` 三条真实页面交互路径；默认入口现为 API，Mock 只在显式参数下使用，但这仍不代表业务主闭环已接通。
-- `[DECISION]` 当前学生首页的核心视觉色为蓝 `#0036FF` 与青柠绿 `#B5F800`；学生端、家长端和后续页面的详细规范以 `DESIGN.md v0.2.30` 为准。
+- `[DECISION]` 当前学生首页的核心视觉色为蓝 `#0036FF` 与青柠绿 `#B5F800`；学生端、家长端和后续页面的详细规范以 `DESIGN.md v0.2.31` 为准。
 - `[FACT]` 用户已将目标教材 ISBN 确认为 `978-7-5720-3630-9`，与当前 161 页教材 PDF 封底条码一致；版权页照片无法提供，因此版次、印次保持未知，不再作为 MVP 开工阻塞项。
 - `[FACT]` 已收到线上购买的教研与试题资料 191 个文件：184 个 DOCX、4 个 PDF 和 3 个 MP3，覆盖学生/考试版、参考答案、教师/解析版、知识清单、答题卡和听力等类型；这些内容资产不是真实学生作答数据。
 - `[DECISION]` 用户确认教材与试题材料可供本项目使用和公开展示，并确认 `logo.png` 可作为 MVP Logo V1；权利台账记录为 `user_asserted_permitted`，购买页/许可条款凭证待归档；教材版权页不可取得。
@@ -2120,6 +2120,11 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.41 — 2026-08-16
+
+- 修复 Demo 栈仍依赖已移除工程文案判断 Web 就绪的问题，改用稳定页面结构信号；真实 API 预览在 Web `3000`、API `4000` 持续返回 200。
+- 同步 PRD v0.1.33、TDD v0.3.34、DESIGN v0.2.31 与 PUSH-026；不改变 PUSH-025 的 OCR、学生记录、个性化或学习效果边界。
 
 ### v0.1.40 — 2026-08-16
 

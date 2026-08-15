@@ -2,15 +2,15 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.33"
+version: "0.3.34"
 status: "DRAFT_FOR_IMPLEMENTATION"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.40"
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.32"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.41"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.33"
 ---
 
 # 知隙 GapProof 技术设计文档（TDD）
@@ -1637,8 +1637,14 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-023 | 2026-08-16 | `main` | `pushed` | `feat: add safe Alibaba OCR provider spike` | 新增默认关闭、仅内部使用的 Alibaba OCR adapter/HTTPS transport seam；只接受 synthetic/desensitized source，输入与配置 fail closed，稳定映射 Provider 错误并隔离原始响应、凭据、URL 查询、warnings 和精确置信度。未接上传、Case、Worker、API 或 UI，未发起真实调用；同时登记 healthy successor 优先复用规则 | 162 fast、59 PostgreSQL/API/Worker integration、98 apps/web、双 TypeScript、Next production build、migration drift、上传与 onboarding 浏览器 Fixture、`git diff --check`、敏感/隐私与暂存范围审计通过；预览 Worker 与 integration 队列竞争、并行 Next fixture 锁均经隔离串行重跑通过；同轮推送并核对本地/远端 SHA 一致 |
 | PUSH-024 | 2026-08-16 | `main` | `pushed` | `feat: integrate official Alibaba education OCR SDK` | 固定官方 SDK `3.1.3`，实现开发态 `RecognizeEduPaperOcr` transport、string/object `Data` 解析、文字块/坐标/置信度归一化及 ignored `.env` smoke CLI。只接受 synthetic/desensitized HTTPS source；未接上传、Case、Worker、API 或 UI，缺少安全新凭据与原创/脱敏可访问图片，未发起真实调用 | 169 fast、59 PostgreSQL/API/Worker integration、98 apps/web、双 TypeScript、Next production build、migration drift、上传/onboarding 浏览器、`git diff --check`、敏感/隐私与暂存范围审计通过；缺凭据 smoke 为 `not_executed`，同轮推送并核对本地/远端 SHA 一致 |
 | PUSH-025 | 2026-08-16 | `main` | `pushed` | `feat: validate OCR smoke and govern student copy` | 授权脱敏测试材料通过官方 SDK 完成真实教育 OCR 开发态 smoke，二进制上传、鉴权与响应解析成功，结果为 `needs_confirmation`；学生全路径及视觉截图移除工程术语并保留体验内容不形成正式记录的真实性边界。登记可拆分任务默认优先并行下发 successor/subagent；真实 OCR 仍未接上传/Case/API/Worker/UI，未证明识别准确率、真实个性化、学生记录或学习效果 | 170 fast、59 PostgreSQL/API/Worker integration、98 apps/web、双 TypeScript、Next production build、migration drift、OCR focused 24、真实 OCR smoke、真实状态视觉、隐私/凭据与 `git diff --check` 通过；授权测试材料与 `.env` 排除 Git，集成队列和 `.next` 门禁串行执行；本轮推送后核对本地/远端 SHA 一致 |
+| PUSH-026 | 2026-08-16 | `main` | `pushed` | `fix: decouple demo readiness from product copy` | Demo 栈 Web readiness 从已移除的“真实 API 模式”可见文案改为稳定 `today-page` 页面结构信号，防止产品文案治理后 90 秒误判并停止 API/Worker/Web 子进程 | root typecheck、`git diff --check`、Web 200、API Today 200 且含 overview、Demo 父进程持续存活、3000/4000 监听及生成残留精确清理通过；同轮推送后核对本地/远端 SHA 一致 |
 
 ## 27. 变更日志
+
+### v0.3.34 — 2026-08-16
+
+- Demo 栈 Web readiness 改用稳定 `today-page` 结构信号，不再依赖面向用户的文案。
+- root typecheck、Web/API 200、父进程持续存活与 3000/4000 监听通过；同步 PROJECT_MASTER v0.1.41、PRD v0.1.33、DESIGN v0.2.31 与 PUSH-026。
 
 ### v0.3.33 — 2026-08-16
 

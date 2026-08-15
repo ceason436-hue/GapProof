@@ -210,7 +210,7 @@ async function main() {
 
   try {
     await waitForHttp(`${config.apiOrigin}/v1/students/${config.studentId}/today`, "API", (body) => body.includes('"overview"'));
-    await waitForHttp(`http://127.0.0.1:${config.webPort}/student/today`, "Web", (body) => body.includes("真实 API 模式"));
+    await waitForHttp(`http://127.0.0.1:${config.webPort}/student/today`, "Web", (body) => body.includes("today-page"));
     process.stdout.write(`Local Demo stack ready: http://127.0.0.1:${config.webPort}/student/today\n`);
     const lanHost = discoverLocalDevOrigins().find((origin) => origin !== "localhost" && origin !== "127.0.0.1");
     if (lanHost) process.stdout.write(`LAN preview: http://${lanHost}:${config.webPort}/student/today\n`);

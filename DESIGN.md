@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.30"
+version: "0.2.31"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "PUSH-025 已发布：学生全路径产品文案与视觉截图完成治理；阿里云教育 OCR 真实开发态 smoke 成功但仍需人工确认，且未接学生 UI 或生产链路"
+current_design_stage: "PUSH-026 已发布：Demo 预览就绪检查已与学生可见文案解耦，产品文案可继续治理而不影响 3000/4000 启动；OCR 与真实性边界不变"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -1780,6 +1780,11 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 ---
 
 ## 22. 版本记录
+
+### v0.2.31 — 2026-08-16
+
+- Demo 启动就绪检查改用页面结构信号，不再把任何学生可见工程文案当作运行依赖；产品语言后续可独立迭代。
+- Web/API 预览稳定返回 200；同步 PROJECT_MASTER v0.1.41、PRD v0.1.33、TDD v0.3.34 与 PUSH-026，PUSH-025 的真实性边界不变。
 
 ### v0.2.30 — 2026-08-16
 
