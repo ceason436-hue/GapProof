@@ -1494,10 +1494,14 @@ export async function buildApi(options: BuildApiOptions) {
       },
     },
     async (request) => {
-      const idempotencyKey = `retest-attempt:${getIdempotencyKey(request)}`;
+      const requestIdempotencyKey = getIdempotencyKey(request);
+      const d1IdempotencyKey = `d1-retest-attempt:${requestIdempotencyKey}`;
+      const d7IdempotencyKey = `d7-retest-attempt:${requestIdempotencyKey}`;
       const requestPayload = d1AttemptRequestPayload(request.body);
-      const existing = await findEvidenceEventByIdempotencyKey(options.database, idempotencyKey);
-      if (existing !== undefined) {
+      const existingKeys = [d1IdempotencyKey, d7IdempotencyKey];
+      for (const existingKey of existingKeys) {
+        const existing = await findEvidenceEventByIdempotencyKey(options.database, existingKey);
+        if (existing === undefined) continue;
         if (!isMatchingRetestEvaluationEvent(existing, request.params.taskId, requestPayload)) {
           throw new ApiHttpError(409, "IDEMPOTENCY_KEY_REUSED", "The idempotency key belongs to another write request.");
         }
@@ -1515,6 +1519,9 @@ export async function buildApi(options: BuildApiOptions) {
       if (caseRow === undefined) {
         throw new ResourceNotFoundError("Case", taskRow.caseId);
       }
+      const idempotencyKey = taskRow.taskType === "d7_retest"
+        ? d7IdempotencyKey
+        : d1IdempotencyKey;
       if (taskRow.taskType === "d7_retest") {
         if (caseRow.stateVersion !== request.body.expectedVersion) {
           throw new VersionConflictError(caseRow.id, request.body.expectedVersion);

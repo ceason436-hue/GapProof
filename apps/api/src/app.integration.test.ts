@@ -11,6 +11,7 @@ import type {
   AttemptView,
   CaseView,
   D1RetestAttemptView,
+  D7RetestAttemptView,
   DemoClockAdvanceView,
   HypothesesView,
   InitiatedSourceAssetUploadView,
@@ -228,6 +229,35 @@ async function activatePreparedD1(
     effectiveNow: new Date(task.scheduledFor),
   });
   return { ...prepared, task: { ...task, status: "ready" as const } };
+}
+
+async function activatePreparedD7(
+  api: Awaited<ReturnType<typeof buildApi>>,
+  database: ReturnType<typeof createDatabase>["db"],
+  keyPrefix: string,
+) {
+  const prepared = await activatePreparedD1(api, database, `${keyPrefix}-d1`);
+  const d1 = await api.inject({
+    method: "POST",
+    url: `/v1/tasks/${prepared.task.id}/attempts`,
+    headers: { "idempotency-key": `${keyPrefix}-d1-attempt` },
+    payload: {
+      expectedVersion: 6,
+      itemId: prepared.task.item.id,
+      selectedChoiceId: "choice-written",
+    },
+  });
+  expect(d1.statusCode).toBe(200);
+  const d1Body = d1.json<ApiResponse<D1RetestAttemptView>>().data;
+  expect(d1Body.scheduledRetest).not.toBeNull();
+  const d7 = d1Body.scheduledRetest;
+  if (d7 === null) throw new Error("Expected a scheduled D7 task.");
+  await activateDueRetestTask(database, {
+    caseId: prepared.caseId,
+    taskId: d7.id,
+    effectiveNow: new Date(d7.scheduledFor),
+  });
+  return { ...prepared, d7: { ...d7, status: "ready" as const } };
 }
 
 describeWithDatabase("Fastify API and run-next worker", () => {
@@ -1991,6 +2021,133 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     await evaluationApi.close();
   }, 25_000);
 
+  it("evaluates a ready D7 exactly once, redacts the answer, and reaches repair_verified", async () => {
+    const prepared = await activatePreparedD7(api, database.db, "d7-pass-v1");
+    const request = {
+      method: "POST" as const,
+      url: `/v1/tasks/${prepared.d7.id}/attempts`,
+      headers: { "idempotency-key": "d7-pass-attempt-v1" },
+      payload: {
+        expectedVersion: 7,
+        itemId: prepared.d7.item.id,
+        selectedChoiceId: "choice-written",
+      },
+    };
+    const [left, right] = await Promise.all([
+      api.inject(request),
+      api.inject(request),
+    ]);
+    const body = left.json<ApiResponse<D7RetestAttemptView>>();
+    expect(left.statusCode).toBe(200);
+    expect(right.statusCode).toBe(200);
+    expect(right.json<ApiResponse<D7RetestAttemptView>>().data).toEqual(body.data);
+    expect(body.data).toMatchObject({
+      passed: true,
+      state: "repair_verified",
+      stateVersion: 8,
+      scheduledRetest: null,
+    });
+    expect(JSON.stringify(body)).not.toContain("expectedChoiceId");
+    const changedReplay = await api.inject({
+      ...request,
+      payload: { ...request.payload, selectedChoiceId: "choice-wrote" },
+    });
+    expect(changedReplay.statusCode).toBe(409);
+    expect(changedReplay.json<ApiErrorResponse>().error.code).toBe("IDEMPOTENCY_KEY_REUSED");
+  }, 35_000);
+
+  it("fails D7 into one replan job below the cap and support_required at the cap", async () => {
+    const belowCap = await activatePreparedD7(api, database.db, "d7-fail-v1");
+    const failed = await api.inject({
+      method: "POST",
+      url: `/v1/tasks/${belowCap.d7.id}/attempts`,
+      headers: { "idempotency-key": "d7-fail-attempt-v1" },
+      payload: {
+        expectedVersion: 7,
+        itemId: belowCap.d7.item.id,
+        selectedChoiceId: "choice-wrote",
+      },
+    });
+    const failedBody = failed.json<ApiResponse<D7RetestAttemptView>>();
+    expect(failed.statusCode).toBe(200);
+    expect(failedBody.data.state).toBe("replan_required");
+    expect(failedBody.jobId).toBeTruthy();
+    const queued = await queue.boss.getJobById(REPLAN_QUEUE, failedBody.jobId ?? "");
+    expect(queued?.data).toMatchObject({ caseId: belowCap.caseId });
+
+    const atCap = await activatePreparedD7(api, database.db, "d7-support-v1");
+    await database.db.update(cases).set({ replanCount: 2 }).where(eq(cases.id, atCap.caseId));
+    const supported = await api.inject({
+      method: "POST",
+      url: `/v1/tasks/${atCap.d7.id}/attempts`,
+      headers: { "idempotency-key": "d7-support-attempt-v1" },
+      payload: {
+        expectedVersion: 7,
+        itemId: atCap.d7.item.id,
+        selectedChoiceId: "choice-wrote",
+      },
+    });
+    const supportedBody = supported.json<ApiResponse<D7RetestAttemptView>>();
+    expect(supported.statusCode).toBe(200);
+    expect(supportedBody.data.state).toBe("support_required");
+    expect(supportedBody.jobId).toBeUndefined();
+  }, 45_000);
+
+  it("keeps D1 legacy namespace replayable and caps D1 failures", async () => {
+    const prepared = await activatePreparedD1(api, database.db, "d1-legacy-replay-v1");
+    await database.db.update(cases).set({ replanCount: 2 }).where(eq(cases.id, prepared.caseId));
+    const request = {
+      method: "POST" as const,
+      url: `/v1/tasks/${prepared.task.id}/attempts`,
+      headers: { "idempotency-key": "legacy-d1-key-v1" },
+      payload: {
+        expectedVersion: 6,
+        itemId: prepared.task.item.id,
+        selectedChoiceId: "choice-wrote",
+      },
+    };
+    const first = await api.inject(request);
+    const replay = await api.inject(request);
+    const firstBody = first.json<ApiResponse<D1RetestAttemptView>>();
+    expect(first.statusCode).toBe(200);
+    expect(firstBody.data.state).toBe("support_required");
+    expect(firstBody.jobId).toBeUndefined();
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json<ApiResponse<D1RetestAttemptView>>().data).toEqual(firstBody.data);
+    const eventRows = await database.db.select().from(learningEvidenceEvents).where(eq(learningEvidenceEvents.caseId, prepared.caseId));
+    expect(eventRows.filter(({ eventType }) => eventType === "retest_evaluated")).toHaveLength(1);
+  }, 30_000);
+
+  it("rejects D7 invalid choice and stale version without appending evidence", async () => {
+    const prepared = await activatePreparedD7(api, database.db, "d7-validation-v1");
+    const invalidChoice = await api.inject({
+      method: "POST",
+      url: `/v1/tasks/${prepared.d7.id}/attempts`,
+      headers: { "idempotency-key": "d7-invalid-choice-v1" },
+      payload: {
+        expectedVersion: 7,
+        itemId: prepared.d7.item.id,
+        selectedChoiceId: "choice-injected",
+      },
+    });
+    expect(invalidChoice.statusCode).toBe(400);
+    expect(invalidChoice.json<ApiErrorResponse>().error.code).toBe("INVALID_INPUT");
+    const stale = await api.inject({
+      method: "POST",
+      url: `/v1/tasks/${prepared.d7.id}/attempts`,
+      headers: { "idempotency-key": "d7-stale-v1" },
+      payload: {
+        expectedVersion: 6,
+        itemId: prepared.d7.item.id,
+        selectedChoiceId: "choice-written",
+      },
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json<ApiErrorResponse>().error.code).toBe("VERSION_CONFLICT");
+    const events = await database.db.select().from(learningEvidenceEvents).where(eq(learningEvidenceEvents.caseId, prepared.caseId));
+    expect(events.filter(({ eventType }) => eventType === "retest_evaluated")).toHaveLength(1);
+  }, 35_000);
+
   it("rejects invalid D1 requests without partial writes", async () => {
     const scheduled = await createD1ScheduledCase(api, "d1-validation-v1");
     const scheduledTask = scheduled.completion.scheduledRetest;
@@ -2196,6 +2353,65 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     expect(events.filter(({ eventType }) => eventType === "retest_evaluated")).toHaveLength(1);
     expect(events.filter(({ eventType }) => eventType === "plan_replanned")).toHaveLength(1);
     expect(events.filter(({ eventType }) => eventType === "intervention_generated")).toHaveLength(2);
+    expect(events.find(({ eventType }) => eventType === "plan_replanned")?.payload).toMatchObject({
+      replanIndex: 1,
+      strategy: "alternate_explanation_and_practice",
+    });
+    const replannedTask = afterWorker.find(
+      ({ taskType, payload }) => taskType === "guided_intervention" && payload.replanStrategy === "alternate_explanation_and_practice",
+    );
+    expect(replannedTask).toBeDefined();
+    const secondToday = await evaluationApi.inject({
+      method: "GET",
+      url: `/v1/students/${prepared.studentId}/today`,
+    });
+    const secondIntervention = secondToday
+      .json<ApiResponse<TodayTasksView>>()
+      .data.tasks.find((task) => task.taskType === "guided_intervention" && task.status === "ready");
+    expect(secondIntervention?.taskType).toBe("guided_intervention");
+    if (secondIntervention?.taskType !== "guided_intervention") throw new Error("Expected second intervention.");
+    const secondCompletionResponse = await evaluationApi.inject({
+      method: "POST",
+      url: `/v1/tasks/${secondIntervention.id}/submit`,
+      headers: { "idempotency-key": "d1-fail-v1-second-complete" },
+      payload: {
+        expectedVersion: 9,
+        completedStepIds: secondIntervention.steps.map(({ id }) => id),
+      },
+    });
+    expect(secondCompletionResponse.statusCode).toBe(200);
+    const secondCompletion = secondCompletionResponse.json<ApiResponse<TaskCompletionView>>().data;
+    await activateDueRetestTask(database.db, {
+      caseId: prepared.caseId,
+      taskId: secondCompletion.scheduledRetest.id,
+      effectiveNow: new Date(secondCompletion.scheduledRetest.scheduledFor),
+    });
+    const secondFailed = await evaluationApi.inject({
+      method: "POST",
+      url: `/v1/tasks/${secondCompletion.scheduledRetest.id}/attempts`,
+      headers: { "idempotency-key": "d1-fail-v1-second-attempt" },
+      payload: {
+        expectedVersion: 10,
+        itemId: secondCompletion.scheduledRetest.item.id,
+        selectedChoiceId: "choice-wrote",
+      },
+    });
+    const secondFailedBody = secondFailed.json<ApiResponse<D1RetestAttemptView>>();
+    expect(secondFailedBody.data.state).toBe("replan_required");
+    expect(secondFailedBody.jobId).toBeTruthy();
+    await replanWorker.start();
+    await waitForState(evaluationApi, prepared.caseId, "intervention_active");
+    await replanWorker.stop();
+    const secondReplanEvents = await database.db
+      .select()
+      .from(learningEvidenceEvents)
+      .where(eq(learningEvidenceEvents.caseId, prepared.caseId));
+    expect(secondReplanEvents.find(({ eventType, payload }) => eventType === "plan_replanned" && payload.replanIndex === 2)?.payload).toMatchObject({
+      replanIndex: 2,
+      strategy: "prerequisite_skill_with_example",
+    });
+    const [countedCase] = await database.db.select().from(cases).where(eq(cases.id, prepared.caseId));
+    expect(countedCase?.replanCount).toBe(2);
     await evaluationApi.close();
   }, 35_000);
 

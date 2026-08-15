@@ -131,7 +131,10 @@ export const cases = appSchema.table(
   (table) => [
     index("cases_student_updated_idx").on(table.studentId, table.updatedAt),
     check("cases_state_version_nonnegative", sql`${table.stateVersion} >= 0`),
-    check("cases_replan_count_bounded", sql`${table.replanCount} >= 0`),
+    check(
+      "cases_replan_count_bounded",
+      sql`${table.replanCount} >= 0 and ${table.replanCount} <= 2`,
+    ),
   ],
 );
 
