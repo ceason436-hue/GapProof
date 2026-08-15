@@ -21,7 +21,7 @@ const taskBase = (id, status, title) => ({
   studentId,
   status,
   title,
-  rationale: "受控 API fixture：仅用于前端契约与视觉验收。",
+  rationale: "请按步骤完成并确认选择。",
   estimatedMinutes: 6,
   scheduledFor,
   dueAt,
@@ -33,7 +33,7 @@ const guided = {
   taskType: "guided_intervention",
   steps: [
     { id: "synthetic-step-explain", kind: "explain", title: "看一个例子", content: "比较动作发生时间与助动词结构。" },
-    { id: "synthetic-step-practice", kind: "guided_practice", title: "做一道确认小题", content: "只读预览；本轮不会提交任务状态。" },
+    { id: "synthetic-step-practice", kind: "guided_practice", title: "做一道确认小题", content: "完成本步并确认你的选择。" },
   ],
 };
 const retestItem = cycle => ({
@@ -106,6 +106,24 @@ const fixtures = {
 
 let fixtureName = "current-guided";
 const fixtureServer = createServer((request, response) => {
+  if (fixtureName === "current-guided" && request.url === `/v1/cases/${caseId}`) {
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({
+      data: {
+        id: caseId,
+        studentId,
+        state: "intervention_active",
+        stateVersion: 4,
+        title: "Synthetic guided case",
+        simulation: true,
+        synthetic: true,
+        updatedAt: "2026-08-15T01:00:00.000Z",
+      },
+      requestId: "synthetic-current-guided-case-request",
+      traceId: "synthetic-current-guided-case-trace",
+    }));
+    return;
+  }
   if (request.url === `/v1/students/${studentId}/today`) {
     response.writeHead(200, { "Content-Type": "application/json" });
     response.end(JSON.stringify({
@@ -170,6 +188,7 @@ try {
             ? '[data-current-task="none"]'
             : ".state-card";
         await page.locator(expectedSelector).waitFor();
+        if (state === "current-guided") await page.locator('[data-guided-task-state="idle"]').waitFor();
         if (state !== "empty" && await page.locator("[data-today-overview]").count() !== 1) {
           throw new Error(`Default Today entry did not render the API overview for ${state}.`);
         }
