@@ -7,10 +7,10 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档状态 | Draft v0.1.23 |
+| 文档状态 | Draft v0.1.24 |
 | 产品名称 | 知隙 GapProof |
 | 文档角色 | 产品需求、业务流程、功能范围与验收标准 |
-| 当前阶段 | PUSH-016 合成识别确认演示与 Fake OCR Demo 守卫已通过最终门禁并发布；真实识别接口仍待冻结 |
+| 当前阶段 | PUSH-017 guided 完成与 D7/两次重排封顶已通过门禁待发布；D7 前端作答与显式识别创建 Case 仍待实现 |
 | 产品形态 | Web 应用 |
 | 目标教材 | 上海教育出版社《义务教育教科书（五·四学制）英语 八年级上册》 |
 | 适用版本 | 目标教材以 ISBN、当前 PDF 哈希和内容快照锁定；版权页不可取得，版次、印次和册次保持未知 |
@@ -239,12 +239,13 @@ MVP 基于用户确认且与当前教材 PDF 封底一致的教材 ISBN，并以
 
 流程要求：
 
-1. 上传后进行图片质量检查。
-2. OCR 识别题目、选项、学生答案和批改痕迹。
-3. 对无法确定的区域标记低置信度。
-4. 学生或家长确认关键信息。
-5. 系统展示“识别到了什么”，再进入诊断。
-6. 比赛 Demo 中，复杂识别情况允许回退到预置结果，但必须明确标识为 Demo 回退。
+1. 上传后进行图片质量检查；基础检查成功不得创建 Case 或启动 OCR。
+2. 页面展示处理说明，用户显式点击“开始识别并创建案例”；该意图必须独立、幂等、可审计。
+3. OCR 识别题目、选项、学生答案和批改痕迹。
+4. 对无法确定的区域标记低置信度。
+5. 学生或家长确认关键信息。
+6. 系统展示“识别到了什么”，再进入诊断。
+7. 比赛 Demo 中，复杂识别情况允许回退到预置结果，但必须明确标识为 Demo 回退。
 
 当前 `[PROTOTYPE]` 已完成上述流程的“选择图片、安全上传字节、确定性基础检查”前置段：JPEG/PNG/WebP、1B–10MiB，浏览器计算 SHA-256，经短期授权 PUT 原始字节；异步 Worker 重新校验存储字节大小/hash，并解析图片 header/尺寸，识别 MIME 不匹配、截断/非法图片、超过 1 亿像素及低于 640×480 的低分辨率。它不检测真实模糊度、方向或缺页，也未接入 OCR、低置信识别确认与诊断；不得因基础检查通过宣称已识别或已形成学习结论。
 
@@ -442,8 +443,10 @@ MVP 使用原创模拟试卷、预置学生 Case 和合成学习轨迹，不声�
 - Demo 使用虚构姓名和脱敏数据；
 - 不默认建立声纹；
 - 不做持续摄像和麦克风监听；
-- 后续真实试点需取得监护人同意；
-- 原始图片和音频应设置保存期限；
+- 真实 OCR 初期只处理合成或已脱敏材料；未满 18 岁用户统一在监护人确认后才允许处理真实材料；
+- 启动真实 OCR 前明确告知材料将发送给阿里云用于本次识别、不得用于训练；Provider 官方“不保留”说明不能替代 GapProof 自身存储责任；
+- GapProof 原图在识别确认后 24 小时内删除，且自上传起最多保留 7 天，并提供主动删除入口；派生 OCR 文本、Case 证据和报告的具体期限仍 unresolved；
+- OCR 凭据只进入服务端环境变量或受控密钥配置，优先最小权限 RAM/临时授权，禁止进入网页、日志、聊天、仓库或客户端；
 - 不默认使用儿童输入训练模型；
 - 所有关键模型调用和数据访问可审计。
 
@@ -494,8 +497,10 @@ Demo 界面或旁白必须明确区分：
 - `[PROTOTYPE]` Worker 可从 `intervention_ready` 生成 3 步/8 分钟的确定性最小干预任务并进入 `intervention_active`；学生可通过正式接口读取今日任务并提交完整步骤。提交后系统原子创建 24 小时后的 D+1 复测任务、进入 `d1_scheduled`，但 mastery 仅为 `pending_retest`。
 - `[PROTOTYPE]` D+1 任务通过事务内 `retest.due` 延迟 Job 和生产 Worker 到期激活；Demo 可在受环境开关保护的虚拟时钟接口中按 Case 快进。到期仅把任务从 `scheduled` 改为 `ready`，Case 仍为 `d1_scheduled`、mastery 仍为 `pending_retest`。
 - `[PROTOTYPE]` D+1 ready 任务现可通过共享 `POST /v1/tasks/{taskId}/attempts` 契约提交客观选择并由服务端私有答案确定性评分；通过时创建 D7 调度，失败时事务内入队异步重排。当前题目与重排内容仍为明确标记的合成 Fixture，不是现实题库或真实个性化效果。
+- `[PROTOTYPE]` ready D7 已复用同一 attempts 路由完成服务端确定性评分：通过进入 `repair_verified`，不会冒充 `report_ready`；失败按持久 `replan_count` 最多自动重排两次，策略依次为“更换讲解表达与练习形式”和“下探一个前置技能并加入示例”，再次失败进入 `support_required` 且不再入队。D7 前端作答仍未实现；规则化合成内容不等于真实个性化或真实人工协助。
+- `[PROTOTYPE]` ready guided intervention 已可在 Today 勾选完整步骤并安全提交；使用权威 Case 版本、UUIDv7 幂等意图、冲突重新确认、独立 GET 恢复和网络未知锁定，完成后只声明安排 D+1，不声明掌握。
 - `[PROTOTYPE]` 学生端“今日”页 F0 Mock、F1b 只读 API、F1c ready D1 客户端作答与真实 overview 已通过对应构建和自动化门禁；F1c 使用共享 attempts contracts、权威 Case 版本、UUIDv7 幂等意图和受控错误状态。受控 HTTP 浏览器 Fixture 已覆盖真实点击成功、`VERSION_CONFLICT` 重新确认与 `NETWORK_UNKNOWN` 锁定三条路径；无参数入口现走真实 API，只有显式 `?source=mock` 使用合成页面，但仍不能作为主闭环完成证据。
-- `[PROTOTYPE]` 已实现 JPEG/PNG/WebP、1B–10MiB 的真实字节上传与确定性图片基础检查闭环：`/materials/new` 计算 SHA-256，以 UUIDv7 固定一次上传/prepare 意图，经同源 API PUT 同一原始字节并读取异步状态；服务端校验归属、MIME/大小/hash，原子落盘后由 `source_asset.quality_check` Worker 重新读取并验证字节，解析 header/尺寸，将 `uploaded → queued → processing → succeeded/needs_confirmation/failed/retryable_error` 结果持久化。页面不显示对象键、token、内部 ID、文件名、hash 或 OCR 内容。该能力仅是本地 Demo 存储与 `image-header-v1` 检查器，不是生产 S3、完整模糊/方向/缺页检测、OCR、识别确认、Case 创建或真实学习效果；真实 AI 干预、完整 7 日计划、D+7 作答与评分、可执行的失败重排上限、学生/家长报告及前端主闭环仍未实现。
+- `[PROTOTYPE]` 已实现 JPEG/PNG/WebP、1B–10MiB 的真实字节上传与确定性图片基础检查闭环：`/materials/new` 计算 SHA-256，以 UUIDv7 固定一次上传/prepare 意图，经同源 API PUT 同一原始字节并读取异步状态；服务端校验归属、MIME/大小/hash，原子落盘后由 `source_asset.quality_check` Worker 验证字节并持久化质量状态。页面不显示对象键、token、内部 ID、文件名、hash 或 OCR 内容。该能力仅是本地 Demo 存储与 `image-header-v1` 检查器，不是生产 S3、完整图片质量模型、OCR、识别确认、Case 创建或真实学习效果；显式创建 Case/启动识别、D7 前端和完整上传到修复证明主闭环仍未实现。
 - `[PROTOTYPE]` 遗留 Fake OCR 只允许 `simulation && synthetic` 的 Demo Case，API 与 Worker 双重拒绝非 Demo 路径。`/materials/demo/review` 是明确标注的无网络合成识别确认演示：允许本地修正和记录演示确认，提供空态/错误态，但不调用 `/api/v1`、不启动 OCR、不创建或推进 Case、不生成学习结论。真实上传到 Case 的绑定、识别结果读取 DTO 与确认写入仍未实现。
 - 因此，以下验收项仍是完整 MVP 的目标，不因后端局部闭环而标记为 `[LIVE]`。
 
@@ -511,7 +516,7 @@ Demo 界面或旁白必须明确区分：
 - Demo 能触发次日复测；
 - Demo 能展示复测失败后的任务重排；
 - Demo 能展示第 7 天迁移测试结果；
-- 学生和家长都能看到相应报告。
+- 异步学生/家长报告页面本轮 deferred，不属于“项目本身”初赛验收阻断项；后续实现时只有报告已生成、有权威引用且当前可读才可称 `report_ready`。
 
 ### 12.2 质量验收
 
@@ -540,7 +545,7 @@ Demo 界面或旁白必须明确区分：
 - 确认小题提交具有未选择、已选择、提交中、已接收、冲突、失败六种 UI 状态。成功后使用中性“已收到，正在准备下一步”反馈，不把诊断探针包装成考试分数，也不显示内部答案键或评分映射。
 - 当前确认小题、Today、任务详情、干预提交及 D1 `POST /v1/tasks/{taskId}/attempts` 均已具备共享请求/响应 Schema。前端只可消费 `@gapproof/contracts`，不得自行补写任务字段、答案、掌握结论或服务端未返回的首页事实。
 - D+1 的 `scheduled → ready` 由服务端到期 Worker 或 Demo 虚拟时钟产生；学生端不得自行倒计时改状态。`ready` 只表示允许进入复测；只有服务端返回的 D1 attempt 结果才能表示本次通过/失败，且 D1 通过只进入 `d7_scheduled`，不得提前宣称已经掌握。
-- Today 的 `currentTaskId` 为服务端权威 `uuid | null`；只有当前可行动的 ready D1 或 guided 任务可被引用，scheduled、completed、无任务和仅有 ready D7 时必须为 `null`。前端不得从数组顺序猜测替代任务。
+- Today 的 `currentTaskId` 为服务端权威 `uuid | null`；当前可行动的 ready D1、ready D7 或 ready guided 任务可被引用，scheduled、completed 或无任务时为 `null`。前端不得从数组顺序猜测替代任务；当前 D7 前端仍只读，须由后续切片接入共享 attempts 契约。
 - Today 的 `overview` 由服务端始终提供：恰好 7 个截至学生本地“今天”的连续日期及完成任务数、真实周目标或 `null`、未删除待确认 Case 数、最多两条脱敏进展，以及最早 scheduled D1/D7 检查。当前无权威周目标存储，因此返回 `weeklyGoal:null`；显式 API 页面缺失该字段时必须受控报错，不得回退 Mock 或推断百分比。
 - 干预提交必须恰好覆盖任务全部步骤；提交中禁用重复操作，`INVALID_INPUT` 保留已选步骤，`INVALID_TASK_STATE` 刷新今日任务并解释任务已变化，`VERSION_CONFLICT` 只自动刷新一次，不自动重复写入。
 
@@ -651,6 +656,7 @@ PROJECT_MASTER.md
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
+| 0.1.24 | 2026-08-15 | 发布 guided 安全完成与服务端 D7 客观评分、两次规则化重排及 `support_required` 封顶；确认合成 OCR 可满足本轮项目验收、显式开始识别/创建 Case、阿里云处理与未成年人边界、严格 `report_ready` 和异步报告 deferred。D7 前端、真实 OCR、30–50 页基准、派生数据留存仍未完成；同步 PROJECT_MASTER v0.1.32、TDD v0.3.25、DESIGN v0.2.22 与 PUSH-017 |
 | 0.1.23 | 2026-08-15 | 发布受 `simulation && synthetic` 双重守卫的遗留 Fake OCR 与 `/materials/demo/review` 无网络合成识别确认演示；浏览器 Fixture 证明零 `/api/v1`、本地确认、空/错态和脱敏边界。明确不是真实 OCR、上传到 Case 绑定或学习效果；同步 PROJECT_MASTER v0.1.31、TDD v0.3.24、DESIGN v0.2.21 与 PUSH-016，D7/报告/重排产品决策继续暂停 |
 | 0.1.22 | 2026-08-15 | 发布真实确定性图片基础检查闭环：prepare/status contracts、幂等异步 Job、存储字节复核、JPEG/PNG/WebP header/尺寸解析、质量状态持久化及受控前端轮询；明确不是 OCR/完整图片质量模型/生产 S3/学习效果，D7/报告/重排产品决策继续暂停；同步 PROJECT_MASTER v0.1.30、TDD v0.3.23、DESIGN v0.2.20 与 PUSH-015 |
 | 0.1.21 | 2026-08-15 | 发布真实图片字节上传最小闭环：共享 contracts、幂等创建、短期 HMAC token、本地目录原子落盘、前端 SHA-256/UUIDv7/受控重试与脱敏成功状态；明确不是生产 S3/OCR/学习效果，D7/报告/完整闭环仍未完成；同步 PROJECT_MASTER v0.1.29、TDD v0.3.22、DESIGN v0.2.19 与 PUSH-014 |

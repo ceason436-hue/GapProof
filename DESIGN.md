@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.21"
+version: "0.2.22"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "PUSH-016 合成识别确认演示与 Fake OCR Demo 守卫已通过最终门禁并发布；真实识别页面写入仍待冻结"
+current_design_stage: "PUSH-017 guided 完成与 D7/两次重排封顶已通过门禁待发布；D7 前端作答与显式识别创建 Case 仍待实现"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -86,11 +86,11 @@ upstream_documents:
 
 ### 0.3.2 当前阶段与下一步
 
-**已完成**：学生端“今日”页的桌面视觉结构、颜色角色、主要卡片层级和关键静态内容已确定；F0/F1b、F1c 及真实 Today overview 已完成对应构建和自动化门禁。F1c 只为服务端当前 ready D1 增加安全作答，使用权威 Case 版本、共享 contracts 和 UUIDv7 幂等意图；受控 HTTP 浏览器 Fixture 已覆盖成功、冲突和网络未知三条真实页面交互路径。无参数入口现展示服务端 7 日足迹、nullable 周目标、待确认数、脱敏进展与下次检查；合成 Mock 仅显式启用。`/materials/new` 已完成真实单图选择、校验、上传、异步基础检查与中性成功/需确认/失败状态。`/materials/demo/review` 新增持久 Demo 标记的无网络合成识别确认演示、本地编辑/确认、空态和错误态；两页均有对应浏览器 Fixture 与双视口截图。
+**已完成**：学生端“今日”页的桌面视觉结构、颜色角色、主要卡片层级和关键静态内容已确定；默认 API、真实 Today overview、ready guided 安全完成与 ready D1 作答已完成对应构建和自动化门禁。两类写入均使用权威 Case 版本、共享 contracts 和 UUIDv7 幂等意图；guided Fixture 额外覆盖 Case GET 失败恢复、冲突重新确认与网络未知锁定。无参数入口展示服务端 7 日足迹、nullable 周目标、待确认数、脱敏进展与下次检查；合成 Mock 仅显式启用。`/materials/new` 已完成真实单图选择、校验、上传、异步基础检查；`/materials/demo/review` 是持久 Demo 标记的无网络合成识别确认演示。服务端 D7 评分和两次重排封顶已有证据，但前端 D7 仍只读。
 
-**尚未完成**：真实模糊度、方向、缺页与恶意文件检查，上传 asset 到 Case 的绑定、OCR/识别结果读取与确认写入；其他学生 P0 页面、家长端页面、Logo 紧裁/SVG/Favicon 与最终品牌规范、完整交互原型。D7 作答、报告及其页面仍未实现。
+**尚未完成**：真实模糊度、方向、缺页与恶意文件检查，上传 asset 到 Case 的显式绑定/启动识别、OCR 结果读取与确认写入；其他学生 P0 页面、家长端页面、Logo 紧裁/SVG/Favicon 与最终品牌规范、完整交互原型。D7 后端可评分但前端作答仍未实现；异步报告本轮 deferred。
 
-**下一步**：先冻结上传 asset↔Case 绑定、识别结果读取 DTO 与确认写入契约，再把真实图片基础检查连接到识别确认；D7 继续只读。任何新字段不得从视觉稿或合成 Fixture 反推业务状态。
+**下一步**：先接入 D7 前端安全作答，再冻结“开始识别并创建案例”的独立幂等意图、asset↔Case 绑定、识别结果读取 DTO 与确认写入契约。任何新字段不得从视觉稿或合成 Fixture 反推业务状态。
 
 ### 0.4 设计底线
 
@@ -478,9 +478,11 @@ Tab 规则：
 - 上传失败；
 - 可以继续。
 
-**主操作**：“检查图片内容”。
+**首个主操作**：“检查图片内容”。基础检查成功后的独立主操作为“开始识别并创建案例”。
 
 当前 `[PROTOTYPE]` 页面开放单张 JPEG/PNG/WebP、1B–10MiB 的“开始上传”。上传期间锁定重复提交；上传后自动进入基础检查，依次展示 preparing/queued/processing，并在 30 秒内按 1s→2s→3s 读取权威状态；隐藏或离页停止轮询。低分辨率等确定性原因进入需确认，失败/可重试/超时均有中性恢复文案；成功只显示“图片基础检查通过，识别尚未开始，不会自动生成学习结论”，并允许重新选择。页面不得显示短期 token、对象键、内部 asset ID、服务端文件名、hash、OCR 文本或置信度；当前还不能进入 `/materials/:id/review` 或展示 OCR 结果。
+
+基础检查成功不得自动创建/绑定 Case 或启动 OCR。页面先展示处理说明，再由用户显式点击“开始识别并创建案例”；该动作将来必须对应独立、幂等、可审计的用户意图。真实 OCR 启动前还要展示阿里云处理告知、不得用于训练的说明和监护确认状态；未满 18 岁未确认时按钮不可用。当前这些真实写入与状态尚未实现，不能用 Demo 本地确认替代。
 
 **错误文案示例**：
 
@@ -923,6 +925,8 @@ flowchart LR
 - 家长建议。
 
 报告默认不展示模型名称、技术置信度和工具日志。
+
+异步报告页面本轮 deferred。后续加载态必须区分“正在生成”“可以查看”“生成失败”；只有报告已成功生成、具有权威证据引用且当前可打开时才能显示“报告已准备好”。queued/processing 不得显示为 ready，合成报告不得冒充真实学生报告或学习效果。
 
 ### 6.6 时间、通知与隐私 `/parent/settings`
 
@@ -1469,7 +1473,7 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 
 当前后端可从 `intervention_ready` 生成 `guided_intervention`，并通过今日任务接口返回公开任务视图。页面只渲染 `LearningTaskView` 中的标题、理由、预计时间和步骤；不得推断或展示内部候选错因、答案键、工具 warnings 或内部版本。
 
-学习任务提交使用 `idle → submitting → completed`，旁路为 `conflict`、`invalid`、`failed`。提交前必须确保 `completedStepIds` 恰好覆盖全部步骤；提交中禁用重复点击但保留本地勾选。成功后展示“本次练习已完成，明天会有一次短检查”，并使用服务端 `scheduledRetest.scheduledFor` 按学生时区显示时间；不得表述为“已经修复”或“已经掌握”。D+1 任务为 `scheduled` 时 CTA 不可提前作答；服务端变为 `ready` 后，F1c 使用共享 attempts contracts、权威 `expectedVersion` 与同一 UUIDv7 幂等意图提交。`VERSION_CONFLICT` 只刷新并要求重新确认；网络结果两次未知后锁定选择和提交。D7 在其 attempts 实现前始终只读。Demo 虚拟时钟只供演示控制，不由普通学生页面自行调用。
+学习任务提交使用 `idle → submitting → completed`，旁路为 `conflict`、`invalid`、`failed`。提交前必须确保 `completedStepIds` 恰好覆盖全部步骤；提交中禁用重复点击但保留本地勾选。成功后展示“本次练习已完成，明天会有一次短检查”，并使用服务端 `scheduledRetest.scheduledFor` 按学生时区显示时间；不得表述为“已经修复”或“已经掌握”。guided 与 ready D1 均使用共享 contracts、权威 `expectedVersion` 与同一 UUIDv7 幂等意图提交；`VERSION_CONFLICT` 只刷新并要求重新确认，网络结果两次未知后锁定选择和提交。D1 返回 `support_required` 时显示“已达到两次自动调整上限，需要老师或家长协助”，不得暗示已接真实人工服务。D7 后端 attempts 已实现，但前端作答仍只读；后续接入必须复用同一安全状态机。Demo 虚拟时钟只供演示控制，不由普通学生页面自行调用。
 
 ---
 
@@ -1772,6 +1776,13 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 ---
 
 ## 22. 版本记录
+
+### v0.2.22 — 2026-08-15
+
+- 发布 ready guided 安全完成交互与 D1 `support_required` 封顶文案；浏览器 Fixture 覆盖 Case 同步失败、冲突重新确认和网络未知锁定，API 双视口保持 Stitch V1.1 结构与深色卡书本越界裁切。
+- 登记 D7 后端已可评分但前端仍只读；`repair_verified` 不等于报告可读，异步报告页面本轮 deferred。
+- 冻结基础检查后的显式“开始识别并创建案例”产品动作，以及阿里云处理告知、未满 18 岁监护确认和原图短期删除的页面要求；真实接口与状态仍未实现。
+- 同步 PROJECT_MASTER v0.1.32、PRD v0.1.24、TDD v0.3.25 与 PUSH-017；规则化合成重排不称真实个性化或人工服务。
 
 ### v0.2.21 — 2026-08-15
 

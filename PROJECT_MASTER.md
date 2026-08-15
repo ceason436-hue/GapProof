@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.31"
+version: "0.1.32"
 status: "ACTIVE"
-current_stage: "项目本身初赛验收冲刺；PUSH-016 合成识别确认演示与 Fake OCR Demo 守卫已通过最终门禁并发布；真实 OCR/识别写入接口仍待冻结"
+current_stage: "项目本身初赛验收冲刺；PUSH-017 引导任务完成与 D7/两次重排封顶已通过门禁待发布；D7 前端作答和显式识别创建 Case 仍待实现"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -143,7 +143,7 @@ next_action:
 
 `[FACT]` GOAI 无界应用赛道参赛手册列出的初赛截止日期为 2026-08-16；具体当天截止时刻、入口、文件大小及后续通知仍须在官网、提交系统或官方群再次核对。
 
-`[DECISION]` 当前处于：**项目本身初赛验收冲刺；学生端“今日”页默认入口已接入真实 API 的 ready D1 客户端作答与真实概览投影。`/materials/new` 已在真实字节上传后接入异步、确定性的图片基础检查。PUSH-016 进一步把遗留 Fake OCR 限定为 `simulation && synthetic` 的 Demo Case，并增加 `/materials/demo/review` 无网络合成识别确认演示；该页面只在本地编辑和记录演示确认，不调用 API、不启动 OCR、不创建或推进 Case，也不生成学习结论。真实上传到 Case 的绑定、识别结果读取 DTO、真实 OCR Provider 与识别确认写入仍未冻结或实现。D7 与重排/报告未决策边界保持暂停**。
+`[DECISION]` 当前处于：**项目本身初赛验收冲刺；学生端“今日”页默认入口已接入真实 API，ready guided 与 D1 均有受控提交，服务端已实现 D7 客观复测、最多两次规则化合成重排和 `support_required` 封顶。D7 前端作答仍未接入。当前初赛项目验收允许使用醒目标注的合成 OCR Demo；真实阿里云 OCR 后置。图片基础检查后必须由用户显式执行“开始识别并创建案例”，该真实 Case/OCR 写入契约尚未冻结或实现。异步报告不属于本轮项目验收；`report_ready` 仅保留“报告已生成、有权威引用且当前可读”的严格语义**。
 
 ### 1.2 已完成
 
@@ -175,7 +175,7 @@ next_action:
 - `[RESULT]` 完成干预的同一 PostgreSQL 事务现同时写入 D+1 延迟 `retest.due` Job；独立 Worker 使用 `SystemClock`，仅在 `scheduledFor <= now` 时将指定 Case 的 `d1_retest` 从 `scheduled` 原子激活为 `ready`，重复与并发执行不会产生重复效果。
 - `[RESULT]` 已实现受 `GAPPROOF_DEMO_CLOCK_ENABLED=true` 保护的 `POST /v1/demo/clock/advance`。它为每个合成 Demo Case 持久化独立、带版本的虚拟时间线，可快进并在同一事务激活该 Case 的到期复测、写入 `demo_clock_advanced` 审计；不修改操作系统时间，也不改变 Case 的 `d1_scheduled`、`stateVersion` 或 `pending_retest` mastery。
 - `[RESULT]` 已实现 `GET /v1/tasks/{taskId}` 与 `POST /v1/tasks/{taskId}/attempts` 的 D1 客观复测最小切片。服务端用私有答案执行 `exact-choice-v1`：通过时原子完成 D1、追加 `retest_evaluated { kind:"d1", passed:true }`，并按 `evaluatedAt + 144h` 创建 D7、再给出 12 小时窗口；失败时原子进入 `replan_required` 并入队 `case.replan`，由 Worker 异步生成合成干预骨架。公开响应不含答案键，幂等、并发与乐观锁已有测试覆盖。
-- `[RESULT]` Today contracts 已扩展为服务端学生 `timeZone`、`currentTaskId: uuid | null` 与 guided/D1/D7 判别联合；只有服务端判定的 ready D1 或 guided 任务可成为当前任务。F1c 对 ready D1 使用共享 attempts contracts、权威 Case 版本和 UUIDv7 幂等意图提交；D7 在 attempts 未实现前保持只读。
+- `[RESULT]` Today contracts 已扩展为服务端学生 `timeZone`、`currentTaskId: uuid | null` 与 guided/D1/D7 判别联合；服务端可选择 ready D1/D7/guided。前端已安全提交 guided 与 D1，D7 后端 attempts 已实现但页面仍只读。
 - `[RESULT]` Today API 现始终返回真实只读 `overview`：学生时区下连续 7 日完成数、明确目标或 `null`、待确认数、最多两条脱敏进展与最早 scheduled D1/D7 检查。显式 API 页面严格消费该投影，缺失时受控报错且不回退 Mock；当前数据库没有权威周目标，因此 API 返回 `weeklyGoal:null`，不得从任务或视觉稿推断。
 - `[RESULT]` PostgreSQL `app.source_assets` 与 0006/0007 migrations 保存对象键、SHA-256、MIME、大小、所有权/保留期、处理状态、确定性质量结果与更新时间，不保存文件字节、OCR 文本或答案。共享上传/prepare/status contracts、Fastify 创建/内容 PUT/prepare/读取、HMAC 短期授权、受控目录 `StorageAdapter`、`source_asset.quality_check` Worker 与 `/materials/new` 已形成受测的真实字节上传和图片基础检查闭环；Worker 从存储重新读取并验证字节，解析 JPEG/PNG/WebP header/尺寸，公开响应不含对象键、token、文件名、hash 或 OCR 内容。当前实现是本地 Demo 存储与 `image-header-v1` 检查器，不是生产 S3、完整图片质量模型、OCR，也不会创建 Case 或形成学习结论。
 - `[RESULT]` 遗留 `run-next` Fake OCR 现在由 API 入队前与 Worker 执行时双重守卫，只允许 `simulation=true && synthetic=true` 的 Demo Case；非 Demo Case 返回 `DEMO_CASE_REQUIRED` 且不入队、不写证据。`/materials/demo/review` 提供明确标注的合成识别结果、低置信“请确认”、本地编辑、空态和错误态演示；受控浏览器 Fixture 证明全程零 `/api/v1` 请求。它不是上传后真实识别页面，不会写 Case 或产生学习结论。
@@ -187,7 +187,7 @@ next_action:
 - `[PLANNED]` 尚未建立 30–40 个技能节点及 12 个深度节点的图谱 V0.1。
 - `[PLANNED]` 尚未制作比赛用原创模拟试卷、合成学生轨迹和独立金标集。
 - `[PLANNED]` 尚未确认至少一位英语教育背景人员能否短时抽检核心金标内容。
-- `[PROTOTYPE]` 已建立最小后端 Thin Slice，并完成真实图片字节上传、确定性图片 header/尺寸质量检查、受 Demo 守卫的 Fake OCR、无网络合成识别确认演示、确定性干预生成、今日任务查询、干预提交、D+1 调度/到期/客观评分及失败后的异步重排骨架；尚未形成从真实 OCR 识别到报告的完整端到端 Demo。真实上传到 Case 的绑定、识别读取/确认写入、真实 AI 干预、真实题库、D7 作答评分、可执行的重排上限、真实个性化重排内容、通知和报告仍未实现。
+- `[PROTOTYPE]` 已建立最小后端 Thin Slice，并完成真实图片字节上传、确定性图片 header/尺寸质量检查、受 Demo 守卫的 Fake OCR、无网络合成识别确认演示、确定性干预生成、guided/D1 前端提交、D1/D7 后端评分及两次规则化重排封顶；尚未形成从真实 OCR 识别到修复证明的完整端到端 Demo。显式 Case/OCR 启动、识别读取/确认写入、真实 AI 干预、真实题库、D7 前端、真实个性化内容与通知仍未实现；异步报告本轮 deferred。
 - `[PROTOTYPE]` 学生端“今日”页 F0 Mock、F1b 只读 API、F1c ready D1 客户端作答及真实概览投影已完成对应技术门禁；受控 HTTP 浏览器 Fixture 已证明成功、冲突和网络未知三条交互边界。默认入口现为 API，只有显式 `?source=mock` 使用合成页面；业务主闭环仍未完成，其余学生 P0 页面、家长端页面和评委最小页仍未完成。
 - `[PLANNED]` 尚未完成正式 500 字简介、初赛 PPT、视频、README、数据卡、依赖清单和合规一页纸。
 - `[PLANNED]` 尚未产生可报告的工程评测结果或真实学生学习效果。
@@ -2025,11 +2025,11 @@ review_date:
 | DEC-028 | MVP Agent 固定为六节点 LangGraph.js 图 | accepted | 新增节点必须更新图版本、Schema 和 Golden Cases |
 | DEC-029 | 所有工具先完成接口、Schema、Mock 和错误处理；verify_item/schedule_retest 做 MVP 最小实现 | accepted | 工具边界或 Provider 能力变化 |
 | DEC-030 | escalate_human 先创建待处理记录；analyze_speech/score_writing 暂缓真实能力 | accepted | 真实人工、语音或写作试点启动 |
-| DEC-031 | UUIDv7 + PostgreSQL 16+，完整表结构和删除策略以 TDD v0.3.24 为准 | accepted | 数据规模、扩展支持或合规要求变化 |
+| DEC-031 | UUIDv7 + PostgreSQL 16+，完整表结构和删除策略以 TDD v0.3.25 为准 | accepted | 数据规模、扩展支持或合规要求变化 |
 | DEC-032 | TDD 详细 API 路由为唯一正式接口 | accepted | API 版本升级或新客户端边界产生 |
 | DEC-033 | 杭州阿里云单区域联网 Docker Compose，真实 Provider 演示，Mock 仅测试/故障注入 | accepted | 比赛网络、并发、合规或可用性要求变化 |
 | DEC-034 | DeepSeek `deepseek-v4-flash`、MiniMax `minimax-m3`、腾讯混元 Embedding 作为当前模型配置 | accepted | 账号权限、供应商模型版本或评测结果变化 |
-| DEC-035 | 学生端“今日”页桌面视觉基线已选定；使用 `#0036FF` 导航/进度与 `#B5F800` 行动/积极变化，完整规范以 DESIGN v0.2.21 为准 | accepted | 真实前端实现、可用性测试或品牌资产定稿产生反证 |
+| DEC-035 | 学生端“今日”页桌面视觉基线已选定；使用 `#0036FF` 导航/进度与 `#B5F800` 行动/积极变化，完整规范以 DESIGN v0.2.22 为准 | accepted | 真实前端实现、可用性测试或品牌资产定稿产生反证 |
 | DEC-036 | 新用户今日页先完成第一次检查，不显示虚构的足迹、进展或下次检查；首次任务生成后切换常规今日页 | accepted | onboarding 实测或产品范围变化 |
 | DEC-037 | 目标教材 ISBN 为 `978-7-5720-3630-9`；配套练习 `978-7-5720-3519-7` 不纳入 MVP | accepted | 版权页或出版社正式材料产生冲突 |
 | DEC-038 | 购买教材/试题及完整转换文本保持本地私有并排除 Git；仓库只保存元数据、处理器和项目原创/合成内容 | accepted | 取得可归档的明确再分发许可且完成权利复核 |
@@ -2037,6 +2037,11 @@ review_date:
 | DEC-040 | 前端使用同源 `/api` 代理、共享 `@gapproof/contracts`、Case 版本轮询与方法感知的幂等重试；不得自行发明接口或状态 | accepted | 正式 API 网关、OpenAPI 生成客户端或 SSE 接入 |
 | DEC-041 | 新前后端任务默认 `gpt-5.6-luna/high`；新协调/文档治理任务默认 `gpt-5.6-sol/medium`，并在后续版本和迁移中显式继承 | accepted | 用户另行指定、目标主机不支持或安全恢复要求偏离 |
 | DEC-042 | 本协调目标的初赛验收只覆盖项目本身；简介、PPT/PDF、视频、报名与提交材料不进入完成条件 | accepted | 用户明确扩大本协调目标范围 |
+| DEC-OCR-ACCEPT-001 | 本轮项目验收可使用醒目标注的合成 OCR Demo 与完整可点击工程闭环；真实 OCR Provider 后置 | accepted | 合成 Demo 只证明交互、状态、契约与工程行为，不证明真实识别准确率、个性化或学习效果 |
+| DEC-UPLOAD-CONFIRM-002 | 图片基础检查通过后必须由用户显式执行“开始识别并创建案例”，不得自动创建 Case 或启动 OCR | accepted | 创建/绑定 Case 与启动识别必须是独立、幂等、可审计的用户意图 |
+| DEC-OCR-POLICY-003 | 真实 OCR 采用阿里云读光服务端 HTTPS 调用；初期只处理合成/脱敏材料，未满 18 岁统一要求监护确认，并采用受控凭据和原图短期删除策略 | accepted | 服务已开通不等于已接入；30–50 页独立基准与派生数据留存周期仍 unresolved |
+| DEC-D7-REPLAN-004 | 同一 Case/缺口最多自动重排 2 次：先更换讲解与练习，再下探前置技能并加入示例；再次失败进入 `support_required` | accepted | 封顶后不再自动入队第三轮；规则化合成骨架不等于真实个性化或已接人工服务 |
+| DEC-REPORT-005 | `report_ready` 只表示报告已生成、有权威引用且当前可打开；generating/failed 必须分离，异步报告不纳入本轮项目验收 | accepted / deferred | 报告 DTO、证据引用、失败重试与留存删除仍待冻结 |
 
 ---
 
@@ -2053,7 +2058,7 @@ review_date:
 | 初赛 PPT | `[PLANNED]` | 8–10 页覆盖评分项 | 原型/图表 |
 | 原创模拟试卷 | `[PLANNED]` | 来源自有、已知根因、许可清楚 | 技能示例 |
 | 合成 Case | `[PROTOTYPE]` | 已完成 1 个原创合成 Case 及低置信、复测失败重排、D+7 成功分支；仍需扩充同题同错不同根因与回归集 | 数据 Schema/教材映射 |
-| 学生“今日”页视觉基线 | `[PROTOTYPE]` | 已选定 Stitch 桌面稿；F0/F1b、F1c ready D1 客户端作答、受控 HTTP 浏览器 Fixture 与真实概览投影已合并 `main` 并通过技术门禁；默认入口为 API，合成 Mock 仅显式启用，完整业务写入闭环未完成 | DESIGN v0.2.21 |
+| 学生“今日”页视觉基线 | `[PROTOTYPE]` | 已选定 Stitch 桌面稿；默认 API、真实概览、guided 完成与 ready D1 客户端作答已通过技术门禁，合成 Mock 仅显式启用；D7 后端已可评分但前端作答仍待接入 | DESIGN v0.2.22 |
 | 其余学生/家长关键页设计 | `[PLANNED]` | 覆盖主闭环并遵循今日页设计准则 | 视觉基线 |
 | 可点击 Thin Slice | `[PLANNED]` | 上传到修复证明全链路 | 设计/开发 |
 | 数据与合规页 | `[PLANNED]` | 类型、来源、授权、脱敏、删除、边界 | 数据选择 |
@@ -2112,6 +2117,13 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.32 — 2026-08-15
+
+- 合并学生端 guided intervention 安全完成：权威 Case 版本、UUIDv7 幂等意图、同 key/body 一次网络未知重试、冲突重新确认、GET 失败独立恢复及未知结果锁定；受控浏览器 Fixture 与 API 双视口正常态通过。
+- 合并服务端 D7 `exact-choice-v1` 作答、`repair_verified`、持久 `replan_count`、两次策略及 `support_required` 封顶；D1/D7 幂等兼容、并发、答案脱敏、事务与不再入队均有 PostgreSQL/API/Worker 证据。D7 前端作答仍未实现。
+- 最终确认 DEC-OCR-ACCEPT-001、DEC-UPLOAD-CONFIRM-002、DEC-OCR-POLICY-003、DEC-D7-REPLAN-004 与 DEC-REPORT-005；真实 OCR、显式创建 Case/启动识别、独立 30–50 页基准、派生数据留存和异步报告仍按 accepted/deferred/unresolved 边界处理。
+- 同步 PRD v0.1.24、TDD v0.3.25、DESIGN v0.2.22 与 PUSH-017；本轮仍只证明合成/规则化工程闭环，不证明真实 OCR、真实个性化、人工服务或学习效果。
 
 ### v0.1.31 — 2026-08-15
 
