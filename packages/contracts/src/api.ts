@@ -259,6 +259,28 @@ export type ConfirmExtractionRequest = Static<
   typeof ConfirmExtractionRequestSchema
 >;
 
+export const SyntheticExtractionItemViewSchema = Type.Object({
+  itemId: Type.String({ minLength: 1 }),
+  prompt: Type.String({ minLength: 1 }),
+}, { additionalProperties: false });
+
+export type SyntheticExtractionItemView = Static<
+  typeof SyntheticExtractionItemViewSchema
+>;
+
+export const SyntheticExtractionViewSchema = Type.Object({
+  caseId: Type.String({ format: "uuid" }),
+  state: Type.Literal("awaiting_confirmation"),
+  stateVersion: Type.Integer({ minimum: 0 }),
+  recognitionSource: Type.Literal("synthetic_fixture"),
+  uploadedAssetUsedForRecognition: Type.Literal(false),
+  items: Type.Array(SyntheticExtractionItemViewSchema, { minItems: 1 }),
+}, { additionalProperties: false });
+
+export type SyntheticExtractionView = Static<
+  typeof SyntheticExtractionViewSchema
+>;
+
 export const DiagnosticProbeViewSchema = Type.Omit(
   DiagnosticProbeDraftSchema,
   ["expectedChoiceId", "scoringRule"],

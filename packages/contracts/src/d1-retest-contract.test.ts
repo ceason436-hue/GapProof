@@ -8,6 +8,7 @@ import {
   LearningTaskViewSchema,
   SubmitD1RetestAttemptRequestSchema,
   StartSyntheticRecognitionRequestSchema,
+  SyntheticExtractionViewSchema,
   TodayTasksViewSchema,
 } from "./api.ts";
 
@@ -33,6 +34,22 @@ const baseTask = {
 };
 
 describe("D1 retest HTTP contracts", () => {
+  it("exposes only confirmable synthetic extraction fields", () => {
+    const view = {
+      caseId: "0198b111-1111-7000-8000-000000000002",
+      state: "awaiting_confirmation",
+      stateVersion: 1,
+      recognitionSource: "synthetic_fixture",
+      uploadedAssetUsedForRecognition: false,
+      items: [{ itemId: "item-synthetic-irregular-participle-1", prompt: "Mina has ___ three notes." }],
+    };
+    expect(Value.Check(SyntheticExtractionViewSchema, view)).toBe(true);
+    expect(Value.Check(SyntheticExtractionViewSchema, {
+      ...view,
+      items: [{ ...view.items[0], confidence: 0.98 }],
+    })).toBe(false);
+  });
+
   it("requires explicit synthetic mode and guardian confirmation", () => {
     expect(Value.Check(StartSyntheticRecognitionRequestSchema, {
       mode: "synthetic_demo",

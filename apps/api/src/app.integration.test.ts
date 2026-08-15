@@ -690,6 +690,62 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     expect(evidence).toMatchObject({ sourceType: "fake_ocr", sourceRef: "asset-synthetic-paper-1" });
     expect(JSON.stringify(evidence?.payload)).not.toContain(upload.assetId);
     expect(JSON.stringify(evidence?.payload)).not.toContain("source-assets/");
+
+    const extractionResponse = await api.inject({
+      method: "GET",
+      url: `/v1/cases/${startedBody.data.caseId}/extraction`,
+    });
+    const extraction = extractionResponse.json<ApiResponse<{
+      caseId: string;
+      state: string;
+      stateVersion: number;
+      recognitionSource: string;
+      uploadedAssetUsedForRecognition: boolean;
+      items: Array<{ itemId: string; prompt: string }>;
+    }>>();
+    expect(extractionResponse.statusCode).toBe(200);
+    expect(extraction.data).toMatchObject({
+      caseId: startedBody.data.caseId,
+      state: "awaiting_confirmation",
+      stateVersion: 1,
+      recognitionSource: "synthetic_fixture",
+      uploadedAssetUsedForRecognition: false,
+    });
+    expect(extraction.data.items).toEqual([
+      expect.objectContaining({
+        itemId: "item-synthetic-irregular-participle-1",
+        prompt: expect.any(String),
+      }),
+    ]);
+    expect(JSON.stringify(extraction)).not.toContain("studentAnswer");
+    expect(JSON.stringify(extraction)).not.toContain("confidence");
+    expect(JSON.stringify(extraction)).not.toContain("asset-synthetic-paper-1");
+
+    const confirmed = await api.inject({
+      method: "POST",
+      url: `/v1/cases/${startedBody.data.caseId}/extraction/confirm`,
+      headers: { "idempotency-key": "source-start-recognition-confirm-v1" },
+      payload: {
+        expectedVersion: 1,
+        confirmedItemIds: ["item-synthetic-irregular-participle-1"],
+        corrections: [],
+      },
+    });
+    expect(confirmed.statusCode).toBe(200);
+    expect(confirmed.json<ApiResponse<CaseView>>().data).toMatchObject({
+      id: startedBody.data.caseId,
+      state: "ready_for_diagnosis",
+      stateVersion: 2,
+    });
+
+    const next = await api.inject({
+      method: "POST",
+      url: `/v1/cases/${startedBody.data.caseId}/commands/run-next`,
+      headers: { "idempotency-key": "source-start-recognition-next-v1" },
+      payload: { expectedVersion: 2 },
+    });
+    expect(next.statusCode).toBe(202);
+    await waitForState(api, startedBody.data.caseId, "probe_required");
   }, 35_000);
 
   it("requires guardian confirmation at the synthetic recognition contract boundary", async () => {
@@ -701,6 +757,49 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     });
     expect(response.statusCode).toBe(400);
     expect(response.json<ApiErrorResponse>().error.code).toBe("SCHEMA_INVALID");
+  });
+
+  it("fails closed for extraction reads before recognition and across Cases", async () => {
+    const first = await api.inject({
+      method: "POST",
+      url: "/v1/cases",
+      headers: { "idempotency-key": "extraction-read-not-ready-first-v1" },
+      payload: { entry: "synthetic_demo" },
+    });
+    const second = await api.inject({
+      method: "POST",
+      url: "/v1/cases",
+      headers: { "idempotency-key": "extraction-read-not-ready-second-v1" },
+      payload: { entry: "synthetic_demo" },
+    });
+    const firstCaseId = first.json<ApiResponse<CaseView>>().data.id;
+    const secondCaseId = second.json<ApiResponse<CaseView>>().data.id;
+    const notReady = await api.inject({
+      method: "GET",
+      url: `/v1/cases/${firstCaseId}/extraction`,
+    });
+    expect(notReady.statusCode).toBe(409);
+    expect(notReady.json<ApiErrorResponse>().error.code).toBe("EXTRACTION_NOT_READY");
+
+    const missing = await api.inject({
+      method: "GET",
+      url: "/v1/cases/0198b111-1111-7000-8000-999999999999/extraction",
+    });
+    expect(missing.statusCode).toBe(404);
+    expect(missing.json<ApiErrorResponse>().error.code).toBe("RESOURCE_NOT_FOUND");
+
+    const crossCaseConfirm = await api.inject({
+      method: "POST",
+      url: `/v1/cases/${secondCaseId}/extraction/confirm`,
+      headers: { "idempotency-key": "extraction-read-cross-case-confirm-v1" },
+      payload: {
+        expectedVersion: 0,
+        confirmedItemIds: ["item-synthetic-irregular-participle-1"],
+        corrections: [],
+      },
+    });
+    expect(crossCaseConfirm.statusCode).toBe(409);
+    expect(crossCaseConfirm.json<ApiErrorResponse>().error.code).toBe("INVALID_CASE_TRANSITION");
   });
 
   it("rejects unready, non-passed, and already-bound assets without creating recognition state", async () => {
@@ -1060,6 +1159,19 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     });
     expect(stale.statusCode).toBe(409);
     expect(stale.json<ApiErrorResponse>().error.code).toBe("VERSION_CONFLICT");
+
+    const invalidItem = await api.inject({
+      method: "POST",
+      url: `/v1/cases/${caseId}/extraction/confirm`,
+      headers: { "idempotency-key": "confirm-extraction-invalid-item-v1" },
+      payload: {
+        expectedVersion: 1,
+        confirmedItemIds: ["item-not-in-extraction"],
+        corrections: [],
+      },
+    });
+    expect(invalidItem.statusCode).toBe(400);
+    expect(invalidItem.json<ApiErrorResponse>().error.code).toBe("INVALID_INPUT");
 
     const request = {
       method: "POST" as const,
@@ -2381,6 +2493,7 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     });
     expect(stale.statusCode).toBe(409);
     expect(stale.json<ApiErrorResponse>().error.code).toBe("VERSION_CONFLICT");
+
     const events = await database.db.select().from(learningEvidenceEvents).where(eq(learningEvidenceEvents.caseId, prepared.caseId));
     expect(events.filter(({ eventType }) => eventType === "retest_evaluated")).toHaveLength(1);
   }, 35_000);

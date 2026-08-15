@@ -385,6 +385,12 @@ export function createRunNextWorker(options: RunNextWorkerOptions) {
             sourceRef: job.data.assetId,
             payload: {
               lowConfidenceRegionCount,
+              extraction: {
+                items: toolResult.data.items.map(({ id, prompt }) => ({
+                  itemId: id,
+                  prompt,
+                })),
+              },
               toolVersion: toolResult.toolVersion,
               warnings: [...toolResult.warnings],
             },

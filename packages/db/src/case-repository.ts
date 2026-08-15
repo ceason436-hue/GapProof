@@ -322,3 +322,41 @@ export async function findLatestCaseEvidenceEventByType(
 
   return row;
 }
+
+export interface SyntheticExtractionItemRecord {
+  readonly itemId: string;
+  readonly prompt: string;
+}
+
+export function readSyntheticExtractionItems(
+  payload: unknown,
+): readonly SyntheticExtractionItemRecord[] | undefined {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+    return undefined;
+  }
+  const extraction = "extraction" in payload ? payload.extraction : undefined;
+  if (typeof extraction !== "object" || extraction === null || Array.isArray(extraction)) {
+    return undefined;
+  }
+  const items = "items" in extraction ? extraction.items : undefined;
+  if (!Array.isArray(items) || items.length === 0) return undefined;
+
+  const parsed: SyntheticExtractionItemRecord[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    if (typeof item !== "object" || item === null || Array.isArray(item)) {
+      return undefined;
+    }
+    const itemId = "itemId" in item ? item.itemId : undefined;
+    const prompt = "prompt" in item ? item.prompt : undefined;
+    if (
+      typeof itemId !== "string" || itemId.length === 0 || seen.has(itemId) ||
+      typeof prompt !== "string" || prompt.length === 0
+    ) {
+      return undefined;
+    }
+    seen.add(itemId);
+    parsed.push({ itemId, prompt });
+  }
+  return parsed;
+}

@@ -59,6 +59,8 @@ import {
   type StartSyntheticRecognitionRequest,
   StartSyntheticRecognitionViewSchema,
   type StartSyntheticRecognitionView,
+  SyntheticExtractionViewSchema,
+  type SyntheticExtractionView,
   SourceAssetPrepareQueuedViewSchema,
   type SourceAssetPrepareQueuedView,
   SourceAssetPrepareViewSchema,
@@ -80,6 +82,7 @@ import {
   findEvidenceEventByIdempotencyKey,
   findCaseById,
   findLatestCaseEvidenceEventByType,
+  readSyntheticExtractionItems,
   findStudentById,
   findSourceAssetById,
   startSyntheticRecognitionIdempotent,
@@ -624,6 +627,43 @@ async function d7RetestAttemptViewFromEvent(
   };
 }
 
+function syntheticExtractionView(
+  caseRow: CaseRow,
+  event: LearningEvidenceEventRow | undefined,
+): { readonly view: SyntheticExtractionView; readonly itemIds: ReadonlySet<string> } {
+  if (
+    caseRow.state !== "awaiting_confirmation" ||
+    event === undefined ||
+    event.sourceType !== "fake_ocr" ||
+    event.sourceRef !== SYNTHETIC_PARSE_ASSET_ID
+  ) {
+    throw new ApiHttpError(
+      409,
+      "EXTRACTION_NOT_READY",
+      "Synthetic extraction is not ready for confirmation.",
+    );
+  }
+  const items = readSyntheticExtractionItems(event.payload);
+  if (items === undefined) {
+    throw new ApiHttpError(
+      500,
+      "STORED_EVENT_INVALID",
+      "The stored synthetic extraction event is invalid.",
+    );
+  }
+  return {
+    view: {
+      caseId: caseRow.id,
+      state: "awaiting_confirmation",
+      stateVersion: caseRow.stateVersion,
+      recognitionSource: "synthetic_fixture",
+      uploadedAssetUsedForRecognition: false,
+      items: [...items],
+    },
+    itemIds: new Set(items.map(({ itemId }) => itemId)),
+  };
+}
+
 function isSamePayload(
   left: Record<string, unknown>,
   right: Record<string, unknown>,
@@ -1149,6 +1189,32 @@ export async function buildApi(options: BuildApiOptions) {
     },
   );
 
+  api.get<{ Params: CaseIdParams }>(
+    "/v1/cases/:caseId/extraction",
+    {
+      schema: {
+        params: CaseIdParamsSchema,
+        response: {
+          200: apiResponseSchema(SyntheticExtractionViewSchema),
+          "4xx": ApiErrorResponseSchema,
+          500: ApiErrorResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      const caseRow = await findCaseById(options.database, request.params.caseId);
+      if (caseRow === undefined) {
+        throw new ResourceNotFoundError("Case", request.params.caseId);
+      }
+      const event = await findLatestCaseEvidenceEventByType(
+        options.database,
+        caseRow.id,
+        "evidence_ingested",
+      );
+      return success(request, syntheticExtractionView(caseRow, event).view);
+    },
+  );
+
   api.post<{ Params: CaseIdParams; Body: ConfirmExtractionRequest }>(
     "/v1/cases/:caseId/extraction/confirm",
     {
@@ -1206,7 +1272,31 @@ export async function buildApi(options: BuildApiOptions) {
         );
       }
 
+      const extraction = caseRow.state === "awaiting_confirmation"
+        ? syntheticExtractionView(
+            caseRow,
+            await findLatestCaseEvidenceEventByType(
+              options.database,
+              caseRow.id,
+              "evidence_ingested",
+            ),
+        )
+        : undefined;
       const confirmedItemIds = new Set(request.body.confirmedItemIds);
+      if (extraction !== undefined) {
+        const hasUnknownItem =
+          [...confirmedItemIds].some((itemId) => !extraction.itemIds.has(itemId)) ||
+          request.body.corrections.some(
+            (correction) => !extraction.itemIds.has(correction.itemId),
+          );
+        if (hasUnknownItem) {
+          throw new ApiHttpError(
+            400,
+            "INVALID_INPUT",
+            "Every confirmed item must belong to the stored extraction.",
+          );
+        }
+      }
       if (
         request.body.corrections.some(
           (correction) => !confirmedItemIds.has(correction.itemId),
