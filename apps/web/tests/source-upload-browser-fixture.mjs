@@ -328,12 +328,15 @@ try {
     await cancelPage.goto(`${webOrigin}/materials/new`, { waitUntil: "networkidle" });
     await choose(cancelPage);
     await cancelPage.getByRole("button", { name: "开始上传" }).click();
-    await cancelPage.locator('[data-upload-status="queued"]').waitFor({ timeout: 10_000 });
+    await cancelPage.locator('[data-upload-status="queued"], [data-upload-status="processing"]').first().waitFor({ timeout: 10_000 });
+    const getsBeforeHidden = gets.length;
     await cancelPage.evaluate(() => {
       Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
       document.dispatchEvent(new Event("visibilitychange"));
     });
     await cancelPage.locator('[data-upload-status="timeout"]').waitFor({ timeout: 5_000 });
+    await new Promise(resolveWait => setTimeout(resolveWait, 3_500));
+    assert(gets.length === getsBeforeHidden, `cancel: hidden abort allowed another inspection GET (${getsBeforeHidden} before, ${gets.length} after).`);
     await cancelPage.close();
 
     for (const invalid of [
