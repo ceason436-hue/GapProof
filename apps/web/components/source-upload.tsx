@@ -22,6 +22,7 @@ import {
   pollSourceAssetInspection,
   sourceInspectionMessage,
 } from "@/lib/source-inspection";
+import { beginSourceUploadLifecycle } from "@/lib/source-upload-lifecycle";
 import { AppShell } from "./app-shell";
 
 type UploadStatus =
@@ -79,13 +80,16 @@ export function SourceUpload({ studentId }: { studentId: string }) {
   const [message, setMessage] = useState("请选择一张图片，再开始上传。支持 JPG、PNG 或 WebP，大小 1B–10MiB。");
 
   useEffect(() => {
+    mountedRef.current = true;
+    const cleanupLifecycle = beginSourceUploadLifecycle(mountedRef, () => {
+      activeAbortRef.current?.abort("PAGE_LEFT");
+    });
     const stopWhenHidden = () => {
       if (document.visibilityState === "hidden") activeAbortRef.current?.abort("PAGE_HIDDEN");
     };
     document.addEventListener("visibilitychange", stopWhenHidden);
     return () => {
-      mountedRef.current = false;
-      activeAbortRef.current?.abort("PAGE_LEFT");
+      cleanupLifecycle();
       document.removeEventListener("visibilitychange", stopWhenHidden);
     };
   }, []);
