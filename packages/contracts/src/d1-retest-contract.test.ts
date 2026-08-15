@@ -35,6 +35,7 @@ describe("D1 retest HTTP contracts", () => {
   it("freezes the server-side actionable task type tie-break order", () => {
     expect(CURRENT_ACTIONABLE_TASK_TYPE_PRIORITY).toEqual([
       "d1_retest",
+      "d7_retest",
       "guided_intervention",
     ]);
   });
