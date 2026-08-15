@@ -21,6 +21,7 @@ export interface PersistCaseTransitionInput {
   readonly caseId: string;
   readonly expectedVersion: number;
   readonly nextState: CaseStatus;
+  readonly nextReplanCount?: number;
   readonly event: NewLearningEvidenceEventRow;
   readonly afterPersist?: (
     transaction: Parameters<Parameters<Database["transaction"]>[0]>[0],
@@ -46,6 +47,7 @@ export async function persistCaseTransition(
       .select({
         state: cases.state,
         stateVersion: cases.stateVersion,
+        replanCount: cases.replanCount,
       })
       .from(cases)
       .where(eq(cases.id, input.caseId))
@@ -84,6 +86,7 @@ export async function persistCaseTransition(
       .set({
         state: input.nextState,
         stateVersion: input.expectedVersion + 1,
+        ...(input.nextReplanCount === undefined ? {} : { replanCount: input.nextReplanCount }),
         updatedAt: input.event.occurredAt,
       })
       .where(
@@ -95,6 +98,7 @@ export async function persistCaseTransition(
       .returning({
         state: cases.state,
         stateVersion: cases.stateVersion,
+        replanCount: cases.replanCount,
       });
 
     if (updatedCase === undefined) {

@@ -33,6 +33,8 @@ export const caseState = appSchema.enum("case_state", [
   "d1_scheduled",
   "d7_scheduled",
   "replan_required",
+  "repair_verified",
+  "support_required",
   "report_ready",
 ]);
 
@@ -112,6 +114,7 @@ export const cases = appSchema.table(
       .references(() => students.id),
     state: caseState("state").notNull().default("awaiting_evidence"),
     stateVersion: integer("state_version").notNull().default(0),
+    replanCount: integer("replan_count").notNull().default(0),
     title: text("title"),
     currentSkillId: uuid("current_skill_id"),
     simulation: boolean("simulation").notNull().default(false),
@@ -128,6 +131,7 @@ export const cases = appSchema.table(
   (table) => [
     index("cases_student_updated_idx").on(table.studentId, table.updatedAt),
     check("cases_state_version_nonnegative", sql`${table.stateVersion} >= 0`),
+    check("cases_replan_count_bounded", sql`${table.replanCount} >= 0`),
   ],
 );
 

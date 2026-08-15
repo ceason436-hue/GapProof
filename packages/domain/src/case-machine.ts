@@ -132,24 +132,33 @@ export function transitionCase(
         return advance(
           aggregate,
           event,
-          "replan_required",
+          aggregate.replanCount >= 2 ? "support_required" : "replan_required",
           "insufficient_evidence",
         );
       }
 
       return event.kind === "d1"
         ? advance(aggregate, event, "d7_scheduled", "pending_retest")
-        : advance(aggregate, event, "report_ready", "repaired");
+        : advance(aggregate, event, "repair_verified", "repaired");
     }
 
     case "plan_replanned": {
       requireStatus(aggregate, event, "replan_required");
+      if (
+        event.replanIndex !== aggregate.replanCount + 1 ||
+        event.replanIndex > 2
+      ) {
+        throw new CaseTransitionError(
+          "invariant_violation",
+          "A plan replan index must advance the persistent count within the two-replan cap.",
+        );
+      }
       return advance(
         aggregate,
         event,
         "intervention_ready",
         "insufficient_evidence",
-        aggregate.replanCount + 1,
+        event.replanIndex,
       );
     }
   }

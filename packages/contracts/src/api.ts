@@ -349,12 +349,10 @@ export const LearningTaskViewSchema = Type.Union([
   D7RetestTaskViewSchema,
 ]);
 
-/**
- * Stable actionable tie-break order after dueAt ASC NULLS LAST. D7 remains
- * read-only until its attempt contract and evaluation route are implemented.
- */
+/** Stable actionable tie-break order after dueAt ASC NULLS LAST. */
 export const CURRENT_ACTIONABLE_TASK_TYPE_PRIORITY = [
   "d1_retest",
+  "d7_retest",
   "guided_intervention",
 ] as const;
 
@@ -468,6 +466,10 @@ export type SubmitD1RetestAttemptRequest = Static<
   typeof SubmitD1RetestAttemptRequestSchema
 >;
 
+/** Shared exact-choice request; D1 export remains source-compatible. */
+export const SubmitRetestAttemptRequestSchema = SubmitD1RetestAttemptRequestSchema;
+export type SubmitRetestAttemptRequest = SubmitD1RetestAttemptRequest;
+
 export const D1RetestAttemptViewSchema = Type.Object({
   attemptId: Type.String({ format: "uuid" }),
   caseId: Type.String({ format: "uuid" }),
@@ -479,6 +481,7 @@ export const D1RetestAttemptViewSchema = Type.Object({
   state: Type.Union([
     Type.Literal("d7_scheduled"),
     Type.Literal("replan_required"),
+    Type.Literal("support_required"),
   ]),
   stateVersion: Type.Integer({ minimum: 0 }),
   completedTask: D1RetestTaskViewSchema,
@@ -486,6 +489,32 @@ export const D1RetestAttemptViewSchema = Type.Object({
 });
 
 export type D1RetestAttemptView = Static<typeof D1RetestAttemptViewSchema>;
+
+export const D7RetestAttemptViewSchema = Type.Object({
+  attemptId: Type.String({ format: "uuid" }),
+  caseId: Type.String({ format: "uuid" }),
+  taskId: Type.String({ format: "uuid" }),
+  itemId: Type.String({ minLength: 1 }),
+  selectedChoiceId: Type.String({ minLength: 1 }),
+  passed: Type.Boolean(),
+  scoringMethod: Type.Literal("exact-choice-v1"),
+  state: Type.Union([
+    Type.Literal("repair_verified"),
+    Type.Literal("replan_required"),
+    Type.Literal("support_required"),
+  ]),
+  stateVersion: Type.Integer({ minimum: 0 }),
+  completedTask: D7RetestTaskViewSchema,
+  scheduledRetest: Type.Null(),
+});
+
+export type D7RetestAttemptView = Static<typeof D7RetestAttemptViewSchema>;
+
+export const RetestAttemptViewSchema = Type.Union([
+  D1RetestAttemptViewSchema,
+  D7RetestAttemptViewSchema,
+]);
+export type RetestAttemptView = Static<typeof RetestAttemptViewSchema>;
 
 export const DemoClockAdvanceRequestSchema = Type.Object({
   caseId: Type.String({ format: "uuid" }),

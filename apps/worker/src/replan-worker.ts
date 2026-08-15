@@ -1,4 +1,4 @@
-import { isReplanJobData } from "@gapproof/contracts";
+import { isReplanJobData, type ReplanStrategy } from "@gapproof/contracts";
 import {
   findCaseById,
   findEvidenceEventByIdempotencyKey,
@@ -54,12 +54,21 @@ export function createReplanWorker(options: ReplanWorkerOptions) {
         if (trigger?.id !== job.data.triggerEventId) {
           throw new Error("RETEST_EVALUATION_EVIDENCE_NOT_FOUND");
         }
+        if (caseRow.state !== "replan_required" || caseRow.replanCount >= 2) {
+          throw new Error("REPLAN_CAP_REACHED");
+        }
 
         const occurredAt = clock.now();
+        const replanIndex = (caseRow.replanCount + 1) as 1 | 2;
+        const strategy: ReplanStrategy = replanIndex === 1
+          ? "alternate_explanation_and_practice"
+          : "prerequisite_skill_with_example";
         const event = {
           eventId: uuidv7(),
           occurredAt: occurredAt.toISOString(),
           type: "plan_replanned" as const,
+          replanIndex,
+          strategy,
         };
         const next = transitionCase(
           {
@@ -67,7 +76,7 @@ export function createReplanWorker(options: ReplanWorkerOptions) {
             status: caseRow.state,
             mastery: "insufficient_evidence",
             version: caseRow.stateVersion,
-            replanCount: 0,
+            replanCount: caseRow.replanCount,
             appliedEventIds: [],
           },
           event,
@@ -76,6 +85,7 @@ export function createReplanWorker(options: ReplanWorkerOptions) {
           caseId: caseRow.id,
           expectedVersion: job.data.expectedVersion,
           nextState: next.status,
+          nextReplanCount: next.replanCount,
           event: {
             id: event.eventId,
             tenantId: caseRow.tenantId,
@@ -87,6 +97,8 @@ export function createReplanWorker(options: ReplanWorkerOptions) {
             payload: {
               triggerEventId: trigger.id,
               interventionJobId: job.data.interventionJobId,
+              replanIndex,
+              strategy,
             },
             occurredAt,
             idempotencyKey,

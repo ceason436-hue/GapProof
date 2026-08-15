@@ -57,6 +57,13 @@
       "when": 1786741000000,
       "tag": "0007_source_asset_quality",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786742000000,
+      "tag": "0008_d7_replan_cap",
+      "breakpoints": true
     }
   ]
 }

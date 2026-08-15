@@ -59,15 +59,16 @@ export async function findCurrentActionableTaskId(
       and(
         eq(tasks.studentId, studentId),
         eq(tasks.status, "ready"),
-        inArray(tasks.taskType, ["d1_retest", "guided_intervention"]),
+        inArray(tasks.taskType, ["d1_retest", "d7_retest", "guided_intervention"]),
       ),
     )
     .orderBy(
       sql`${tasks.dueAt} asc nulls last`,
       sql`case ${tasks.taskType}
         when 'd1_retest' then 1
-        when 'guided_intervention' then 2
-        else 3
+        when 'd7_retest' then 2
+        when 'guided_intervention' then 3
+        else 4
       end`,
       asc(tasks.createdAt),
       asc(tasks.id),

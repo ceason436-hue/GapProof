@@ -25,8 +25,10 @@ import {
   DemoClockAdvanceRequestSchema,
   type DemoClockAdvanceRequest,
   DemoClockAdvanceViewSchema,
-  D1RetestAttemptViewSchema,
   type D1RetestAttemptView,
+  D7RetestAttemptViewSchema,
+  type D7RetestAttemptView,
+  RetestAttemptViewSchema,
   type D1RetestTaskView,
   type D7RetestTaskView,
   type FormHypothesesOutput,
@@ -44,8 +46,9 @@ import {
   type RunNextRequest,
   SubmitAttemptRequestSchema,
   type SubmitAttemptRequest,
-  SubmitD1RetestAttemptRequestSchema,
   type SubmitD1RetestAttemptRequest,
+  SubmitRetestAttemptRequestSchema,
+  type SubmitRetestAttemptRequest,
   StudentIdParamsSchema,
   type StudentIdParams,
   SourceAssetIdParamsSchema,
@@ -513,7 +516,7 @@ async function d1RetestAttemptViewFromEvent(
     typeof result.selectedChoiceId !== "string" ||
     typeof result.passed !== "boolean" ||
     result.scoringMethod !== "exact-choice-v1" ||
-    !["d7_scheduled", "replan_required"].includes(String(result.state)) ||
+    !["d7_scheduled", "replan_required", "support_required"].includes(String(result.state)) ||
     !Number.isInteger(result.stateVersion) ||
     !(typeof result.d7TaskId === "string" || result.d7TaskId === null) ||
     !(typeof result.replanJobId === "string" || result.replanJobId === null) ||
@@ -543,7 +546,7 @@ async function d1RetestAttemptViewFromEvent(
       selectedChoiceId: result.selectedChoiceId,
       passed: result.passed,
       scoringMethod: "exact-choice-v1",
-      state: result.state as "d7_scheduled" | "replan_required",
+      state: result.state as "d7_scheduled" | "replan_required" | "support_required",
       stateVersion: result.stateVersion as number,
       completedTask: result.completedTask as D1RetestTaskView,
       scheduledRetest: result.scheduledRetest as D7RetestTaskView | null,
@@ -551,6 +554,64 @@ async function d1RetestAttemptViewFromEvent(
     ...(typeof result.replanJobId === "string"
       ? { jobId: result.replanJobId }
       : {}),
+  };
+}
+
+function isD7EvaluationEvent(event: LearningEvidenceEventRow): boolean {
+  return event.eventType === "retest_evaluated" &&
+    isRecord(event.payload.result) && event.payload.result.kind === "d7";
+}
+
+function isMatchingRetestEvaluationEvent(
+  event: LearningEvidenceEventRow,
+  taskId: string,
+  requestPayload: Record<string, unknown>,
+): boolean {
+  return event.eventType === "retest_evaluated" &&
+    event.sourceRef === taskId &&
+    isRecord(event.payload.request) &&
+    isSamePayload(event.payload.request, requestPayload);
+}
+
+async function d7RetestAttemptViewFromEvent(
+  event: LearningEvidenceEventRow,
+): Promise<{ view: D7RetestAttemptView; jobId?: string }> {
+  const result = event.payload.result;
+  if (
+    !isRecord(result) ||
+    result.kind !== "d7" ||
+    typeof result.taskId !== "string" ||
+    typeof result.itemId !== "string" ||
+    typeof result.selectedChoiceId !== "string" ||
+    typeof result.passed !== "boolean" ||
+    result.scoringMethod !== "exact-choice-v1" ||
+    !["repair_verified", "replan_required", "support_required"].includes(String(result.state)) ||
+    !Number.isInteger(result.stateVersion) ||
+    !isRecord(result.completedTask) ||
+    result.completedTask.taskType !== "d7_retest" ||
+    result.completedTask.status !== "completed" ||
+    !isRecord(result.completedTask.item) ||
+    "expectedChoiceId" in result.completedTask.item ||
+    result.scheduledRetest !== null ||
+    !(typeof result.replanJobId === "string" || result.replanJobId === null)
+  ) {
+    throw new ApiHttpError(500, "STORED_EVENT_INVALID", "The stored D7 evaluation event is invalid.");
+  }
+  return {
+    view: {
+      attemptId: event.id,
+      caseId: event.caseId,
+      taskId: result.taskId,
+      itemId: result.itemId,
+      selectedChoiceId: result.selectedChoiceId,
+      passed: result.passed,
+      scoringMethod: "exact-choice-v1",
+      state: result.state as D7RetestAttemptView["state"],
+      stateVersion: result.stateVersion as number,
+      completedTask: result.completedTask as D7RetestTaskView,
+      scheduledRetest: null,
+    },
+    ...(typeof result.replanJobId === "string" ? { jobId: result.replanJobId } : {}),
   };
 }
 
@@ -1099,7 +1160,7 @@ export async function buildApi(options: BuildApiOptions) {
           status: caseRow.state,
           mastery: "insufficient_evidence",
           version: caseRow.stateVersion,
-          replanCount: 0,
+          replanCount: caseRow.replanCount,
           appliedEventIds: [],
         },
         event,
@@ -1273,7 +1334,7 @@ export async function buildApi(options: BuildApiOptions) {
           status: caseRow.state,
           mastery: "insufficient_evidence",
           version: caseRow.stateVersion,
-          replanCount: 0,
+          replanCount: caseRow.replanCount,
           appliedEventIds: [],
         },
         event,
@@ -1419,28 +1480,30 @@ export async function buildApi(options: BuildApiOptions) {
     },
   );
 
-  api.post<{ Params: TaskIdParams; Body: SubmitD1RetestAttemptRequest }>(
+  api.post<{ Params: TaskIdParams; Body: SubmitRetestAttemptRequest }>(
     "/v1/tasks/:taskId/attempts",
     {
       schema: {
         params: TaskIdParamsSchema,
-        body: SubmitD1RetestAttemptRequestSchema,
+        body: SubmitRetestAttemptRequestSchema,
         response: {
-          200: apiResponseSchema(D1RetestAttemptViewSchema),
+          200: apiResponseSchema(RetestAttemptViewSchema),
           "4xx": ApiErrorResponseSchema,
           500: ApiErrorResponseSchema,
         },
       },
     },
     async (request) => {
-      const idempotencyKey = `d1-retest-attempt:${getIdempotencyKey(request)}`;
+      const idempotencyKey = `retest-attempt:${getIdempotencyKey(request)}`;
       const requestPayload = d1AttemptRequestPayload(request.body);
       const existing = await findEvidenceEventByIdempotencyKey(options.database, idempotencyKey);
       if (existing !== undefined) {
-        if (!isMatchingD1EvaluationEvent(existing, request.params.taskId, requestPayload)) {
+        if (!isMatchingRetestEvaluationEvent(existing, request.params.taskId, requestPayload)) {
           throw new ApiHttpError(409, "IDEMPOTENCY_KEY_REUSED", "The idempotency key belongs to another write request.");
         }
-        const replay = await d1RetestAttemptViewFromEvent(options.database, existing);
+        const replay = isD7EvaluationEvent(existing)
+          ? await d7RetestAttemptViewFromEvent(existing)
+          : await d1RetestAttemptViewFromEvent(options.database, existing);
         return success(request, replay.view, replay.jobId);
       }
 
@@ -1451,6 +1514,112 @@ export async function buildApi(options: BuildApiOptions) {
       const caseRow = await findCaseById(options.database, taskRow.caseId);
       if (caseRow === undefined) {
         throw new ResourceNotFoundError("Case", taskRow.caseId);
+      }
+      if (taskRow.taskType === "d7_retest") {
+        if (caseRow.stateVersion !== request.body.expectedVersion) {
+          throw new VersionConflictError(caseRow.id, request.body.expectedVersion);
+        }
+        if (taskRow.status !== "ready" || caseRow.state !== "d7_scheduled") {
+          throw new InvalidTaskStateError("Only a ready D7 retest in d7_scheduled can be submitted.");
+        }
+        const item = privateRetestItemFromTask(taskRow);
+        if (item.id !== request.body.itemId) {
+          throw new ApiHttpError(400, "INVALID_INPUT", "The submitted item does not belong to this D7 task.");
+        }
+        const score = scoreSingleChoiceRetest({
+          itemId: item.id,
+          selectedChoiceId: request.body.selectedChoiceId,
+          expectedChoiceId: item.expectedChoiceId,
+          availableChoiceIds: item.choices.map(({ id }) => id),
+        });
+        const evaluatedAt = clock.now();
+        const eventId = uuidv7();
+        const canReplan = !score.passed && caseRow.replanCount < 2;
+        const replanJobId = canReplan ? uuidv7() : null;
+        const interventionJobId = canReplan ? uuidv7() : null;
+        const domainEvent = {
+          eventId,
+          occurredAt: evaluatedAt.toISOString(),
+          type: "retest_evaluated" as const,
+          kind: "d7" as const,
+          passed: score.passed,
+        };
+        const next = transitionCase({
+          id: caseRow.id,
+          status: caseRow.state,
+          mastery: "pending_retest",
+          version: caseRow.stateVersion,
+          replanCount: caseRow.replanCount,
+          appliedEventIds: [],
+        }, domainEvent);
+        const completedTaskSnapshot: D7RetestTaskView = {
+          ...(toLearningTaskView(taskRow) as D7RetestTaskView),
+          status: "completed",
+          completedAt: evaluatedAt.toISOString(),
+        };
+        const eventPayload = {
+          kind: "d7" as const,
+          passed: score.passed,
+          request: requestPayload,
+          result: {
+            kind: "d7" as const,
+            taskId: taskRow.id,
+            itemId: item.id,
+            selectedChoiceId: request.body.selectedChoiceId,
+            passed: score.passed,
+            scoringMethod: score.scoringMethod,
+            state: next.status,
+            stateVersion: next.version,
+            replanJobId,
+            completedTask: completedTaskSnapshot,
+            scheduledRetest: null,
+          },
+          privateEvidence: {
+            scoringRule: score.scoringMethod,
+            itemSource: "synthetic_fixture",
+          },
+        };
+        const persisted = await persistD1RetestEvaluation(options.database, {
+          caseId: caseRow.id,
+          taskId: taskRow.id,
+          expectedVersion: request.body.expectedVersion,
+          nextState: next.status,
+          evaluatedAt,
+          kind: "d7",
+          event: {
+            id: eventId,
+            tenantId: caseRow.tenantId,
+            studentId: caseRow.studentId,
+            caseId: caseRow.id,
+            eventType: domainEvent.type,
+            sourceType: "student_d7_retest_attempt",
+            sourceRef: taskRow.id,
+            payload: eventPayload,
+            occurredAt: evaluatedAt,
+            idempotencyKey,
+          },
+          enqueueFollowUp: async (transaction) => {
+            if (!canReplan || replanJobId === null || interventionJobId === null) return;
+            await enqueueReplanTransactional(transaction, options.queue, {
+              jobId: replanJobId,
+              caseId: caseRow.id,
+              triggerEventId: eventId,
+              expectedVersion: next.version,
+              traceId: traceId(request),
+              interventionJobId,
+            });
+          },
+        });
+        const persistedEvent = await findEvidenceEventByIdempotencyKey(options.database, idempotencyKey);
+        if (persistedEvent === undefined || !isD7EvaluationEvent(persistedEvent)) {
+          throw new ApiHttpError(
+            persisted.applied ? 500 : 409,
+            persisted.applied ? "STORED_EVENT_INVALID" : "IDEMPOTENCY_KEY_REUSED",
+            persisted.applied ? "The D7 evaluation event could not be reconstructed." : "The idempotency key belongs to another write request.",
+          );
+        }
+        const response = await d7RetestAttemptViewFromEvent(persistedEvent);
+        return success(request, response.view, response.jobId);
       }
       if (caseRow.stateVersion !== request.body.expectedVersion) {
         const racedEvent = await findEvidenceEventByIdempotencyKey(
@@ -1490,8 +1659,9 @@ export async function buildApi(options: BuildApiOptions) {
       const evaluatedAt = clock.now();
       const eventId = uuidv7();
       const d7TaskId = score.passed ? uuidv7() : null;
-      const replanJobId = score.passed ? null : uuidv7();
-      const interventionJobId = score.passed ? null : uuidv7();
+      const canReplan = !score.passed && caseRow.replanCount < 2;
+      const replanJobId = canReplan ? uuidv7() : null;
+      const interventionJobId = canReplan ? uuidv7() : null;
       const d7ScheduledFor = new Date(evaluatedAt.getTime() + 144 * 60 * 60 * 1_000);
       const d7DueAt = new Date(d7ScheduledFor.getTime() + 12 * 60 * 60 * 1_000);
       const domainEvent = {
@@ -1507,7 +1677,7 @@ export async function buildApi(options: BuildApiOptions) {
           status: caseRow.state,
           mastery: "pending_retest",
           version: caseRow.stateVersion,
-          replanCount: 0,
+          replanCount: caseRow.replanCount,
           appliedEventIds: [],
         },
         domainEvent,
@@ -1616,8 +1786,8 @@ export async function buildApi(options: BuildApiOptions) {
             });
             return;
           }
-          if (replanJobId === null || interventionJobId === null) {
-            throw new Error("A failed D1 evaluation requires replan job ids.");
+          if (!canReplan || replanJobId === null || interventionJobId === null) {
+            return;
           }
           await enqueueReplanTransactional(transaction, options.queue, {
             jobId: replanJobId,
@@ -1774,7 +1944,7 @@ export async function buildApi(options: BuildApiOptions) {
           status: caseRow.state,
           mastery: "insufficient_evidence",
           version: caseRow.stateVersion,
-          replanCount: 0,
+          replanCount: caseRow.replanCount,
           appliedEventIds: [],
         },
         event,

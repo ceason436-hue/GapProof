@@ -10,6 +10,8 @@ export const CaseStatusSchema = Type.Union([
   Type.Literal("d1_scheduled"),
   Type.Literal("d7_scheduled"),
   Type.Literal("replan_required"),
+  Type.Literal("repair_verified"),
+  Type.Literal("support_required"),
   Type.Literal("report_ready"),
 ]);
 
@@ -22,6 +24,13 @@ export const MasteryStatusSchema = Type.Union([
 ]);
 
 export type MasteryStatus = Static<typeof MasteryStatusSchema>;
+
+export const ReplanStrategySchema = Type.Union([
+  Type.Literal("alternate_explanation_and_practice"),
+  Type.Literal("prerequisite_skill_with_example"),
+]);
+
+export type ReplanStrategy = Static<typeof ReplanStrategySchema>;
 
 const EventBaseSchema = Type.Object({
   eventId: Type.String({ minLength: 1 }),
@@ -84,7 +93,11 @@ export const CaseEventSchema = Type.Union([
   ]),
   Type.Intersect([
     EventBaseSchema,
-    Type.Object({ type: Type.Literal("plan_replanned") }),
+    Type.Object({
+      type: Type.Literal("plan_replanned"),
+      replanIndex: Type.Union([Type.Literal(1), Type.Literal(2)]),
+      strategy: ReplanStrategySchema,
+    }),
   ]),
 ]);
 

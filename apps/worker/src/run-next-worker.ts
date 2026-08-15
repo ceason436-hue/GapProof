@@ -77,6 +77,16 @@ export function createRunNextWorker(options: RunNextWorkerOptions) {
           if (probeEvaluationEvent === undefined) {
             throw new Error("PROBE_EVALUATION_EVIDENCE_NOT_FOUND");
           }
+          const replanEvent = await findLatestCaseEvidenceEventByType(
+            options.database,
+            caseRow.id,
+            "plan_replanned",
+          );
+          const replanStrategy = replanEvent?.payload.strategy === "prerequisite_skill_with_example"
+            ? "prerequisite_skill_with_example"
+            : replanEvent?.payload.strategy === "alternate_explanation_and_practice"
+              ? "alternate_explanation_and_practice"
+              : null;
           const evaluationResult = probeEvaluationEvent.payload.result;
           if (
             typeof evaluationResult !== "object" ||
@@ -136,7 +146,7 @@ export function createRunNextWorker(options: RunNextWorkerOptions) {
               status: caseRow.state,
               mastery: "insufficient_evidence",
               version: caseRow.stateVersion,
-              replanCount: 0,
+              replanCount: caseRow.replanCount,
               appliedEventIds: [],
             },
             event,
@@ -158,6 +168,7 @@ export function createRunNextWorker(options: RunNextWorkerOptions) {
                 payload: {
                   taskId,
                   probeEvaluationEventId: probeEvaluationEvent.id,
+                  ...(replanStrategy === null ? {} : { replanStrategy }),
                   toolVersion: toolResult.toolVersion,
                   warnings: [...toolResult.warnings],
                 },
@@ -172,12 +183,21 @@ export function createRunNextWorker(options: RunNextWorkerOptions) {
                 caseId: caseRow.id,
                 taskType: "guided_intervention",
                 status: "ready",
-                title: toolResult.data.title,
+                title: replanStrategy === "alternate_explanation_and_practice"
+                  ? "换一种讲解与练习方式"
+                  : replanStrategy === "prerequisite_skill_with_example"
+                    ? "回到前置技能并结合示例"
+                    : toolResult.data.title,
                 estimatedMinutes: toolResult.data.estimatedMinutes,
                 scheduledFor: occurredAt,
                 payload: {
-                  rationale: toolResult.data.rationale,
+                  rationale: replanStrategy === "alternate_explanation_and_practice"
+                    ? "规则化合成骨架：更换讲解表达与练习形式。"
+                    : replanStrategy === "prerequisite_skill_with_example"
+                      ? "规则化合成骨架：下探一个前置技能并加入示例。"
+                      : toolResult.data.rationale,
                   steps: toolResult.data.steps,
+                  ...(replanStrategy === null ? {} : { replanStrategy }),
                   warnings: [...toolResult.warnings],
                   toolVersion: toolResult.toolVersion,
                 },
@@ -263,7 +283,7 @@ export function createRunNextWorker(options: RunNextWorkerOptions) {
             status: caseRow.state,
             mastery: "insufficient_evidence",
             version: caseRow.stateVersion,
-            replanCount: 0,
+            replanCount: caseRow.replanCount,
             appliedEventIds: [],
           };
           const event = {
@@ -337,7 +357,7 @@ export function createRunNextWorker(options: RunNextWorkerOptions) {
           status: caseRow.state,
           mastery: "insufficient_evidence",
           version: caseRow.stateVersion,
-          replanCount: 0,
+          replanCount: caseRow.replanCount,
           appliedEventIds: [],
         };
         const lowConfidenceRegionCount = toolResult.warnings.filter((warning) =>

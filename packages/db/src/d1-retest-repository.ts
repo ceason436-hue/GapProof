@@ -29,6 +29,8 @@ export interface PersistD1RetestEvaluationInput {
   readonly evaluatedAt: Date;
   readonly event: NewLearningEvidenceEventRow;
   readonly d7Task?: NewTaskRow;
+  /** D1 is the compatibility default; D7 uses the same atomic evaluator. */
+  readonly kind?: "d1" | "d7";
   readonly enqueueFollowUp: (
     transaction: Parameters<Parameters<Database["transaction"]>[0]>[0],
   ) => Promise<void>;
@@ -49,7 +51,7 @@ export async function persistD1RetestEvaluation(
 
   return database.transaction(async (transaction) => {
     const [lockedCase] = await transaction
-      .select({ state: cases.state, stateVersion: cases.stateVersion })
+      .select({ state: cases.state, stateVersion: cases.stateVersion, replanCount: cases.replanCount })
       .from(cases)
       .where(eq(cases.id, input.caseId))
       .for("update")
@@ -69,8 +71,11 @@ export async function persistD1RetestEvaluation(
     if (lockedCase.stateVersion !== input.expectedVersion) {
       throw new VersionConflictError(input.caseId, input.expectedVersion);
     }
-    if (lockedCase.state !== "d1_scheduled") {
-      throw new InvalidTaskStateError("The Case is not awaiting a D1 retest.");
+    const kind = input.kind ?? "d1";
+    const expectedState = kind === "d1" ? "d1_scheduled" : "d7_scheduled";
+    const expectedTaskType = kind === "d1" ? "d1_retest" : "d7_retest";
+    if (lockedCase.state !== expectedState) {
+      throw new InvalidTaskStateError(`The Case is not awaiting a ${kind.toUpperCase()} retest.`);
     }
 
     const [lockedTask] = await transaction
@@ -84,10 +89,10 @@ export async function persistD1RetestEvaluation(
     }
     if (
       lockedTask.caseId !== input.caseId ||
-      lockedTask.taskType !== "d1_retest" ||
+      lockedTask.taskType !== expectedTaskType ||
       lockedTask.status !== "ready"
     ) {
-      throw new InvalidTaskStateError("Only a ready D1 retest can be submitted.");
+      throw new InvalidTaskStateError(`Only a ready ${kind.toUpperCase()} retest can be submitted.`);
     }
 
     const [updatedCase] = await transaction
@@ -98,7 +103,7 @@ export async function persistD1RetestEvaluation(
         updatedAt: input.evaluatedAt,
       })
       .where(and(eq(cases.id, input.caseId), eq(cases.stateVersion, input.expectedVersion)))
-      .returning({ state: cases.state, stateVersion: cases.stateVersion });
+      .returning({ state: cases.state, stateVersion: cases.stateVersion, replanCount: cases.replanCount });
     if (updatedCase === undefined) {
       throw new VersionConflictError(input.caseId, input.expectedVersion);
     }

@@ -202,7 +202,12 @@ describe("case state machine", () => {
 
     aggregate = transitionCase(
       aggregate,
-      event({ eventId: "evt-replan", type: "plan_replanned" }),
+      event({
+        eventId: "evt-replan",
+        type: "plan_replanned",
+        replanIndex: 1,
+        strategy: "alternate_explanation_and_practice",
+      }),
     );
 
     expect(aggregate.status).toBe("intervention_ready");
@@ -240,8 +245,76 @@ describe("case state machine", () => {
       }),
     );
 
-    expect(aggregate.status).toBe("report_ready");
+    expect(aggregate.status).toBe("repair_verified");
     expect(aggregate.mastery).toBe("repaired");
+  });
+
+  it("caps a third failed retest at support_required and records both strategies", () => {
+    let aggregate = reachInterventionActive();
+    aggregate = transitionCase(aggregate, event({
+      eventId: "evt-intervention",
+      type: "intervention_completed",
+      taskId: "task-guided-intervention-1",
+      d1TaskId: "task-d1-1",
+      d1ScheduledFor: "2026-08-15T10:00:00.000Z",
+    }));
+    aggregate = transitionCase(aggregate, event({
+      eventId: "evt-d1-fail-1",
+      type: "retest_evaluated",
+      kind: "d1",
+      passed: false,
+    }));
+    aggregate = transitionCase(aggregate, event({
+      eventId: "evt-replan-1",
+      type: "plan_replanned",
+      replanIndex: 1,
+      strategy: "alternate_explanation_and_practice",
+    }));
+    aggregate = transitionCase(aggregate, event({
+      eventId: "evt-intervention-2",
+      type: "intervention_generated",
+      taskId: "task-guided-intervention-2",
+    }));
+    aggregate = transitionCase(aggregate, event({
+      eventId: "evt-intervention-complete-2",
+      type: "intervention_completed",
+      taskId: "task-guided-intervention-2",
+      d1TaskId: "task-d1-2",
+      d1ScheduledFor: "2026-08-22T10:00:00.000Z",
+    }));
+    aggregate = transitionCase(aggregate, event({
+      eventId: "evt-d1-fail-2",
+      type: "retest_evaluated",
+      kind: "d1",
+      passed: false,
+    }));
+    aggregate = transitionCase(aggregate, event({
+      eventId: "evt-replan-2",
+      type: "plan_replanned",
+      replanIndex: 2,
+      strategy: "prerequisite_skill_with_example",
+    }));
+    aggregate = transitionCase(aggregate, event({
+      eventId: "evt-intervention-3",
+      type: "intervention_generated",
+      taskId: "task-guided-intervention-3",
+    }));
+    aggregate = transitionCase(aggregate, event({
+      eventId: "evt-intervention-complete-3",
+      type: "intervention_completed",
+      taskId: "task-guided-intervention-3",
+      d1TaskId: "task-d1-3",
+      d1ScheduledFor: "2026-08-29T10:00:00.000Z",
+    }));
+    aggregate = transitionCase(aggregate, event({
+      eventId: "evt-d1-fail-3",
+      type: "retest_evaluated",
+      kind: "d1",
+      passed: false,
+    }));
+
+    expect(aggregate.status).toBe("support_required");
+    expect(aggregate.replanCount).toBe(2);
   });
 
   it("applies the same event id only once", () => {
