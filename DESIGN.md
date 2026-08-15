@@ -4,7 +4,7 @@ document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
 version: "0.2.19"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "真实图片上传最小页面已形成未推送本地检查点；当前暂停，等待用户确认长期规则与交接办法后再继续"
+current_design_stage: "PUSH-014 真实图片上传页面已通过最终门禁并发布；下一步继续上传后的识别/OCR 最小切片"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -90,7 +90,7 @@ upstream_documents:
 
 **尚未完成**：上传后的图片质量检查、OCR/识别确认页面写入；其他学生 P0 页面、家长端页面、Logo 紧裁/SVG/Favicon 与最终品牌规范、完整交互原型。D7 作答、报告及其页面仍未实现。
 
-**下一步**：当前按用户要求暂停，PUSH-014 尚未推送。收到明确“继续”后，先由协调任务完整复核四文档交接规则并向用户复述确认；确认后才恢复目标、完成 PUSH-014 最终复核/推送并决定下一最小切片。任何新字段须先由共享 contracts 与 TDD 冻结，不从视觉稿或 Fixture 反推业务状态。
+**下一步**：从已发布的上传完成状态推进图片质量/OCR/识别确认的下一最小切片；D7 继续只读。任何新字段须先由共享 contracts 与 TDD 冻结，不从视觉稿或 Fixture 反推业务状态。
 
 ### 0.4 设计底线
 
@@ -1775,7 +1775,7 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 
 - `/materials/new` 完成单图真实上传状态：类型/大小校验、hashing/创建意图/上传、受控错误与“上传完成，识别尚未开始”的中性成功反馈。
 - 浏览器 Fixture 证明同源 POST/PUT、UUIDv7、相同 key/token/bytes 单次未知结果重试、无效 MIME/超限不发请求及成功页脱敏；新增 1440×900 与 1366×768 成功截图。
-- 保持 Stitch V1.1 深色卡书本越界裁切不变；D7、OCR/识别确认与报告仍未实现。同步 PROJECT_MASTER v0.1.29、PRD v0.1.21、TDD v0.3.22 与 PUSH-014 `local_checkpoint`；当前暂停且尚未推送。
+- 保持 Stitch V1.1 深色卡书本越界裁切不变；D7、OCR/识别确认与报告仍未实现。同步 PROJECT_MASTER v0.1.29、PRD v0.1.21、TDD v0.3.22 与 PUSH-014，并完成远端 SHA 核对。
 
 ### v0.2.18 — 2026-08-15
 

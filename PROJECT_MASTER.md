@@ -4,7 +4,7 @@ document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
 version: "0.1.29"
 status: "ACTIVE"
-current_stage: "项目本身初赛验收冲刺；真实图片字节上传已形成未推送的本地验收检查点；当前暂停，等待用户确认长期规则与交接办法后再继续"
+current_stage: "项目本身初赛验收冲刺；PUSH-014 真实图片字节上传闭环已通过最终门禁并发布，下一步继续上传后的识别/OCR 最小切片"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -143,7 +143,7 @@ next_action:
 
 `[FACT]` GOAI 无界应用赛道参赛手册列出的初赛截止日期为 2026-08-16；具体当天截止时刻、入口、文件大小及后续通知仍须在官网、提交系统或官方群再次核对。
 
-`[DECISION]` 当前处于：**项目本身初赛验收冲刺；学生端“今日”页默认入口已接入真实 API 的 ready D1 客户端作答与真实概览投影。`/materials/new` 的 JPEG/PNG/WebP 真实字节上传已形成未推送的本地验收检查点：浏览器计算 SHA-256、以 UUIDv7 固定一次意图、经同源 API 创建短期上传授权并 PUT 原始字节，服务端校验 MIME/大小/hash 后原子写入受控本地目录并更新 `source_assets`；这不是生产 S3、OCR、识别或学习效果。D7 作答、识别确认、报告及上传到修复证明的完整业务闭环仍未完成。按用户要求立即暂停；下次收到“继续”后先完整复核四文档交接规则并向用户复述确认，确认后才恢复持续目标、派工和 PUSH-014 最终复核/推送**。
+`[DECISION]` 当前处于：**项目本身初赛验收冲刺；学生端“今日”页默认入口已接入真实 API 的 ready D1 客户端作答与真实概览投影。`/materials/new` 的 JPEG/PNG/WebP 真实字节上传已通过 PUSH-014 门禁并发布：浏览器计算 SHA-256、以 UUIDv7 固定一次意图、经同源 API 创建短期上传授权并 PUT 原始字节，服务端校验 MIME/大小/hash 后原子写入受控本地目录并更新 `source_assets`；这不是生产 S3、OCR、识别或学习效果。D7 作答、识别确认、报告及上传到修复证明的完整业务闭环仍未完成。下一步继续上传后的识别/OCR 最小切片，D7 与重排/报告未决策边界保持暂停**。
 
 ### 1.2 已完成
 
@@ -2028,7 +2028,7 @@ review_date:
 | DEC-032 | TDD 详细 API 路由为唯一正式接口 | accepted | API 版本升级或新客户端边界产生 |
 | DEC-033 | 杭州阿里云单区域联网 Docker Compose，真实 Provider 演示，Mock 仅测试/故障注入 | accepted | 比赛网络、并发、合规或可用性要求变化 |
 | DEC-034 | DeepSeek `deepseek-v4-flash`、MiniMax `minimax-m3`、腾讯混元 Embedding 作为当前模型配置 | accepted | 账号权限、供应商模型版本或评测结果变化 |
-| DEC-035 | 学生端“今日”页桌面视觉基线已选定；使用 `#0036FF` 导航/进度与 `#B5F800` 行动/积极变化，完整规范以 DESIGN v0.2.18 为准 | accepted | 真实前端实现、可用性测试或品牌资产定稿产生反证 |
+| DEC-035 | 学生端“今日”页桌面视觉基线已选定；使用 `#0036FF` 导航/进度与 `#B5F800` 行动/积极变化，完整规范以 DESIGN v0.2.19 为准 | accepted | 真实前端实现、可用性测试或品牌资产定稿产生反证 |
 | DEC-036 | 新用户今日页先完成第一次检查，不显示虚构的足迹、进展或下次检查；首次任务生成后切换常规今日页 | accepted | onboarding 实测或产品范围变化 |
 | DEC-037 | 目标教材 ISBN 为 `978-7-5720-3630-9`；配套练习 `978-7-5720-3519-7` 不纳入 MVP | accepted | 版权页或出版社正式材料产生冲突 |
 | DEC-038 | 购买教材/试题及完整转换文本保持本地私有并排除 Git；仓库只保存元数据、处理器和项目原创/合成内容 | accepted | 取得可归档的明确再分发许可且完成权利复核 |
@@ -2116,7 +2116,7 @@ review_date:
 
 - 冻结并实现真实图片字节上传最小闭环：共享 DTO、UUIDv7 幂等意图、HMAC 短期授权、同源 PUT、实际 MIME/大小/hash 校验、受控本地目录原子落盘与 `source_assets` 状态更新。
 - `/materials/new` 成功只声明上传完成、识别尚未开始；不展示 token、对象键、内部 ID 或文件名，不自动启动 OCR、创建 Case 或生成学习结论。当前 StorageAdapter 仅为本地 Demo，不是生产 S3。
-- 96 fast、46 integration、62 apps/web、migration drift、Mock/API/上传视觉、上传与 D1 浏览器 Fixture、全仓 TypeScript 与 Next build 已在本地检查点通过；同步 PRD v0.1.21、TDD v0.3.22、DESIGN v0.2.19 与 PUSH-014 `local_checkpoint`。尚未推送；当前按用户要求暂停。
+- 96 fast、46 integration（Today 时间 fixture 确定性修复后连续两轮通过）、62 apps/web、migration drift、Mock/API/上传视觉、上传与 D1 浏览器 Fixture、全仓 TypeScript 与 Next build 通过；同步 PRD v0.1.21、TDD v0.3.22、DESIGN v0.2.19 与 PUSH-014，并完成远端 SHA 核对。
 
 ### v0.1.28 — 2026-08-15
 
