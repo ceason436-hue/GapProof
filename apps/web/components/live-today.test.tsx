@@ -46,14 +46,15 @@ describe("D+1/D+7 read-only cards", () => {
     expect(html).not.toContain("href=");
   });
 
-  it("labels ready D1 as a future integration and D7 as read-only", () => {
+  it("labels ready D1 as actionable and D7 as read-only", () => {
     const d1 = renderToStaticMarkup(createElement(RetestCard, {
       retest: retest("d1_retest", "ready"), timeZone: "Asia/Tokyo",
     }));
     const d7 = renderToStaticMarkup(createElement(RetestCard, {
       retest: retest("d7_retest", "ready"), timeZone: "Asia/Tokyo",
     }));
-    expect(d1).toContain("作答接入下一阶段");
+    expect(d1).toContain("可以检查");
+    expect(d1).toContain("ready D1 可以作答");
     expect(d7).toContain("D+7 检查只读");
     expect(d7).toContain("只读待接入");
     expect(d7).not.toContain("可以检查");

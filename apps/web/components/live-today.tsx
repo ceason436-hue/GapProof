@@ -1,6 +1,7 @@
 import type { D1RetestTaskView, GuidedInterventionTaskView, TodayOverview } from "@gapproof/contracts";
 import { AppShell } from "./app-shell";
 import { D1AttemptPanel } from "./d1-attempt-panel";
+import { GuidedTaskCompletion } from "./guided-task-completion";
 import { ApiClientError } from "@/lib/api-client";
 import { WebConfigurationError } from "@/lib/runtime-config";
 import {
@@ -117,14 +118,14 @@ export function RetestCard({
     : retest.status === "completed"
       ? "这里只展示服务端完成状态，不生成掌握结论。"
       : retest.taskType === "d1_retest"
-        ? "作答接入下一阶段，本轮不提交或评分。"
+        ? "ready D1 可以作答，提交后由服务端记录。"
         : "D+7 attempts 尚未实现，本轮保持只读。";
   const button = retest.status === "scheduled"
     ? "尚未到期"
     : retest.status === "completed"
       ? "已完成（只读）"
       : retest.taskType === "d1_retest"
-        ? "作答接入下一阶段"
+        ? "可以检查"
         : "D+7 检查只读";
 
   return <article className="retest-card" data-task-status={retest.status} data-task-type={retest.taskType}>
@@ -144,11 +145,8 @@ function GuidedCurrent({ task, timeZone }: { task: GuidedInterventionTaskView; t
     <h2>{task.title}</h2>
     <p>{task.rationale}</p>
     <TaskDates scheduledFor={task.scheduledFor} dueAt={task.dueAt} timeZone={timeZone}/>
-    <ol className="guided-steps">{task.steps.map(step => <li key={step.id}>
-      <strong>{step.title}</strong><span>{step.content}</span>
-    </li>)}</ol>
-    <p className="read-only-note">预计约 {task.estimatedMinutes} 分钟；F1b 仅展示，不改变任务状态。</p>
-    <button type="button" disabled aria-disabled="true">引导任务只读</button>
+    <p className="read-only-note">预计约 {task.estimatedMinutes} 分钟；完成后由服务端安排下一次检查。</p>
+    <GuidedTaskCompletion task={task} timeZone={timeZone}/>
   </article>;
 }
 
@@ -227,7 +225,7 @@ export async function LiveToday() {
     }
 
     const actionLabel = model.current.kind === "selected"
-      ? model.current.task.taskType === "guided_intervention" ? "引导任务只读" : "D+1 检查"
+      ? model.current.task.taskType === "guided_intervention" ? "完成引导任务" : "D+1 检查"
       : model.current.kind === "contract_error" ? "当前任务不可用" : "暂无当前任务";
     return <AppShell actionDisabled actionLabel={actionLabel}>
       <section className="today-page">
@@ -237,7 +235,7 @@ export async function LiveToday() {
             <CurrentPanel current={model.current} timeZone={model.timeZone}/>
             <TodayOverviewPanel overview={model.overview}/>
           </div>
-          <aside className="live-panel"><OverviewNextCheck nextCheck={model.overview.nextCheck} timeZone={model.timeZone}/><h2>D+1 / D+7 检查状态</h2><p>ready D1 可在当前任务区作答；D+7 仍只读。默认入口仍为 Mock。</p><div className="retest-list">
+          <aside className="live-panel"><OverviewNextCheck nextCheck={model.overview.nextCheck} timeZone={model.timeZone}/><h2>D+1 / D+7 检查状态</h2><p>ready D1 可在当前任务区作答；D+7 仍只读。默认入口为 API，Mock 仅在显式 <code>?source=mock</code> 时启用。</p><div className="retest-list">
             {model.retests.length
               ? model.retests.map(retest => <RetestCard key={retest.id} retest={retest} timeZone={model.timeZone}/>)
               : <div className="unavailable-row"><strong>暂无延迟检查</strong><span>服务端创建后才会显示。</span></div>}
