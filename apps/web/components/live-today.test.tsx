@@ -100,17 +100,23 @@ describe("Today overview projection", () => {
     expect(html).toContain('data-pending-confirmations="2"');
     expect(html).toContain("完成了一次练习");
     expect(html).toContain('class="overview overview-panel"');
+    expect(html.match(/class="lime-heading"/g)).toHaveLength(2);
+    expect(html.match(/class="card-art"/g)).toHaveLength(2);
     expect(html).not.toContain("本周学习足迹");
     expect(html).not.toContain("eventId");
     expect(html).not.toContain("caseId");
     expect(html).not.toContain("已掌握");
   });
 
-  it("projects activity and the weekly goal into the right-column footprint", () => {
+  it("projects factual activity into the Stitch footprint without an extra goal card", () => {
     const html = renderToStaticMarkup(createElement(TodayFootprint, { overview }));
     expect(html).toContain('class="footprint overview-activity"');
     expect(html).toContain('data-local-date="2026-08-16"');
-    expect(html).toContain("2 / 5 天");
+    expect(html).toContain("今日");
+    expect(html).toContain('data-active-days="2"');
+    expect(html).toContain("近 7 天有 2 天完成任务");
+    expect(html).not.toContain("overview-goal");
+    expect(html).not.toContain("activity-level-");
   });
 
   it("keeps a D7 next check read-only and handles no check", () => {

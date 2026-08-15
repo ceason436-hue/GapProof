@@ -296,6 +296,14 @@ try {
             const heroStyle = getComputedStyle(hero);
             const heroRect = hero.getBoundingClientRect();
             const footprintRect = footprint.getBoundingClientRect();
+            const overviewRect = overviewPanel.getBoundingClientRect();
+            const overviewStyle = getComputedStyle(overviewPanel);
+            const overviewHeading = overviewPanel.querySelector(":scope > h2");
+            const overviewGrid = overviewPanel.querySelector(":scope > .overview-grid");
+            const factCards = [...overviewPanel.querySelectorAll(":scope > .overview-grid > .overview-fact-card")];
+            const todayMarker = footprint.querySelector(".day-grid > .today");
+            const dayGrid = footprint.querySelector(".day-grid");
+            const footprintCopy = footprint.querySelector(":scope > p");
             return {
               gridDisplay: gridStyle.display,
               gridColumns: gridStyle.gridTemplateColumns,
@@ -303,18 +311,38 @@ try {
               heroBackground: heroStyle.backgroundColor,
               alignedColumns: Math.abs(heroRect.top - footprintRect.top) < 1,
               rightFollowsMain: footprintRect.top >= main.getBoundingClientRect().bottom,
+              heroToOverviewGap: overviewRect.top - heroRect.bottom,
+              overviewPadding: overviewStyle.padding,
+              overviewRadius: overviewStyle.borderRadius,
+              overviewHeadingMargin: overviewHeading ? getComputedStyle(overviewHeading).marginBottom : null,
+              overviewGridGap: overviewGrid ? getComputedStyle(overviewGrid).gap : null,
+              factCardHeights: factCards.map(card => card.getBoundingClientRect().height),
+              factHeadingIcons: overviewPanel.querySelectorAll(".lime-heading > svg").length,
+              factCardArt: overviewPanel.querySelectorAll(".overview-fact-card > .card-art").length,
+              hasGoalCard: Boolean(footprint.querySelector(".overview-goal")),
+              todayLabel: todayMarker?.textContent?.trim() ?? "",
+              todayBorder: todayMarker ? getComputedStyle(todayMarker).border : null,
+              todayOutline: todayMarker ? getComputedStyle(todayMarker).outlineStyle : null,
+              dayGridMargin: dayGrid ? getComputedStyle(dayGrid).marginBottom : null,
+              footprintCopyFont: footprintCopy ? `${getComputedStyle(footprintCopy).fontSize}/${getComputedStyle(footprintCopy).lineHeight}` : null,
               mainChildren: [...main.children].map(element => element.className),
               rightChildren: [...right.children].map(element => element.className),
             };
           });
           const desktopStructureValid = width > 900
             ? structure?.gridDisplay === "grid" && structure.gridGap === "40px" && structure.alignedColumns &&
-              structure.gridColumns.trim().split(/\s+/).length === 2
+              structure.gridColumns.trim().split(/\s+/).length === 2 && structure.heroToOverviewGap === 40 &&
+              structure.overviewPadding === "24px" && structure.overviewRadius === "14px" &&
+              structure.overviewHeadingMargin === "16px" && structure.overviewGridGap === "16px" &&
+              structure.factCardHeights.every(height => height === 160)
             : width > 640
               ? structure?.gridDisplay === "grid" && structure.rightFollowsMain && structure.gridColumns.trim().split(/\s+/).length === 1
               : structure?.gridDisplay === "block" && structure.rightFollowsMain;
           if (!structure || !desktopStructureValid ||
               structure.heroBackground !== "rgb(28, 28, 30)" ||
+              structure.factHeadingIcons !== 2 || structure.factCardArt !== 2 || structure.hasGoalCard ||
+              structure.todayLabel !== "今日" || structure.todayBorder !== "2px solid rgb(0, 54, 255)" ||
+              structure.todayOutline !== "none" || structure.dayGridMargin !== "24px" || structure.footprintCopyFont !== "14px/22px" ||
               structure.mainChildren.length !== 2 || !structure.mainChildren[0].includes("hero-card") || !structure.mainChildren[1].includes("overview") ||
               structure.rightChildren.length !== 3 || !structure.rightChildren[0].includes("footprint") ||
               !structure.rightChildren[1].includes("continue") || structure.rightChildren[2] !== "next-check") {

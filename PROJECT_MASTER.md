@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.43"
+version: "0.1.44"
 status: "ACTIVE"
-current_stage: "PUSH-028 已发布：真实 API Today 已汇流到冻结 Mock 视觉骨架，任务提交成功后刷新权威页面状态；不改变 OCR、个性化、学生记录或学习效果边界"
+current_stage: "PUSH-029 已发布：真实 API Today 的学习足迹与今日概览已按 Stitch V1.1 原 HTML/PNG 精确复原；只替换服务端事实，不复制 Mock 学习数据"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -2120,6 +2120,11 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.44 — 2026-08-16
+
+- 按 `today-final.stitch.html/png` 精确复原真实 API Today 两处视觉：移除 Stitch 不存在的右栏目标卡，目标摘要回到页头；足迹恢复 32px 日期块、单层今日描边与可见标签；概览恢复 40px 视觉间距、16px 标题间距、160px 双卡、圆形图标和装饰图。
+- 真实完成天数、周目标、待确认数和最近进展仍只来自服务端，不复制 Mock 数值或效果结论。105 Web、双 TypeScript、Next build、6 状态 × 4 视口真实 API 精确几何/截图门禁及实时页面核验通过；同步 PRD v0.1.36、TDD v0.3.37、DESIGN v0.2.34 与 PUSH-029。
 
 ### v0.1.43 — 2026-08-16
 

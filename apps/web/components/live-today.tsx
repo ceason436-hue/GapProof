@@ -27,10 +27,6 @@ function TaskDates({
   </div>;
 }
 
-function activityLevel(completedTaskCount: number): string {
-  return `activity-level-${Math.min(completedTaskCount, 3)}`;
-}
-
 const progressCopy: Record<TodayOverview["recentProgress"][number]["kind"], string> = {
   recognition_confirmed: "学习材料已确认",
   diagnosis_checked: "完成了一次学习检查",
@@ -41,47 +37,41 @@ const progressCopy: Record<TodayOverview["recentProgress"][number]["kind"], stri
 };
 
 export function TodayFootprint({ overview }: { overview: TodayOverview }) {
+  const activeDays = overview.activityDays.filter(day => day.completedTaskCount > 0).length;
   return <section className="footprint overview-activity" aria-labelledby="activity-title">
     <h2 id="activity-title">本周学习足迹</h2>
     <div className="day-grid server-day-grid" role="list" aria-label="本周学习足迹">
       {overview.activityDays.map((day, index) => <span
-        className={`${activityLevel(day.completedTaskCount)}${index === overview.activityDays.length - 1 ? " today" : ""}`}
+        className={`${day.completedTaskCount > 0 ? "done" : ""}${index === overview.activityDays.length - 1 ? " today" : ""}`}
         data-local-date={day.localDate}
         key={day.localDate}
         role="listitem"
         aria-label={`${day.localDate}，完成任务 ${day.completedTaskCount} 项`}
         title={`${day.localDate}：完成任务 ${day.completedTaskCount} 项`}
-      />)}
+      >{index === overview.activityDays.length - 1 ? <i>今日</i> : null}</span>)}
     </div>
-    <p>最右侧是今天；每天完成的任务越多，颜色越深。</p>
-    <OverviewGoal overview={overview}/>
-  </section>;
-}
-
-function OverviewGoal({ overview }: { overview: TodayOverview }) {
-  return <section className="overview-goal" aria-labelledby="goal-title">
-    <h3 id="goal-title">本周目标</h3>
-    {overview.weeklyGoal
-      ? <p data-weekly-goal>{overview.weeklyGoal.completedDays} / {overview.weeklyGoal.targetDays} 天</p>
-      : <p data-weekly-goal="unset">目标待设置</p>}
-    <span>{overview.weeklyGoal ? "继续保持本周节奏" : "完成第一次检查后即可设置目标"}</span>
+    <p data-active-days={activeDays}>近 7 天有 {activeDays} 天完成任务</p>
   </section>;
 }
 
 function OverviewPending({ overview }: { overview: TodayOverview }) {
   const count = overview.pendingConfirmationCount;
   return <article className="lime-card overview-fact-card" data-pending-confirmations={count}>
-    <div className="lime-heading"><h3>等你确认</h3></div>
-    <p>{count > 0 ? `有 ${count} 项内容等你确认。` : "当前没有待确认事项。"}</p>
+    <div className="lime-content"><div className="lime-heading"><Icon name="alert"/><h3>等你确认</h3></div>
+      <p>{count > 0 ? `有 ${count} 项内容等你确认。` : "当前没有待确认事项。"}</p>
+    </div>
+    <Icon name="check" className="card-art"/>
   </article>;
 }
 
 function OverviewProgress({ overview }: { overview: TodayOverview }) {
   return <article className="lime-card overview-fact-card" data-recent-progress-count={overview.recentProgress.length}>
-    <div className="lime-heading"><h3>最近进展</h3></div>
-    {overview.recentProgress.length
-      ? <ul className="recent-progress-list">{overview.recentProgress.slice(0, 2).map(progress => <li key={progress.eventId}>{progressCopy[progress.kind]}</li>)}</ul>
-      : <p>暂无新的学习进展。</p>}
+    <div className="lime-content"><div className="lime-heading"><Icon name="progress"/><h3>最近进展</h3></div>
+      {overview.recentProgress.length
+        ? <ul className="recent-progress-list">{overview.recentProgress.slice(0, 2).map(progress => <li key={progress.eventId}>{progressCopy[progress.kind]}</li>)}</ul>
+        : <p>暂无新的学习进展。</p>}
+    </div>
+    <Icon name="progress" className="card-art"/>
   </article>;
 }
 
@@ -231,7 +221,9 @@ function TodayDateSummary({ overview }: { overview: TodayOverview }) {
   const [, month = "", day = ""] = today.localDate.split("-");
   return <div className="date-summary" data-today-local-date={today.localDate}>
     <strong>{Number(month)} 月 {Number(day)} 日</strong>
-    <span>今日完成 {today.completedTaskCount} 项</span>
+    <span>{overview.weeklyGoal
+      ? `本周目标 ${overview.weeklyGoal.completedDays} / ${overview.weeklyGoal.targetDays} 天`
+      : "本周目标待设置"}</span>
   </div>;
 }
 
