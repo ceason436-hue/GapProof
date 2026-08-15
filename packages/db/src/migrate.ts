@@ -3,7 +3,7 @@ import { runMigrations } from "./run-migrations.ts";
 
 const databaseUrl =
   process.env.DATABASE_URL ??
-  "postgres://gapproof:gapproof_local@localhost:55432/gapproof";
+  "postgres://gapproof:gapproof_local@127.0.0.1:55432/gapproof";
 
 const database = createDatabase(databaseUrl);
 

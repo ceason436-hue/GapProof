@@ -9,8 +9,14 @@ try {
   // a valid origin, keep the browser on this origin and install no proxy route.
 }
 
+const allowedDevOrigins = process.env.GAPPROOF_ALLOWED_DEV_ORIGINS
+  ?.split(",")
+  .map(origin => origin.trim())
+  .filter(Boolean);
+
 const nextConfig: NextConfig = {
   transpilePackages: ["@gapproof/contracts"],
+  ...(allowedDevOrigins?.length ? { allowedDevOrigins } : {}),
   async rewrites() {
     return apiOrigin
       ? [{ source: "/api/:path*", destination: `${apiOrigin}/:path*` }]

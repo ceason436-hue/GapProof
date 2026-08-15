@@ -317,7 +317,11 @@ export async function findLatestCaseEvidenceEventByType(
         eq(learningEvidenceEvents.eventType, eventType),
       ),
     )
-    .orderBy(desc(learningEvidenceEvents.occurredAt))
+    .orderBy(
+      desc(learningEvidenceEvents.occurredAt),
+      desc(learningEvidenceEvents.createdAt),
+      desc(learningEvidenceEvents.id),
+    )
     .limit(1);
 
   return row;

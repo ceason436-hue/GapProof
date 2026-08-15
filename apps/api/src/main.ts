@@ -6,7 +6,7 @@ import { LocalDirectorySourceAssetStorage } from "./source-asset-storage.ts";
 
 const databaseUrl =
   process.env.DATABASE_URL ??
-  "postgres://gapproof:gapproof_local@localhost:55432/gapproof";
+  "postgres://gapproof:gapproof_local@127.0.0.1:55432/gapproof";
 const port = Number(process.env.API_PORT ?? "4000");
 const uploadDirectory = process.env.GAPPROOF_UPLOAD_DIR;
 const uploadSigningSecret = process.env.GAPPROOF_UPLOAD_SIGNING_SECRET;

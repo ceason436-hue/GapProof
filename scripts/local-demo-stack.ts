@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import { spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import net from "node:net";
+import { networkInterfaces } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
@@ -24,6 +25,18 @@ export interface LocalDemoConfig {
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
+export function discoverLocalDevOrigins(): readonly string[] {
+  const origins = new Set(["localhost", "127.0.0.1"]);
+  for (const addresses of Object.values(networkInterfaces())) {
+    for (const address of addresses ?? []) {
+      if (address.family === "IPv4" && !address.internal && !address.address.startsWith("169.254.")) {
+        origins.add(address.address);
+      }
+    }
+  }
+  return [...origins];
+}
+
 export function parsePort(value: string | undefined, fallback: number, name: string): number {
   const candidate = value === undefined || value.trim() === "" ? fallback : Number(value);
   if (!Number.isInteger(candidate) || candidate < 1 || candidate > 65_535) {
@@ -39,7 +52,7 @@ export function createLocalDemoConfig(
   const apiPort = parsePort(env.API_PORT, 4000, "API_PORT");
   const webPort = parsePort(env.WEB_PORT, 3000, "WEB_PORT");
   if (apiPort === webPort) throw new Error("API_PORT and WEB_PORT must be different.");
-  const databaseUrl = env.DATABASE_URL?.trim() || "postgres://gapproof:gapproof_local@localhost:55432/gapproof";
+  const databaseUrl = env.DATABASE_URL?.trim() || "postgres://gapproof:gapproof_local@127.0.0.1:55432/gapproof";
   const apiOrigin = `http://127.0.0.1:${apiPort}`;
   const uploadDirectory = path.resolve(
     env.GAPPROOF_UPLOAD_DIR?.trim() || path.join(root, ".local", "gapproof", "uploads"),
@@ -66,6 +79,7 @@ export function buildDemoEnvironment(
     WEB_PORT: String(config.webPort),
     GAPPROOF_API_ORIGIN: config.apiOrigin,
     GAPPROOF_DEMO_STUDENT_ID: config.studentId,
+    GAPPROOF_ALLOWED_DEV_ORIGINS: discoverLocalDevOrigins().join(","),
     GAPPROOF_UPLOAD_DIR: config.uploadDirectory,
     GAPPROOF_UPLOAD_SIGNING_SECRET: signingSecret,
   } as unknown as NodeJS.ProcessEnv;
@@ -198,6 +212,8 @@ async function main() {
     await waitForHttp(`${config.apiOrigin}/v1/students/${config.studentId}/today`, "API", (body) => body.includes('"overview"'));
     await waitForHttp(`http://127.0.0.1:${config.webPort}/student/today`, "Web", (body) => body.includes("真实 API 模式"));
     process.stdout.write(`Local Demo stack ready: http://127.0.0.1:${config.webPort}/student/today\n`);
+    const lanHost = discoverLocalDevOrigins().find((origin) => origin !== "localhost" && origin !== "127.0.0.1");
+    if (lanHost) process.stdout.write(`LAN preview: http://${lanHost}:${config.webPort}/student/today\n`);
     process.stdout.write(`Demo student: ${config.studentId}\n`);
     await new Promise<void>((resolve) => {
       for (const child of children) child.once("exit", () => resolve());

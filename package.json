@@ -12,7 +12,7 @@
     "dev:web": "bun run --cwd apps/web dev",
     "build:web": "bun run --cwd apps/web build",
     "test": "vitest run",
-    "test:db": "TEST_DATABASE_URL=postgres://gapproof:gapproof_local@localhost:55432/gapproof vitest run --maxWorkers=1 --no-file-parallelism packages/db/src/schema.integration.test.ts apps/api/src/app.integration.test.ts",
+    "test:db": "TEST_DATABASE_URL=postgres://gapproof:gapproof_local@127.0.0.1:55432/gapproof vitest run --maxWorkers=1 --no-file-parallelism packages/db/src/schema.integration.test.ts apps/api/src/app.integration.test.ts",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate --config packages/db/drizzle.config.ts",

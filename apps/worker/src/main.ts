@@ -10,7 +10,7 @@ import { requireUploadDirectory } from "./worker-config.ts";
 
 const databaseUrl =
   process.env.DATABASE_URL ??
-  "postgres://gapproof:gapproof_local@localhost:55432/gapproof";
+  "postgres://gapproof:gapproof_local@127.0.0.1:55432/gapproof";
 
 const uploadDirectory = requireUploadDirectory(process.env.GAPPROOF_UPLOAD_DIR);
 const database = createDatabase(databaseUrl);

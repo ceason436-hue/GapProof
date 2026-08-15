@@ -2689,7 +2689,6 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     await replanWorker.start();
     const active = await waitForState(evaluationApi, prepared.caseId, "intervention_active");
     expect(active.stateVersion).toBe(9);
-    await replanWorker.stop();
 
     const afterWorker = await database.db
       .select()
@@ -2749,7 +2748,6 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     const secondFailedBody = secondFailed.json<ApiResponse<D1RetestAttemptView>>();
     expect(secondFailedBody.data.state).toBe("replan_required");
     expect(secondFailedBody.jobId).toBeTruthy();
-    await replanWorker.start();
     await waitForState(evaluationApi, prepared.caseId, "intervention_active");
     await replanWorker.stop();
     const secondReplanEvents = await database.db
