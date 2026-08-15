@@ -44,8 +44,8 @@ function DemoBanner() {
 }
 
 export function DemoRecognitionReview({ mode = "review" }: { mode?: DemoReviewMode }) {
-  const [prompt, setPrompt] = useState(DEMO_REVIEW_ITEM.prompt);
-  const [studentAnswer, setStudentAnswer] = useState(DEMO_REVIEW_ITEM.studentAnswer);
+  const [prompt, setPrompt] = useState<string>(DEMO_REVIEW_ITEM.prompt);
+  const [studentAnswer, setStudentAnswer] = useState<string>(DEMO_REVIEW_ITEM.studentAnswer);
   const [confirmed, setConfirmed] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
