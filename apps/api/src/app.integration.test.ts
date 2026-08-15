@@ -1068,6 +1068,27 @@ describeWithDatabase("Fastify API and run-next worker", () => {
 
   it("returns a factual Today overview with local activity, progress, and next check", async () => {
     const prepared = await createD1ScheduledCase(api, "today-overview-v1");
+    // Confirmation/probe routes use wall-clock timestamps while completion uses the injected clock.
+    // Normalize this fixture explicitly so the assertion exercises the repository's
+    // occurredAt DESC, eventId DESC ordering rather than the host clock.
+    const progressEvents = await database.db
+      .select({ id: learningEvidenceEvents.id, eventType: learningEvidenceEvents.eventType })
+      .from(learningEvidenceEvents)
+      .where(eq(learningEvidenceEvents.caseId, prepared.caseId));
+    const occurredAtByType = {
+      recognition_confirmed: new Date("2026-08-14T23:58:00.000Z"),
+      probe_evaluated: new Date("2026-08-14T23:59:00.000Z"),
+      intervention_completed: new Date("2026-08-15T00:00:00.000Z"),
+    } as const;
+    for (const event of progressEvents) {
+      const occurredAt = occurredAtByType[event.eventType as keyof typeof occurredAtByType];
+      if (occurredAt !== undefined) {
+        await database.db
+          .update(learningEvidenceEvents)
+          .set({ occurredAt })
+          .where(eq(learningEvidenceEvents.id, event.id));
+      }
+    }
     const today = await api.inject({
       method: "GET",
       url: `/v1/students/${prepared.studentId}/today`,
