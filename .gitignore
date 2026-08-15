@@ -12,6 +12,7 @@ __pycache__/
 # Local QA and generated intermediates
 tmp/
 uploads/
+.local/gapproof/
 
 # Purchased/private source materials and full-text derivatives.
 # Keep only project-owned metadata/catalog files outside these paths in Git.

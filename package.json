@@ -19,7 +19,9 @@
     "db:migrate": "bun packages/db/src/migrate.ts",
     "schemas:generate": "bun packages/contracts/scripts/export-tool-schemas.ts",
     "dev:api": "bun apps/api/src/main.ts",
-    "dev:worker": "bun apps/worker/src/main.ts"
+    "dev:worker": "bun apps/worker/src/main.ts",
+    "demo:seed": "bun scripts/local-demo-seed.ts",
+    "demo:stack": "bun scripts/local-demo-stack.ts"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
