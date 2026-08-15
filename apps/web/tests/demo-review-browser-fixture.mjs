@@ -62,7 +62,7 @@ try {
     assert(await page.locator('[data-demo-confirm="true"]').count() === 0, "Empty state exposed confirmation action.");
     await page.goto(`${webOrigin}/materials/demo/review?state=error`, { waitUntil: "networkidle" });
     assert(await page.locator('[data-review-state="error"]').count() === 1, "Error demo state missing.");
-    assert(await page.getByRole("alert").count() === 1, "Error state is not announced.");
+    assert(await page.locator('[data-review-state="error"] [role="alert"]').count() === 1, "Error state is not announced.");
 
     await mkdir(screenshots, { recursive: true });
     for (const [width, height] of [[1440, 900], [1366, 768]]) {
