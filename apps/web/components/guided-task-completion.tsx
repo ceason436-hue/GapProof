@@ -17,13 +17,28 @@ type CompletionState =
   | { kind: "submitting" }
   | { kind: "conflict"; requestId?: string }
   | { kind: "success"; scheduledFor: string }
+  | { kind: "case_error"; code: string; requestId?: string; retryable?: boolean }
   | { kind: "error"; code: string; requestId?: string; retryable?: boolean };
 
-function toErrorState(error: unknown): Extract<CompletionState, { kind: "error" }> {
+export function toCaseErrorState(error: unknown): Extract<CompletionState, { kind: "case_error" }> {
+  if (error instanceof ApiClientError) {
+    return { kind: "case_error", code: error.response.error.code, requestId: error.response.requestId, retryable: error.response.error.retryable };
+  }
+  return { kind: "case_error", code: "CASE_SYNC_FAILED" };
+}
+
+export function toSubmitErrorState(error: unknown): Extract<CompletionState, { kind: "error" }> {
   if (error instanceof ApiClientError) {
     return { kind: "error", code: error.response.error.code, requestId: error.response.requestId, retryable: error.response.error.retryable };
   }
   return { kind: "error", code: "NETWORK_UNKNOWN" };
+}
+
+function caseErrorMessage(state: Extract<CompletionState, { kind: "case_error" }>) {
+  const detail = state.code === "RESOURCE_NOT_FOUND"
+    ? "对应任务或版本暂不可用；你的选择仍保留，请重新同步任务或返回今日。"
+    : "未能同步任务版本；你的选择仍保留，请重新同步任务后再继续。";
+  return <p className="guided-task-feedback error" role="alert">{detail}{state.requestId ? ` 请求编号：${state.requestId}` : ""}</p>;
 }
 
 function errorMessage(state: Extract<CompletionState, { kind: "error" }>) {
@@ -54,7 +69,7 @@ export function GuidedTaskCompletion({ task, timeZone }: { task: GuidedIntervent
       setExpectedVersion(response.data.stateVersion);
       setState({ kind: "idle" });
     } catch (error) {
-      setState(toErrorState(error));
+      setState(toCaseErrorState(error));
     }
   };
 
@@ -80,7 +95,7 @@ export function GuidedTaskCompletion({ task, timeZone }: { task: GuidedIntervent
         authoritativeVersion = latest.data.stateVersion;
         setExpectedVersion(authoritativeVersion);
       } catch (error) {
-        setState(toErrorState(error));
+        setState(toCaseErrorState(error));
         return;
       }
     }
@@ -100,11 +115,11 @@ export function GuidedTaskCompletion({ task, timeZone }: { task: GuidedIntervent
           setExpectedVersion(latest.data.stateVersion);
           setState({ kind: "conflict", requestId: error.response.requestId });
         } catch (refreshError) {
-          setState(toErrorState(refreshError));
+          setState(toCaseErrorState(refreshError));
         }
         return;
       }
-      setState(toErrorState(error));
+      setState(toSubmitErrorState(error));
     }
   };
 
@@ -132,8 +147,11 @@ export function GuidedTaskCompletion({ task, timeZone }: { task: GuidedIntervent
       </div>
     </fieldset>
     {state.kind === "conflict" ? <p className="guided-task-feedback error" role="alert">任务版本已更新，已同步最新版本。请再次确认全部步骤后提交。{state.requestId ? ` 请求编号：${state.requestId}` : ""}</p> : null}
+    {state.kind === "case_error" ? caseErrorMessage(state) : null}
     {state.kind === "error" ? errorMessage(state) : null}
-    {state.kind === "error" && (state.code === "NETWORK_UNKNOWN" || state.code === "INVALID_TASK_STATE")
+    {state.kind === "case_error"
+      ? <button className="guided-task-submit" type="button" onClick={() => { void refreshCase(); }}>重新同步任务</button>
+      : state.kind === "error" && (state.code === "NETWORK_UNKNOWN" || state.code === "INVALID_TASK_STATE")
       ? <a className="guided-task-submit" href="/student/today">{state.code === "NETWORK_UNKNOWN" ? "请刷新今日" : "返回今日刷新"}</a>
       : <button className="guided-task-submit" type="button" onClick={() => { void submit(); }} disabled={disabled}>
         {state.kind === "loading_case" ? "正在同步任务" : state.kind === "submitting" ? "正在提交" : state.kind === "conflict" ? "确认后重新提交" : state.kind === "error" && state.retryable ? "再次确认提交" : "确认完成任务"}

@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { GuidedTaskCompletion } from "./guided-task-completion";
+import { GuidedTaskCompletion, toCaseErrorState, toSubmitErrorState } from "./guided-task-completion";
 
 const task = {
   id: "0198b111-1111-7000-8000-000000000012",
@@ -32,5 +32,10 @@ describe("GuidedTaskCompletion", () => {
     expect(html).not.toContain("引导任务只读");
     expect(html).not.toContain("已掌握");
     expect(html).not.toContain("/api/v1/tasks/");
+  });
+
+  it("keeps Case sync failures separate from an unknown submitted result", () => {
+    expect(toCaseErrorState(new TypeError("case read failed"))).toMatchObject({ kind: "case_error", code: "CASE_SYNC_FAILED" });
+    expect(toSubmitErrorState(new TypeError("submit result unknown"))).toMatchObject({ kind: "error", code: "NETWORK_UNKNOWN" });
   });
 });

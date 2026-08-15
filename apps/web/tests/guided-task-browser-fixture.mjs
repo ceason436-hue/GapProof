@@ -54,6 +54,12 @@ const readJsonBody = request => new Promise((resolveBody, rejectBody) => {
 let scenario = "success";
 let caseReads = 0;
 const posts = [];
+const shouldDropCaseRead = () => {
+  if (scenario === "initial-get-failure" && caseReads <= 3) return true;
+  if (scenario === "pre-submit-get-failure" && caseReads >= 2 && caseReads <= 4) return true;
+  if (scenario === "conflict-get-failure" && caseReads >= 3 && caseReads <= 5) return true;
+  return false;
+};
 const fixtureServer = createServer(async (request, response) => {
   if (request.method === "GET" && request.url === `/v1/students/${studentId}/today`) {
     response.writeHead(200, { "Content-Type": "application/json" });
@@ -62,7 +68,13 @@ const fixtureServer = createServer(async (request, response) => {
   }
   if (request.method === "GET" && request.url === `/v1/cases/${caseId}`) {
     caseReads += 1;
-    const stateVersion = scenario === "conflict" && posts.length > 0 ? 5 : 4;
+    if (scenario === "case-not-found" && caseReads === 1) {
+      response.writeHead(404, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ error: { code: "RESOURCE_NOT_FOUND", message: "Synthetic case not found.", retryable: false }, requestId: "guided-case-not-found", traceId: "guided-case-not-found" }));
+      return;
+    }
+    if (shouldDropCaseRead()) { request.socket.destroy(); return; }
+    const stateVersion = (scenario === "conflict" || scenario === "conflict-get-failure") && posts.length > 0 ? 5 : 4;
     response.writeHead(200, { "Content-Type": "application/json" });
     response.end(JSON.stringify(envelope({ id: caseId, studentId, state: "intervention_active", stateVersion, title: "Synthetic guided fixture", simulation: true, synthetic: true, updatedAt: "2026-08-16T00:00:00.000Z" })));
     return;
@@ -71,7 +83,7 @@ const fixtureServer = createServer(async (request, response) => {
     const body = await readJsonBody(request);
     posts.push({ body, idempotencyKey: request.headers["idempotency-key"] });
     if (scenario === "network-unknown") { request.socket.destroy(); return; }
-    if (scenario === "conflict" && posts.length === 1) {
+    if ((scenario === "conflict" || scenario === "conflict-get-failure") && posts.length === 1) {
       response.writeHead(409, { "Content-Type": "application/json" });
       response.end(JSON.stringify({ error: { code: "VERSION_CONFLICT", message: "Synthetic version conflict.", retryable: false }, requestId: "guided-conflict-request", traceId: "guided-conflict-trace" }));
       return;
@@ -107,13 +119,63 @@ try {
   }
   const browser = await chromium.launch({ channel: "msedge", headless: true });
   try {
-    for (const currentScenario of ["success", "conflict", "network-unknown"]) {
+    for (const currentScenario of ["success", "conflict", "network-unknown", "initial-get-failure", "pre-submit-get-failure", "conflict-get-failure", "case-not-found"]) {
       scenario = currentScenario; caseReads = 0; posts.length = 0;
       const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+      await page.addInitScript(() => {
+        window.__guidedUuidCalls = 0;
+        const originalGetRandomValues = crypto.getRandomValues.bind(crypto);
+        Object.defineProperty(crypto, "getRandomValues", {
+          configurable: true,
+          value: bytes => { window.__guidedUuidCalls += 1; return originalGetRandomValues(bytes); },
+        });
+      });
       await page.goto(`${webOrigin}/student/today?source=api&fixture=${currentScenario}`, { waitUntil: "networkidle" });
-      await page.locator('[data-guided-task-state="idle"]').waitFor({ timeout: 10_000 });
-      for (const stepId of stepIds) await page.locator(`input[type="checkbox"][value="${stepId}"]`).check();
-      await page.getByRole("button", { name: "确认完成任务" }).click();
+      if (currentScenario === "initial-get-failure" || currentScenario === "case-not-found") {
+        await page.locator('[data-guided-task-state="case_error"]').waitFor({ timeout: 10_000 });
+        assert(posts.length === 0, `${currentScenario}: Case GET failure caused a POST.`);
+        assert(await page.evaluate(() => window.__guidedUuidCalls) === 0, `${currentScenario}: Case GET failure generated an intent.`);
+        assert((await page.locator("body").innerText()).includes("未能同步任务版本") || currentScenario === "case-not-found", `${currentScenario}: neutral sync error was missing.`);
+        assert(!(await page.locator("body").innerText()).includes("提交结果未确认"), `${currentScenario}: GET failure was mislabeled as submission unknown.`);
+        assert(await page.getByRole("button", { name: "重新同步任务" }).isEnabled(), `${currentScenario}: resync was not actionable.`);
+        await page.getByRole("button", { name: "重新同步任务" }).click();
+        await page.locator('[data-guided-task-state="idle"]').waitFor();
+        for (const stepId of stepIds) await page.locator(`input[type="checkbox"][value="${stepId}"]`).check();
+        await page.getByRole("button", { name: "确认完成任务" }).click();
+        await page.locator('[data-guided-result="success"]').waitFor();
+        assert(posts.length === 1, `${currentScenario}: resync did not recover to one POST.`);
+      } else if (currentScenario === "pre-submit-get-failure") {
+        await page.locator('[data-guided-task-state="idle"]').waitFor({ timeout: 10_000 });
+        for (const stepId of stepIds) await page.locator(`input[type="checkbox"][value="${stepId}"]`).check();
+        await page.getByRole("button", { name: "确认完成任务" }).click();
+        await page.locator('[data-guided-task-state="case_error"]').waitFor();
+        assert(posts.length === 0, "pre-submit-get-failure: Case GET failure caused a POST.");
+        assert(await page.evaluate(() => window.__guidedUuidCalls) === 0, "pre-submit-get-failure: Case GET failure generated an intent.");
+        assert(!(await page.locator("body").innerText()).includes("提交结果未确认"), "pre-submit-get-failure: GET failure was mislabeled as submission unknown.");
+        await page.getByRole("button", { name: "重新同步任务" }).click();
+        await page.locator('[data-guided-task-state="idle"]').waitFor();
+        await page.getByRole("button", { name: "确认完成任务" }).click();
+        await page.locator('[data-guided-result="success"]').waitFor();
+        assert(posts.length === 1, "pre-submit-get-failure: resync did not recover to one POST.");
+      } else if (currentScenario === "conflict-get-failure") {
+        await page.locator('[data-guided-task-state="idle"]').waitFor({ timeout: 10_000 });
+        for (const stepId of stepIds) await page.locator(`input[type="checkbox"][value="${stepId}"]`).check();
+        await page.getByRole("button", { name: "确认完成任务" }).click();
+        await page.locator('[data-guided-task-state="case_error"]').waitFor();
+        assert(posts.length === 1, "conflict-get-failure: conflict refresh GET caused an automatic second POST.");
+        assert(!(await page.locator("body").innerText()).includes("提交结果未确认"), "conflict-get-failure: GET failure was mislabeled as submission unknown.");
+        await page.getByRole("button", { name: "重新同步任务" }).click();
+        await page.locator('[data-guided-task-state="idle"]').waitFor();
+        assert(posts.length === 1, "conflict-get-failure: resync automatically submitted.");
+        await page.getByRole("button", { name: "确认完成任务" }).click();
+        await page.locator('[data-guided-result="success"]').waitFor();
+        assert(posts.length === 2, "conflict-get-failure: explicit retry did not submit once.");
+        assert(posts[1].idempotencyKey !== posts[0].idempotencyKey, "conflict-get-failure: new confirmation reused the old key.");
+      } else {
+        await page.locator('[data-guided-task-state="idle"]').waitFor({ timeout: 10_000 });
+        for (const stepId of stepIds) await page.locator(`input[type="checkbox"][value="${stepId}"]`).check();
+        await page.getByRole("button", { name: "确认完成任务" }).click();
+      }
       if (currentScenario === "success") {
         await page.locator('[data-guided-result="success"]').waitFor();
         assert(posts.length === 1, `success: expected one POST, observed ${posts.length}.`);
@@ -133,13 +195,19 @@ try {
         assert(posts.length === 2, "conflict: explicit reconfirmation did not create one second POST.");
         assert(posts[1].idempotencyKey !== posts[0].idempotencyKey, "conflict: explicit new intent reused the old key.");
         assert(posts[1].body.expectedVersion === 5, "conflict: refreshed Case version was not used.");
-      } else {
+      } else if (currentScenario === "network-unknown") {
         await page.locator('[data-guided-task-state="error"]').waitFor();
         await page.waitForTimeout(1_000);
         assert(posts.length === 2, `network-unknown: expected exactly two POSTs, observed ${posts.length}.`);
         assert(posts[1].idempotencyKey === posts[0].idempotencyKey, "network-unknown: retry changed the key.");
         assert(JSON.stringify(posts[1].body) === JSON.stringify(posts[0].body), "network-unknown: retry changed the body.");
         assert(await page.getByRole("link", { name: "请刷新今日" }).count() === 1, "network-unknown: submit was not locked behind a refresh link.");
+        assert(await page.locator('input[type="checkbox"]').evaluateAll(inputs => inputs.every(input => input.disabled)), "network-unknown: selections were not locked.");
+        assert(await page.locator('button.guided-task-submit').count() === 0, "network-unknown: a submit button remained available.");
+        const uuidCallsAfterRetry = await page.evaluate(() => window.__guidedUuidCalls);
+        await page.waitForTimeout(1_000);
+        assert(posts.length === 2, "network-unknown: a third POST was sent after the result stayed unknown.");
+        assert(await page.evaluate(() => window.__guidedUuidCalls) === uuidCallsAfterRetry, "network-unknown: a new UUID was generated after the retry.");
       }
       await page.close();
     }
