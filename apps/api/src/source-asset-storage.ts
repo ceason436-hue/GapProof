@@ -13,6 +13,7 @@ export interface SourceAssetStoragePutInput {
 export interface SourceAssetStorage {
   put(input: SourceAssetStoragePutInput): Promise<{ readonly created: boolean }>;
   remove(input: Pick<SourceAssetStoragePutInput, "assetId" | "objectKey">): Promise<void>;
+  read(input: Pick<SourceAssetStoragePutInput, "assetId" | "objectKey">): Promise<Buffer>;
 }
 
 function assertSafeAssetPath(assetId: string, objectKey: string): void {
@@ -66,6 +67,10 @@ export class LocalDirectorySourceAssetStorage implements SourceAssetStorage {
 
   async remove(input: Pick<SourceAssetStoragePutInput, "assetId" | "objectKey">): Promise<void> {
     await rm(this.pathFor(input.assetId, input.objectKey), { force: true });
+  }
+
+  async read(input: Pick<SourceAssetStoragePutInput, "assetId" | "objectKey">): Promise<Buffer> {
+    return readFile(this.pathFor(input.assetId, input.objectKey));
   }
 
   async exists(input: Pick<SourceAssetStoragePutInput, "assetId" | "objectKey">): Promise<boolean> {

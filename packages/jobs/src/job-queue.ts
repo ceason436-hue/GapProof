@@ -2,6 +2,7 @@ import type {
   ReplanJobData,
   RetestDueJobData,
   RunNextJobData,
+  SourceAssetQualityCheckJobData,
 } from "@gapproof/contracts";
 import {
   apiIdempotencyRecords,
@@ -12,6 +13,9 @@ import {
   sql,
   type Database,
   ResourceNotFoundError,
+  SourceAssetIdempotencyKeyReusedError,
+  SourceAssetNotUploadedError,
+  sourceAssets,
   VersionConflictError,
 } from "@gapproof/db";
 import { fromDrizzle, type Job, PgBoss } from "pg-boss";
@@ -20,8 +24,13 @@ import { v7 as uuidv7 } from "uuid";
 export const RUN_NEXT_QUEUE = "case-run-next";
 export const RETEST_DUE_QUEUE = "retest.due";
 export const REPLAN_QUEUE = "case.replan";
+export const SOURCE_ASSET_QUALITY_CHECK_QUEUE = "source_asset.quality_check";
 
 export interface EnqueueRunNextInput extends RunNextJobData {
+  readonly idempotencyKey: string;
+}
+
+export interface EnqueueSourceAssetQualityCheckInput extends SourceAssetQualityCheckJobData {
   readonly idempotencyKey: string;
 }
 
@@ -44,6 +53,7 @@ export class JobQueue {
     await this.boss.createQueue(RUN_NEXT_QUEUE);
     await this.boss.createQueue(RETEST_DUE_QUEUE);
     await this.boss.createQueue(REPLAN_QUEUE);
+    await this.boss.createQueue(SOURCE_ASSET_QUALITY_CHECK_QUEUE);
   }
 
   async stop(): Promise<void> {
@@ -105,6 +115,23 @@ export class JobQueue {
 
   async stopReplanWorker(workerId: string): Promise<void> {
     await this.boss.offWork(REPLAN_QUEUE, { id: workerId, wait: true });
+  }
+
+  async workSourceAssetQualityCheck(
+    handler: (job: Job<SourceAssetQualityCheckJobData>) => Promise<object>,
+  ): Promise<string> {
+    return this.boss.work<SourceAssetQualityCheckJobData, object>(
+      SOURCE_ASSET_QUALITY_CHECK_QUEUE,
+      { batchSize: 1, pollingIntervalSeconds: 1 },
+      async ([job]) => {
+        if (job === undefined) throw new Error("pg-boss delivered an empty source asset batch.");
+        return handler(job);
+      },
+    );
+  }
+
+  async stopSourceAssetQualityCheckWorker(workerId: string): Promise<void> {
+    await this.boss.offWork(SOURCE_ASSET_QUALITY_CHECK_QUEUE, { id: workerId, wait: true });
   }
 }
 
@@ -300,5 +327,52 @@ export async function enqueueRunNextIdempotent(
       throw error;
     }
     return { jobId: record.jobId, replayed: true } as const;
+  }
+}
+
+export async function enqueueSourceAssetQualityCheckIdempotent(
+  database: Database,
+  queue: JobQueue,
+  input: EnqueueSourceAssetQualityCheckInput,
+) {
+  const jobId = input.assetId;
+  try {
+    return await database.transaction(async (transaction) => {
+      const [existingKey] = await transaction
+        .select({ resourceId: apiIdempotencyRecords.resourceId, jobId: apiIdempotencyRecords.jobId })
+        .from(apiIdempotencyRecords)
+        .where(and(eq(apiIdempotencyRecords.scope, "source_asset_prepare"), eq(apiIdempotencyRecords.idempotencyKey, input.idempotencyKey)))
+        .limit(1);
+      if (existingKey !== undefined && existingKey.resourceId !== input.assetId) throw new SourceAssetIdempotencyKeyReusedError();
+
+      const [asset] = await transaction.select().from(sourceAssets).where(eq(sourceAssets.id, input.assetId)).for("update").limit(1);
+      if (asset === undefined) throw new ResourceNotFoundError("Source asset", input.assetId);
+      if (asset.deletedAt !== null) throw new ResourceNotFoundError("Source asset", input.assetId);
+      if (existingKey !== undefined) return { asset, jobId: existingKey.jobId ?? undefined, replayed: true } as const;
+      if (asset.processingStatus !== "uploaded") {
+        if (asset.processingStatus === "pending_upload") throw new SourceAssetNotUploadedError();
+        return {
+          asset,
+          jobId: asset.processingStatus === "queued" ? asset.id : undefined,
+          replayed: true,
+        } as const;
+      }
+
+      const [queued] = await transaction.update(sourceAssets)
+        .set({ processingStatus: "queued", quality: null, updatedAt: new Date() })
+        .where(and(eq(sourceAssets.id, input.assetId), eq(sourceAssets.processingStatus, "uploaded")))
+        .returning();
+      if (queued === undefined) throw new Error("The source asset could not be queued.");
+      const sent = await queue.boss.send(SOURCE_ASSET_QUALITY_CHECK_QUEUE, { assetId: input.assetId } satisfies SourceAssetQualityCheckJobData, { id: jobId, retryLimit: 3, retryDelay: 1, retryBackoff: true, db: fromDrizzle(transaction, sql) });
+      if (sent === null) throw new Error("The source asset quality check job was not queued.");
+      await transaction.insert(apiIdempotencyRecords).values({ id: uuidv7(), scope: "source_asset_prepare", idempotencyKey: input.idempotencyKey, resourceId: input.assetId, jobId: sent });
+      return { asset: queued, jobId: sent, replayed: false } as const;
+    });
+  } catch (error) {
+    if (!isPostgresUniqueViolation(error)) throw error;
+    const [record] = await database.select({ resourceId: apiIdempotencyRecords.resourceId, jobId: apiIdempotencyRecords.jobId }).from(apiIdempotencyRecords).where(and(eq(apiIdempotencyRecords.scope, "source_asset_prepare"), eq(apiIdempotencyRecords.idempotencyKey, input.idempotencyKey))).limit(1);
+    if (record?.resourceId !== input.assetId) throw new SourceAssetIdempotencyKeyReusedError();
+    const asset = await database.select().from(sourceAssets).where(eq(sourceAssets.id, input.assetId)).limit(1);
+    return { asset: asset[0], jobId: record.jobId ?? undefined, replayed: true } as const;
   }
 }

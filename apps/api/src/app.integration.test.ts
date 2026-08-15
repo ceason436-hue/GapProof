@@ -15,6 +15,7 @@ import type {
   HypothesesView,
   InitiatedSourceAssetUploadView,
   LearningTaskView,
+  SourceAssetProcessingView,
   TaskCompletionView,
   TodayTasksView,
   UploadedSourceAssetView,
@@ -40,11 +41,13 @@ import {
   REPLAN_QUEUE,
   RETEST_DUE_QUEUE,
   RUN_NEXT_QUEUE,
+  SOURCE_ASSET_QUALITY_CHECK_QUEUE,
 } from "@gapproof/jobs";
 import {
   createReplanWorker,
   createRetestDueWorker,
   createRunNextWorker,
+  createSourceAssetQualityWorker,
 } from "@gapproof/worker";
 
 import { buildApi } from "./app.ts";
@@ -61,6 +64,31 @@ function requireGuidedTask(task: LearningTaskView | undefined) {
     throw new Error("Expected a guided intervention task.");
   }
   return task;
+}
+
+function pngBytes(width: number, height: number): Buffer {
+  const bytes = Buffer.alloc(33);
+  Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(bytes, 0);
+  bytes.writeUInt32BE(13, 8);
+  bytes.write("IHDR", 12, "ascii");
+  bytes.writeUInt32BE(width, 16);
+  bytes.writeUInt32BE(height, 20);
+  return bytes;
+}
+
+async function waitForSourceAsset(
+  api: Awaited<ReturnType<typeof buildApi>>,
+  assetId: string,
+  expected: SourceAssetProcessingView["processingStatus"],
+): Promise<SourceAssetProcessingView> {
+  const deadline = Date.now() + 8_000;
+  while (Date.now() < deadline) {
+    const response = await api.inject({ method: "GET", url: `/v1/source-assets/${assetId}` });
+    const body = response.json<ApiResponse<SourceAssetProcessingView>>();
+    if (body.data.processingStatus === expected) return body.data;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`Source asset ${assetId} did not reach ${expected}.`);
 }
 
 async function waitForState(
@@ -208,6 +236,7 @@ describeWithDatabase("Fastify API and run-next worker", () => {
   let api: Awaited<ReturnType<typeof buildApi>>;
   let worker: ReturnType<typeof createRunNextWorker>;
   let retestDueWorker: ReturnType<typeof createRetestDueWorker>;
+  let qualityWorker: ReturnType<typeof createSourceAssetQualityWorker>;
   let uploadRoot: string;
   let uploadStorage: LocalDirectorySourceAssetStorage;
 
@@ -225,6 +254,7 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     await queue.boss.deleteAllJobs(RETEST_DUE_QUEUE);
     await queue.boss.deleteAllJobs(REPLAN_QUEUE);
     await queue.boss.deleteAllJobs(RUN_NEXT_QUEUE);
+    await queue.boss.deleteAllJobs(SOURCE_ASSET_QUALITY_CHECK_QUEUE);
     worker = createRunNextWorker({ database: database.db, queue });
     await worker.start();
     retestDueWorker = createRetestDueWorker({
@@ -234,6 +264,8 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     await retestDueWorker.start();
     uploadRoot = await mkdtemp(path.join(os.tmpdir(), "gapproof-api-upload-"));
     uploadStorage = new LocalDirectorySourceAssetStorage(uploadRoot);
+    qualityWorker = createSourceAssetQualityWorker({ database: database.db, queue, storage: uploadStorage });
+    await qualityWorker.start();
     api = await buildApi({
       database: database.db,
       queue,
@@ -246,6 +278,7 @@ describeWithDatabase("Fastify API and run-next worker", () => {
 
   afterAll(async () => {
     await api.close();
+    await qualityWorker.stop();
     await retestDueWorker.stop();
     await worker.stop();
     await queue.stop();
@@ -450,6 +483,148 @@ describeWithDatabase("Fastify API and run-next worker", () => {
       payload: bytes,
     });
     expect(uploaded.statusCode).toBe(200);
+  });
+
+  it("prepares uploaded source assets once and persists deterministic image quality", async () => {
+    await qualityWorker.stop();
+    const created = await api.inject({
+      method: "POST",
+      url: "/v1/cases",
+      headers: { "idempotency-key": "source-inspection-case-v1" },
+      payload: { entry: "synthetic_demo" },
+    });
+    const caseView = created.json<ApiResponse<CaseView>>().data;
+    const bytes = pngBytes(1280, 960);
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    const initiated = await api.inject({
+      method: "POST",
+      url: "/v1/source-assets/uploads",
+      headers: { "idempotency-key": "source-inspection-upload-v1" },
+      payload: {
+        studentId: caseView.studentId,
+        caseId: caseView.id,
+        fileName: "worksheet.png",
+        mimeType: "image/png",
+        byteSize: bytes.byteLength,
+        sha256,
+      },
+    });
+    const upload = initiated.json<ApiResponse<InitiatedSourceAssetUploadView>>().data;
+    const beforeUpload = await api.inject({
+      method: "POST",
+      url: `/v1/source-assets/${upload.assetId}/commands/prepare`,
+      headers: { "idempotency-key": "source-inspection-pending-v1" },
+      payload: {},
+    });
+    expect(beforeUpload.statusCode).toBe(409);
+    expect(beforeUpload.json<ApiErrorResponse>().error.code).toBe("SOURCE_ASSET_NOT_UPLOADED");
+    await api.inject({
+      method: "PUT",
+      url: upload.upload.path.replace("/api", ""),
+      headers: { "x-gapproof-upload-token": upload.upload.token, "content-type": "image/png" },
+      payload: bytes,
+    });
+
+    const prepare = await api.inject({
+      method: "POST",
+      url: `/v1/source-assets/${upload.assetId}/commands/prepare`,
+      headers: { "idempotency-key": "source-inspection-prepare-v1" },
+      payload: {},
+    });
+    const queued = prepare.json<ApiResponse<{ assetId: string; stage: string; processingStatus: string }>>();
+    expect(prepare.statusCode).toBe(202);
+    expect(queued.data).toEqual({ assetId: upload.assetId, stage: "image_quality_check", processingStatus: "queued" });
+    expect(queued.jobId).toBe(upload.assetId);
+
+    const replay = await api.inject({
+      method: "POST",
+      url: `/v1/source-assets/${upload.assetId}/commands/prepare`,
+      headers: { "idempotency-key": "source-inspection-prepare-v1" },
+      payload: {},
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json<ApiResponse<{ assetId: string }>>().jobId).toBe(upload.assetId);
+
+    const alternateKey = await api.inject({
+      method: "POST",
+      url: `/v1/source-assets/${upload.assetId}/commands/prepare`,
+      headers: { "idempotency-key": "source-inspection-prepare-v2" },
+      payload: {},
+    });
+    expect(alternateKey.statusCode).toBe(200);
+    expect(alternateKey.json<ApiResponse<{ assetId: string }>>().data.assetId).toBe(upload.assetId);
+
+    await qualityWorker.start();
+    const inspected = await waitForSourceAsset(api, upload.assetId, "succeeded");
+    expect(inspected.quality).toMatchObject({
+      status: "passed",
+      detectedMimeType: "image/png",
+      width: 1280,
+      height: 960,
+      reasons: [],
+      checkerVersion: "image-header-v1",
+    });
+    expect(inspected).not.toHaveProperty("objectKey");
+    expect(inspected).not.toHaveProperty("token");
+    expect(inspected).not.toHaveProperty("fileName");
+    expect(inspected).not.toHaveProperty("ocrText");
+  });
+
+  it("fails closed for missing bytes and requests confirmation for low resolution", async () => {
+    await qualityWorker.stop();
+    const created = await api.inject({
+      method: "POST",
+      url: "/v1/cases",
+      headers: { "idempotency-key": "source-inspection-edge-case-v1" },
+      payload: { entry: "synthetic_demo" },
+    });
+    const caseView = created.json<ApiResponse<CaseView>>().data;
+
+    const initiate = async (key: string, bytes: Buffer) => {
+      const sha256 = createHash("sha256").update(bytes).digest("hex");
+      const response = await api.inject({
+        method: "POST",
+        url: "/v1/source-assets/uploads",
+        headers: { "idempotency-key": `${key}-upload` },
+        payload: {
+          studentId: caseView.studentId,
+          caseId: caseView.id,
+          fileName: `${key}.png`,
+          mimeType: "image/png",
+          byteSize: bytes.byteLength,
+          sha256,
+        },
+      });
+      const asset = response.json<ApiResponse<InitiatedSourceAssetUploadView>>().data;
+      const uploaded = await api.inject({
+        method: "PUT",
+        url: asset.upload.path.replace("/api", ""),
+        headers: { "x-gapproof-upload-token": asset.upload.token, "content-type": "image/png" },
+        payload: bytes,
+      });
+      expect(uploaded.statusCode).toBe(200);
+      return asset;
+    };
+
+    const missing = await initiate("source-inspection-missing-v1", pngBytes(1280, 960));
+    const low = await initiate("source-inspection-low-v1", pngBytes(320, 240));
+    const [missingRow] = await database.db.select().from(sourceAssets).where(eq(sourceAssets.id, missing.assetId));
+    await uploadStorage.remove({ assetId: missingRow!.id, objectKey: missingRow!.objectKey });
+
+    for (const [assetId, key] of [[missing.assetId, "source-inspection-missing-prepare-v1"], [low.assetId, "source-inspection-low-prepare-v1"]] as const) {
+      const prepared = await api.inject({
+        method: "POST",
+        url: `/v1/source-assets/${assetId}/commands/prepare`,
+        headers: { "idempotency-key": key },
+        payload: {},
+      });
+      expect(prepared.statusCode).toBe(202);
+    }
+    await qualityWorker.start();
+    const missingView = await waitForSourceAsset(api, missing.assetId, "failed");
+    expect(missingView.quality).toMatchObject({ status: "failed", reasons: ["stored_bytes_missing"] });
+    const lowView = await waitForSourceAsset(api, low.assetId, "needs_confirmation");
+    expect(lowView.quality).toMatchObject({ status: "needs_confirmation", reasons: ["low_resolution"], width: 320, height: 240 });
   });
 
   it("returns a unified not-found error", async () => {

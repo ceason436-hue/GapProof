@@ -1,4 +1,5 @@
 import { and, eq } from "drizzle-orm";
+import type { SourceAssetQualityCheck } from "@gapproof/contracts";
 import type { Database } from "./client.ts";
 import { isPostgresUniqueViolation } from "./case-repository.ts";
 import {
@@ -7,6 +8,7 @@ import {
   sourceAssets,
   students,
   type NewSourceAssetRow,
+  type SourceAssetRow,
 } from "./schema.ts";
 
 const SOURCE_ASSET_UPLOAD_SCOPE = "source_asset_upload";
@@ -17,6 +19,15 @@ export class SourceAssetIdempotencyKeyReusedError extends Error {
   constructor() {
     super("The idempotency key was already used for different upload intent.");
     this.name = "SourceAssetIdempotencyKeyReusedError";
+  }
+}
+
+export class SourceAssetNotUploadedError extends Error {
+  readonly code = "SOURCE_ASSET_NOT_UPLOADED";
+
+  constructor() {
+    super("The source asset must be uploaded before preparation.");
+    this.name = "SourceAssetNotUploadedError";
   }
 }
 
@@ -161,7 +172,7 @@ export async function markSourceAssetUploaded(
 ) {
   const [updated] = await database
     .update(sourceAssets)
-    .set({ processingStatus: "uploaded" })
+    .set({ processingStatus: "uploaded", updatedAt: new Date() })
     .where(
       and(
         eq(sourceAssets.id, assetId),
@@ -170,6 +181,32 @@ export async function markSourceAssetUploaded(
     )
     .returning();
   return updated ?? (await findSourceAssetById(database, assetId));
+}
+
+export async function updateSourceAssetInspection(
+  database: Database,
+  input: {
+    readonly assetId: string;
+    readonly from: SourceAssetRow["processingStatus"];
+    readonly to: SourceAssetRow["processingStatus"];
+    readonly quality?: SourceAssetQualityCheck | null;
+  },
+) {
+  const [updated] = await database
+    .update(sourceAssets)
+    .set({
+      processingStatus: input.to,
+      ...(input.quality === undefined ? {} : { quality: input.quality }),
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(sourceAssets.id, input.assetId),
+        eq(sourceAssets.processingStatus, input.from),
+      ),
+    )
+    .returning();
+  return updated ?? (await findSourceAssetById(database, input.assetId));
 }
 
 export async function findUploadStudentAndCase(

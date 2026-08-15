@@ -22,6 +22,7 @@ describe("LocalDirectorySourceAssetStorage", () => {
       expect(first.created).toBe(true);
       expect(second.created).toBe(false);
       expect(await readFile(storage.pathFor(asset.assetId, asset.objectKey))).toEqual(bytes);
+      expect(await storage.read(asset)).toEqual(bytes);
       expect(storage.pathFor(asset.assetId, asset.objectKey)).toContain(asset.assetId);
       expect(await readdir(path.join(root, asset.assetId))).toHaveLength(1);
     } finally {
@@ -32,5 +33,15 @@ describe("LocalDirectorySourceAssetStorage", () => {
   it("rejects traversal-shaped identifiers", async () => {
     const storage = new LocalDirectorySourceAssetStorage("C:\\tmp\\gapproof");
     expect(() => storage.pathFor("../escape", "source-assets/../escape")).toThrow();
+  });
+
+  it("does not turn a missing object into a successful read", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "gapproof-upload-"));
+    try {
+      const storage = new LocalDirectorySourceAssetStorage(root);
+      await expect(storage.read(asset)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

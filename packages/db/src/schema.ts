@@ -147,7 +147,11 @@ export const sourceAssets = appSchema.table(
     processingStatus: assetProcessingStatus("processing_status")
       .notNull()
       .default("pending_upload"),
+    quality: jsonb("quality").$type<Record<string, unknown> | null>(),
     createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),

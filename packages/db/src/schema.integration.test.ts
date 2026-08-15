@@ -196,6 +196,20 @@ describeWithDatabase("PostgreSQL evidence ledger", () => {
     );
   });
 
+  it("persists source asset inspection quality and update timestamps", async () => {
+    const result = await database.db.execute(sql<{ column_name: string; data_type: string }>`
+      select column_name, data_type
+      from information_schema.columns
+      where table_schema = 'app' and table_name = 'source_assets'
+        and column_name in ('quality', 'updated_at')
+    `);
+
+    expect(result).toEqual(expect.arrayContaining([
+      { column_name: "quality", data_type: "jsonb" },
+      { column_name: "updated_at", data_type: "timestamp with time zone" },
+    ]));
+  });
+
   it("rejects a negative case state version", async () => {
     await expect(
       database.db

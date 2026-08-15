@@ -2,6 +2,7 @@ import Fastify, {
   type FastifyReply,
   type FastifyRequest,
 } from "fastify";
+import { Type } from "@sinclair/typebox";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { v7 as uuidv7 } from "uuid";
@@ -50,6 +51,12 @@ import {
   type StudentIdParams,
   SourceAssetIdParamsSchema,
   type SourceAssetIdParams,
+  PrepareSourceAssetRequestSchema,
+  type PrepareSourceAssetRequest,
+  SourceAssetPrepareQueuedViewSchema,
+  type SourceAssetPrepareQueuedView,
+  SourceAssetProcessingViewSchema,
+  type SourceAssetProcessingView,
   TaskCompletionViewSchema,
   type TaskCompletionView,
   TaskIdParamsSchema,
@@ -87,6 +94,7 @@ import {
   DemoClockVersionConflictError,
   ResourceNotFoundError,
   SourceAssetIdempotencyKeyReusedError,
+  SourceAssetNotUploadedError,
   VersionConflictError,
 } from "@gapproof/db";
 import {
@@ -103,6 +111,7 @@ import {
   enqueueRetestDueTransactional,
   enqueueReplanTransactional,
   enqueueRunNextIdempotent,
+  enqueueSourceAssetQualityCheckIdempotent,
   type JobQueue,
 } from "@gapproof/jobs";
 import {
@@ -178,6 +187,26 @@ function uploadedSourceAssetView(
     mimeType: asset.mimeType as UploadedSourceAssetView["mimeType"],
     byteSize: asset.byteSize,
     sha256: asset.sha256,
+  };
+}
+
+function sourceAssetProcessingView(
+  asset: Awaited<ReturnType<typeof findSourceAssetById>>,
+): SourceAssetProcessingView {
+  if (
+    asset === undefined ||
+    asset.processingStatus === "pending_upload" ||
+    !["image/jpeg", "image/png", "image/webp"].includes(asset.mimeType)
+  ) {
+    throw new ApiHttpError(500, "STORED_SOURCE_ASSET_INVALID", "The stored source asset is invalid.");
+  }
+  return {
+    assetId: asset.id,
+    stage: "image_quality_check",
+    processingStatus: asset.processingStatus,
+    mimeType: asset.mimeType as SourceAssetProcessingView["mimeType"],
+    byteSize: asset.byteSize,
+    quality: asset.quality as SourceAssetProcessingView["quality"],
   };
 }
 
@@ -574,6 +603,10 @@ export async function buildApi(options: BuildApiOptions) {
       statusCode = 409;
       code = error.code;
       message = error.message;
+    } else if (error instanceof SourceAssetNotUploadedError) {
+      statusCode = 409;
+      code = error.code;
+      message = error.message;
     } else if (error instanceof DemoClockVersionConflictError) {
       statusCode = 409;
       code = error.code;
@@ -817,6 +850,59 @@ export async function buildApi(options: BuildApiOptions) {
         }
         throw error;
       }
+    },
+  );
+
+  api.post<{ Params: SourceAssetIdParams; Body: PrepareSourceAssetRequest }>(
+    "/v1/source-assets/:assetId/commands/prepare",
+    {
+      schema: {
+        params: SourceAssetIdParamsSchema,
+        body: PrepareSourceAssetRequestSchema,
+        response: {
+          200: apiResponseSchema(Type.Union([SourceAssetPrepareQueuedViewSchema, SourceAssetProcessingViewSchema])),
+          202: apiResponseSchema(SourceAssetPrepareQueuedViewSchema),
+          "4xx": ApiErrorResponseSchema,
+          500: ApiErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const idempotencyKey = getIdempotencyKey(request);
+      requireUploadConfiguration(options);
+      const result = await enqueueSourceAssetQualityCheckIdempotent(options.database, options.queue, {
+        assetId: request.params.assetId,
+        idempotencyKey,
+      });
+      if (result.asset === undefined) throw new ResourceNotFoundError("Source asset", request.params.assetId);
+      if (result.asset.processingStatus === "queued") {
+        const data: SourceAssetPrepareQueuedView = {
+          assetId: result.asset.id,
+          stage: "image_quality_check",
+          processingStatus: "queued",
+        };
+        return reply.status(result.replayed ? 200 : 202).send(success(request, data, result.jobId));
+      }
+      return success(request, sourceAssetProcessingView(result.asset));
+    },
+  );
+
+  api.get<{ Params: SourceAssetIdParams }>(
+    "/v1/source-assets/:assetId",
+    {
+      schema: {
+        params: SourceAssetIdParamsSchema,
+        response: {
+          200: apiResponseSchema(SourceAssetProcessingViewSchema),
+          "4xx": ApiErrorResponseSchema,
+          500: ApiErrorResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      const asset = await findSourceAssetById(options.database, request.params.assetId);
+      if (asset === undefined || asset.deletedAt !== null) throw new ResourceNotFoundError("Source asset", request.params.assetId);
+      return success(request, sourceAssetProcessingView(asset));
     },
   );
 
