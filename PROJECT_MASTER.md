@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.38"
+version: "0.1.39"
 status: "ACTIVE"
-current_stage: "PUSH-023 已发布：默认关闭的阿里云 OCR Provider 安全 Spike 已完成，仅接受合成/脱敏输入且未接生产链路；真实 OCR、真实个性化与报告仍 unresolved/deferred"
+current_stage: "PUSH-024 已发布：阿里云官方 SDK 的 RecognizeEduPaperOcr 开发态调用与归一化路径完成，但未使用轮换凭据发起真实调用且未接生产链路；真实 OCR、真实个性化与报告仍 unresolved/deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -163,13 +163,13 @@ next_action:
 - `[DECISION]` 已确定后台多 Agent、前台单一 AI 学习教练的产品形态。
 - `[DECISION]` 已确定苏格拉底脚手架、学习证据图谱和延迟迁移验证为核心设计。
 - `[RESULT]` 已在 Stitch 中选定学生端“今日”页桌面高保真视觉基线；F0、F1b 与 F1c 已通过相应构建和自动化门禁。F1c 的受控 HTTP 浏览器 Fixture 已覆盖 ready D1 成功、`VERSION_CONFLICT` 与 `NETWORK_UNKNOWN` 三条真实页面交互路径；默认入口现为 API，Mock 只在显式参数下使用，但这仍不代表业务主闭环已接通。
-- `[DECISION]` 当前学生首页的核心视觉色为蓝 `#0036FF` 与青柠绿 `#B5F800`；学生端、家长端和后续页面的详细规范以 `DESIGN.md v0.2.27` 为准。
+- `[DECISION]` 当前学生首页的核心视觉色为蓝 `#0036FF` 与青柠绿 `#B5F800`；学生端、家长端和后续页面的详细规范以 `DESIGN.md v0.2.29` 为准。
 - `[FACT]` 用户已将目标教材 ISBN 确认为 `978-7-5720-3630-9`，与当前 161 页教材 PDF 封底条码一致；版权页照片无法提供，因此版次、印次保持未知，不再作为 MVP 开工阻塞项。
 - `[FACT]` 已收到线上购买的教研与试题资料 191 个文件：184 个 DOCX、4 个 PDF 和 3 个 MP3，覆盖学生/考试版、参考答案、教师/解析版、知识清单、答题卡和听力等类型；这些内容资产不是真实学生作答数据。
 - `[DECISION]` 用户确认教材与试题材料可供本项目使用和公开展示，并确认 `logo.png` 可作为 MVP Logo V1；权利台账记录为 `user_asserted_permitted`，购买页/许可条款凭证待归档；教材版权页不可取得。
 - `[DECISION]` 教材和试题的完整 Markdown 转换结果仅保存在 `.gitignore` 覆盖的本地私有目录，不进入 Git；公开仓库只保存来源元数据、哈希、处理程序及项目原创/合成内容。
 - `[DECISION]` 答题卡与听力音频不进入 MVP 题库、RAG 或视觉 QA；原文件继续私有留存，不做永久删除。视觉核验只覆盖实际入选 Demo/题库的文件，且入选文件逐份核验，其余材料不要求逐份目视。
-- `[RESULT]` 已初始化 Bun workspace 的 `web`、`contracts`、`domain`、`db`、`jobs` 与 `testkit`；首个原创合成 Case 已保存为可版本化 Fixture。当前组合基线为 146 条快速测试、59 条真实 PostgreSQL/API/Worker 集成测试、98 条 apps/web 测试通过，TypeScript 严格类型检查、Next.js production build 和 migration drift 通过。
+- `[RESULT]` 已初始化 Bun workspace 的 `web`、`contracts`、`domain`、`db`、`jobs` 与 `testkit`；首个原创合成 Case 已保存为可版本化 Fixture。当前组合基线为 169 条快速测试、59 条真实 PostgreSQL/API/Worker 集成测试、98 条 apps/web 测试通过，TypeScript 严格类型检查、Next.js production build 和 migration drift 通过。
 - `[RESULT]` 已实现 `parse_paper` 的 TypeBox/JSON Schema、统一 `ToolResult` 契约与确定性 fake adapter；成功、低置信、超时、权限失败四类 Fixture 已通过 7 条契约测试。尚未接入真实 OCR Provider。
 - `[RESULT]` 已实现 Case 创建/读取、异步 `run-next`、识别确认和 `GET /v1/cases/{caseId}/hypotheses`。Worker 可从 `ready_for_diagnosis` 生成两条有证据引用的竞争性错因和一条确认小题，以 `hypotheses_generated` 将 Case 推进到 `probe_required`；查询响应不暴露答案键。
 - `[RESULT]` 已实现 `POST /v1/cases/{caseId}/attempts`：服务端从内部评分规则执行 `exact_choice_v1`，以 `probe_evaluated` 原子推进至 `intervention_ready`；答错时映射受支持的竞争性错因，答对时不虚构已确认错因。接口具备 Schema、幂等重放、并发去重、版本冲突和非法状态/选项保护。
@@ -193,7 +193,7 @@ next_action:
 - `[PLANNED]` 尚未确认至少一位英语教育背景人员能否短时抽检核心金标内容。
 - `[PROTOTYPE]` 已建立完整可点击的合成验收 Thin Slice：真实图片字节上传与基础检查后，用户经监护确认显式创建/绑定同一合成 Case，受守卫 Fake OCR 产生同一 Case extraction，用户读取、修正、确认后继续确定性诊断、guided、D1/D7、安全重排与封顶。它满足 DEC-OCR-ACCEPT-001，但不证明真实 OCR/AI、真实题库、真实个性化、人工服务或学习效果；上传字节未用于识别，异步报告 deferred。
 - `[PROTOTYPE]` 学生端默认入口已使用真实 API，只有显式 `?source=mock` 使用合成首页；Today overview、guided、D1、D7 与同一 Case review 均有受控浏览器证据。项目本身 P0 合成业务主闭环已完成；其他学生页面、家长端页面和评委扩展页仍未完成。
-- `[PROTOTYPE]` 已新增默认关闭的 `AlibabaOcrSpikeAdapter` 与可注入 HTTPS transport seam：只接受 `synthetic/desensitized` 输入和受限机器提示，限制 100ms–30s 超时，稳定映射认证、权限、408、429、5xx、网络、空结果与低置信状态；原始 Provider payload、URL 查询、凭据、warnings 和精确置信度不进入 `ToolResult`。它未接入上传、Case、Worker、API 或 UI，也未冻结阿里云官方签名/响应协议、配置真实凭据或发起真实调用，因此不构成真实 OCR 已接入或验收。
+- `[PROTOTYPE]` `AlibabaOcrSpikeAdapter` 已接入官方 `@alicloud/ocr-api20210707@3.1.3` 的开发态 `RecognizeEduPaperOcr` transport，并将 SDK 的 string/object `Data` 归一化到现有 `ParsePaperOutput`；仅接受 `synthetic/desensitized` HTTPS source，固定初中英语、关闭 SDK 自动重试并复用稳定错误与脱敏 `ToolResult`。环境构造器和 smoke CLI 只从被 Git 忽略的 `.env` 读取轮换凭据；缺凭据在网络前返回 `not_executed`。该路径未接上传、Case、Worker、API 或 UI，也未使用安全新凭据与原创/脱敏可访问图片完成真实调用，因此不构成真实 OCR 已接入或验收。
 - `[PLANNED]` 尚未完成正式 500 字简介、初赛 PPT、视频、README、数据卡、依赖清单和合规一页纸。
 - `[PLANNED]` 尚未产生可报告的工程评测结果或真实学生学习效果。
 
@@ -2119,6 +2119,12 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.39 — 2026-08-16
+
+- 接入阿里云官方 `@alicloud/ocr-api20210707@3.1.3`，实现开发态 `RecognizeEduPaperOcr` SDK transport、string/object `Data` 解析、文字块/坐标/置信度到 `ParsePaperOutput` 的归一化及稳定错误映射。
+- 新增仅接受 synthetic/desensitized HTTPS source 的开发 smoke CLI；凭据只允许从 ignored `.env` 注入，tracked `.env.example` 只保留空模板。当前缺少可证明已轮换的新凭据和原创/完全脱敏 HTTPS 图片，真实 Provider 调用未执行。
+- 169 fast、59 PostgreSQL/API/Worker integration、98 apps/web、双 TypeScript、Next build、migration drift、上传/onboarding 浏览器与隐私门禁通过；同步 PRD v0.1.31、TDD v0.3.32、DESIGN v0.2.29 与 PUSH-024。未接 API/Worker/UI，不提升真实 OCR、真实学生记录、个性化、学习效果或报告状态。
 
 ### v0.1.38 — 2026-08-16
 

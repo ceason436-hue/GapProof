@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.28"
+version: "0.2.29"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "PUSH-023 已发布：阿里云 OCR Provider 安全 Spike 完成但未接 UI 或生产链路；真实 OCR、真实个性化与报告仍 unresolved/deferred"
+current_design_stage: "PUSH-024 已发布：官方 SDK 开发态调用路径完成但未发起真实调用、未接 UI 或生产链路；真实 OCR、真实个性化与报告仍 unresolved/deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -1780,6 +1780,12 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 ---
 
 ## 22. 版本记录
+
+### v0.2.29 — 2026-08-16
+
+- 登记官方 `RecognizeEduPaperOcr` SDK 开发态 transport 与归一化已完成，但未使用轮换凭据和原创/脱敏图片发起真实调用，也未接 API、Worker 或 UI；现有页面继续只呈现 synthetic flow。
+- SDK 路径不改变未来真实 UI 前置：阿里云处理告知、用途/训练事实核验、独立同意、未成年人监护确认、权威状态与删除事实仍须先由服务端可审计实现。
+- 169 fast、59 integration、98 web、双 typecheck、Next build、migration drift、上传/onboarding 浏览器与隐私门禁通过；同步 PROJECT_MASTER v0.1.39、PRD v0.1.31、TDD v0.3.32 与 PUSH-024。真实 OCR、真实学生记录/个性化/学习效果和报告仍 unresolved/deferred。
 
 ### v0.2.28 — 2026-08-16
 

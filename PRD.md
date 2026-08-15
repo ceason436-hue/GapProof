@@ -7,10 +7,10 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档状态 | Draft v0.1.30 |
+| 文档状态 | Draft v0.1.31 |
 | 产品名称 | 知隙 GapProof |
 | 文档角色 | 产品需求、业务流程、功能范围与验收标准 |
-| 当前阶段 | PUSH-023 已发布：默认关闭的阿里云 OCR Provider 安全 Spike 完成，仅接受合成/脱敏输入且未接生产链路；真实 OCR、真实个性化与报告仍 unresolved/deferred |
+| 当前阶段 | PUSH-024 已发布：官方 SDK 的 RecognizeEduPaperOcr 开发态路径完成但未发起真实调用、未接生产链路；真实 OCR、真实个性化与报告仍 unresolved/deferred |
 | 产品形态 | Web 应用 |
 | 目标教材 | 上海教育出版社《义务教育教科书（五·四学制）英语 八年级上册》 |
 | 适用版本 | 目标教材以 ISBN、当前 PDF 哈希和内容快照锁定；版权页不可取得，版次、印次和册次保持未知 |
@@ -661,6 +661,7 @@ PROJECT_MASTER.md
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
+| 0.1.31 | 2026-08-16 | 接入阿里云官方 SDK 的 `RecognizeEduPaperOcr` 开发态 transport 与 `ParsePaperOutput` 归一化，新增 ignored `.env` 凭据入口和 synthetic/desensitized HTTPS smoke CLI。缺少可证明已轮换的新凭据及原创/脱敏可访问图片，未执行真实调用，也未接上传/Case/Worker/API/UI；同步 PROJECT_MASTER v0.1.39、TDD v0.3.32、DESIGN v0.2.29、PUSH-024。真实 OCR、真实学生记录、个性化、学习效果和报告仍 unresolved/deferred |
 | 0.1.30 | 2026-08-16 | 发布默认关闭、仅接受 synthetic/desensitized HTTPS 输入的阿里云 OCR Provider 安全 Spike；未接上传/Case/Worker/API/UI，未使用真实凭据、材料或学生数据，未发起真实 Provider 调用。稳定错误语义、粗粒度置信度与敏感字段隔离已通过门禁；同步 PROJECT_MASTER v0.1.38、TDD v0.3.31、DESIGN v0.2.28、PUSH-023。真实 OCR、处理 consent/status、删除策略、真实个性化/学习效果和报告仍 unresolved/deferred |
 | 0.1.29 | 2026-08-16 | 发布真实 API 首次使用 onboarding、上传/三题原创合成检查双入口、上传缩略图与五步状态、正确侧栏路由和计划/进步/报告事实空状态。快速检查固定不创建 Case、学习记录或报告；146 fast、59 integration、98 web 与完整门禁通过。同步 PROJECT_MASTER v0.1.37、TDD v0.3.30、DESIGN v0.2.27、PUSH-022；真实 OCR、真实个性化、学习效果、删除策略与异步报告仍 unresolved/deferred |
 | 0.1.28 | 2026-08-15 | 发布可复现真实 API 本地栈、同一 Case synthetic extraction 读取/修正/确认及诊断→guided→D1→D7 导航；修复局域网预览资源来源和同时钟 replan 证据确定性排序。140 fast、58 integration、95 web 与完整门禁通过；同步 PROJECT_MASTER v0.1.36、TDD v0.3.29、DESIGN v0.2.26、PUSH-021。真实 OCR、原图 24h/主动删除、30–50 页基准、派生留存和异步报告仍 unresolved/deferred |

@@ -2,15 +2,15 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.31"
+version: "0.3.32"
 status: "DRAFT_FOR_IMPLEMENTATION"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.38"
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.30"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.39"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.31"
 ---
 
 # 知隙 GapProof 技术设计文档（TDD）
@@ -1217,9 +1217,10 @@ Serverless 很适合短 API 和自动扩容，但 OCR、多轮模型、报告、
 - Today `overview.hasStartedJourney` 由服务端按学生是否存在未删除 Case 投影，前端据此区分首次使用与已有旅程但当前无任务。`GET /v1/quick-checks/synthetic` 仅返回 3 道 `synthetic_demo/original_fixture` 题目且不包含答案键；`POST /v1/quick-checks/synthetic/attempts` 使用 UUIDv7、同步 in-flight 锁和同 key/body 一次网络未知重试，服务端以私有答案确定性评分。结果强制 `learningRecordCreated:false`、`reportReady:false`，不创建 Case、学习证据或幂等数据库记录；最终未知后前端锁定，避免不确定请求被重复提交。
 - `/diagnose` 提供上传与三题合成检查双入口，`/diagnose/quick-check` 承载上述无记录体验；`/student/plan`、`/student/progress`、`/student/report` 只展示各自事实空状态，报告明确未开放。上传选图只在浏览器内生成缩略图和五步状态，不向 UI 暴露本地文件名、对象键、hash、token 或内部编号。
 - `packages/tools/src/parse-paper/alibaba-ocr-spike.ts` 提供默认关闭的内部安全 Spike，不实现现有 `ParsePaperAdapter` 生产接线。输入仅允许 `synthetic/desensitized`、无 userinfo/hash 的 HTTPS source URL、最多 8 个机器 token page hints；timeout 限制 100ms–30s。transport 只接收 source URL 与受限提示，不接收 Case/student/trace 标识；401/403/408/429/5xx/网络与无效响应映射为稳定错误，空结果或低置信进入 `needs_confirmation`。原始 Provider payload、URL 查询、headers/凭据、Provider warnings 与精确置信度不会进入 `ToolResult`。
+- `alibaba-ocr-official.ts` 使用官方 `@alicloud/ocr-api20210707@3.1.3` 调用 `RecognizeEduPaperOcr`：请求固定 `scan`、`JHighSchool_English`、`OutputOricoord:false`，SDK 自动重试关闭且连接/读取超时继承 adapter 边界。SDK 类型定义的 string `Data` 与官方示例 object 形态均经防御解析；有效 `prism_wordsInfo` 归一化为单页 `ParsePaperOutput`，无效结构 fail closed。`ocr:smoke` 只从 ignored `.env` 读取凭据、只接受 synthetic/desensitized HTTPS source，输出不含凭据、签名 URL 或 Provider 原始响应；当前未执行真实调用。
 - `bun run demo:stack` 可复现启动 Docker PostgreSQL、迁移/seed、API、Worker、Web 与 `.local/gapproof/uploads`；数据库默认显式使用 `127.0.0.1`，避免 Windows `localhost` 的 IPv4/IPv6 双监听歧义。Next dev 只允许启动脚本发现的本机 IPv4/localhost，不开放通配来源；签名 secret 每次运行随机生成且不输出。
 - `findLatestCaseEvidenceEventByType` 以 `occurred_at DESC, created_at DESC, UUIDv7 id DESC` 确定性选择最新证据，避免两次复测共享业务时钟时第二次 replan 误读第一次事件。
-- 当前证据为 162 条快速测试、59 条真实 PostgreSQL/API/Worker 集成测试、98 条 apps/web 测试、migration drift、上传与首次使用/三题检查浏览器 Fixture、双 TypeScript 严格类型检查、Next.js production build及隐私扫描通过。Spike 没有生产路由，因此浏览器证据只证明现有 synthetic UI 未回归，不证明浏览器或 Worker 调用了阿里云。
+- 当前证据为 169 条快速测试、59 条真实 PostgreSQL/API/Worker 集成测试、98 条 apps/web 测试、migration drift、上传与首次使用/三题检查浏览器 Fixture、双 TypeScript 严格类型检查、Next.js production build及隐私扫描通过。官方 SDK 开发路径没有生产路由，因此浏览器证据只证明现有 synthetic UI 未回归，不证明浏览器或 Worker 调用了阿里云；缺凭据 smoke 明确为 `not_executed`。
 
 该快照不等于真实 OCR Phase A 完成：真实图片字节可上传到受控本地目录，前端可经监护确认显式创建/绑定同一合成 Case、读取/确认该 Case 的 synthetic extraction 并继续规则化学习路径；但真实 OCR、真实 AI 干预、真实题库、通知、报告与真实模型 Provider 仍未实现。上传字节不参与 Fake OCR；合成确认页与重排仅是规则化工程骨架，不是现实识别或个性化内容。
 
@@ -1633,8 +1634,15 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-021 | 2026-08-15 | `main` | `pushed` | `feat: complete same-case synthetic learning flow` | 发布同一 Case extraction 读取/修正/确认与诊断→guided→D1→D7 导航、`bun run demo:stack` 可复现真实 API 本地栈、局域网开发资源受限允许来源、`127.0.0.1` 数据库确定性，以及同时钟 replan 证据排序修复。真实字节只用于上传/基础检查，Fake OCR 仍使用 synthetic fixture；真实 OCR、删除策略和报告未提升 | 140 fast、58 PostgreSQL/API/Worker integration、95 apps/web、双 TypeScript、Next production build、migration drift、上传/同一 Case review/Demo/guided/D1/D7 浏览器 Fixture、Mock/API/真实 API 视觉、真实栈烟测、`git diff --check` 与敏感/隐私/暂存范围审计通过；代码批次已推至 `a0d1b79271355ec5b9aecbe81220c30edc64bbbe`，文档批次同轮推送后复核本地/远端一致 |
 | PUSH-022 | 2026-08-16 | `main` | `pushed` | `docs: record first-use diagnosis acceptance` | 发布真实 API Today 首次使用引导、上传/三题原创合成检查双入口、上传缩略图与五步状态、正确侧栏路由及计划/进步/报告事实空状态。三题检查固定不创建 Case、学习记录或报告；实现提交为 `647bf407abad7bc4ad788535d88b991600536ed9`。真实 OCR、真实个性化、真实学习效果、删除策略和异步报告未提升 | 146 fast、59 PostgreSQL/API/Worker integration、98 apps/web、双 TypeScript、Next production build、migration drift、上传/同一 Case review/Demo/guided/D1/D7/首次使用与三题检查 7 条浏览器主链、普通/真实 API 视觉、隐私扫描、真实栈烟测与暂存范围审计通过；本轮文档提交推送后核对本地 `main`、`origin/main` 与 GitHub refs 一致 |
 | PUSH-023 | 2026-08-16 | `main` | `pushed` | `feat: add safe Alibaba OCR provider spike` | 新增默认关闭、仅内部使用的 Alibaba OCR adapter/HTTPS transport seam；只接受 synthetic/desensitized source，输入与配置 fail closed，稳定映射 Provider 错误并隔离原始响应、凭据、URL 查询、warnings 和精确置信度。未接上传、Case、Worker、API 或 UI，未发起真实调用；同时登记 healthy successor 优先复用规则 | 162 fast、59 PostgreSQL/API/Worker integration、98 apps/web、双 TypeScript、Next production build、migration drift、上传与 onboarding 浏览器 Fixture、`git diff --check`、敏感/隐私与暂存范围审计通过；预览 Worker 与 integration 队列竞争、并行 Next fixture 锁均经隔离串行重跑通过；同轮推送并核对本地/远端 SHA 一致 |
+| PUSH-024 | 2026-08-16 | `main` | `pushed` | `feat: integrate official Alibaba education OCR SDK` | 固定官方 SDK `3.1.3`，实现开发态 `RecognizeEduPaperOcr` transport、string/object `Data` 解析、文字块/坐标/置信度归一化及 ignored `.env` smoke CLI。只接受 synthetic/desensitized HTTPS source；未接上传、Case、Worker、API 或 UI，缺少安全新凭据与原创/脱敏可访问图片，未发起真实调用 | 169 fast、59 PostgreSQL/API/Worker integration、98 apps/web、双 TypeScript、Next production build、migration drift、上传/onboarding 浏览器、`git diff --check`、敏感/隐私与暂存范围审计通过；缺凭据 smoke 为 `not_executed`，同轮推送并核对本地/远端 SHA 一致 |
 
 ## 27. 变更日志
+
+### v0.3.32 — 2026-08-16
+
+- 接入官方 `@alicloud/ocr-api20210707@3.1.3`，实现开发态 `RecognizeEduPaperOcr` SDK transport、SDK string/官方示例 object 响应兼容和 `ParsePaperOutput` 归一化。
+- 新增 ignored `.env` 凭据入口与 synthetic/desensitized HTTPS smoke CLI；tracked `.env.example` 只保存空模板。当前缺少可证明已轮换的新凭据和原创/完全脱敏可访问图片，因此真实调用未执行，生产 API/Worker/UI 仍未接线。
+- 169 fast、59 PostgreSQL/API/Worker integration、98 apps/web、双 TypeScript、Next build、migration drift、上传/onboarding 浏览器与隐私扫描通过；同步 PROJECT_MASTER v0.1.39、PRD v0.1.31、DESIGN v0.2.29 与 PUSH-024。真实 OCR、真实学生记录、个性化、学习效果和报告未提升。
 
 ### v0.3.31 — 2026-08-16
 
