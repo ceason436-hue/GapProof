@@ -207,7 +207,12 @@ const resetFixtureState = currentScenario => {
   puts.length = 0;
   gets.length = 0;
 };
-const visitAndInspect = async (page, expectedStatus, expectedPreparePosts = 1, expectedGets = 1) => {
+const visitAndInspect = async (page, expectedStatus, {
+  expectedUploadPosts = 1,
+  expectedUploadPuts = 1,
+  expectedPreparePosts = 1,
+  expectedGets = 1,
+} = {}) => {
   await page.goto(`${webOrigin}/materials/new`, { waitUntil: "networkidle" });
   assert(await page.getByRole("heading", { name: "上传一张错题或作业图片" }).count() === 1, "Default materials page did not render the upload UI.");
   assert(await page.getByText("真实上传会在后续阶段接入", { exact: false }).count() === 0, "Upload route still renders the F0 placeholder.");
@@ -219,18 +224,20 @@ const visitAndInspect = async (page, expectedStatus, expectedPreparePosts = 1, e
     const statusText = await page.locator("[data-upload-status]").textContent().catch(() => null);
     throw new Error(`Inspection UI did not reach ${expectedStatus}. scenario=${scenario}; status=${statusText}; posts=${posts.length}; prepare=${preparePosts.length}; puts=${puts.length}; gets=${gets.length}; server=${serverOutput}`, { cause: error });
   }
-  assert(posts.length === 1, `Expected one upload POST, observed ${posts.length}.`);
-  assert(preparePosts.length === expectedPreparePosts, `Expected ${expectedPreparePosts} prepare POST requests, observed ${preparePosts.length}.`);
-  assert(puts.length === 1, `Expected one PUT request, observed ${puts.length}.`);
-  assert(gets.length >= expectedGets, `Expected at least ${expectedGets} inspection GET requests, observed ${gets.length}.`);
-  if (expectedGets === 0) assert(gets.length === 0, "Terminal prepare response triggered an unnecessary GET.");
-  assert(uuidV7Pattern.test(posts[0].idempotencyKey ?? ""), "Upload intent did not use UUIDv7.");
-  assert(preparePosts.every(post => post.idempotencyKey === posts[0].idempotencyKey), "Prepare changed the upload intent idempotency key.");
-  assert(preparePosts.every(post => JSON.stringify(post.body) === "{}"), "Prepare body was not the exact empty shared DTO.");
-  assert(browserPaths.every(path => path === "/api/v1/source-assets/uploads" || path === uploadPath || path === preparePath || path === inspectionPath), "Browser did not use same-origin API paths.");
-  assert(puts.every(put => put.uploadToken === token), "PUT did not use the short-lived upload token.");
-  assert(puts.every(put => put.contentType === "image/png"), "PUT changed the original Content-Type.");
-  assert(puts.every(put => Buffer.compare(put.body, bytes) === 0), "PUT changed the original bytes.");
+  assert(posts.length === expectedUploadPosts, `${scenario}: expected ${expectedUploadPosts} upload POST requests, observed ${posts.length}.`);
+  assert(preparePosts.length === expectedPreparePosts, `${scenario}: expected ${expectedPreparePosts} prepare POST requests, observed ${preparePosts.length}.`);
+  assert(puts.length === expectedUploadPuts, `${scenario}: expected ${expectedUploadPuts} PUT requests, observed ${puts.length}.`);
+  assert(gets.length >= expectedGets, `${scenario}: expected at least ${expectedGets} inspection GET requests, observed ${gets.length}.`);
+  if (expectedGets === 0) assert(gets.length === 0, `${scenario}: terminal prepare response triggered an unnecessary GET.`);
+  assert(uuidV7Pattern.test(posts[0].idempotencyKey ?? ""), `${scenario}: upload intent did not use UUIDv7.`);
+  assert(posts.every(post => post.idempotencyKey === posts[0].idempotencyKey), `${scenario}: upload POST retry changed the idempotency key.`);
+  assert(posts.every(post => JSON.stringify(post.body) === JSON.stringify(posts[0].body)), `${scenario}: upload POST retry changed the JSON body.`);
+  assert(preparePosts.every(post => post.idempotencyKey === posts[0].idempotencyKey), `${scenario}: prepare changed the upload intent idempotency key.`);
+  assert(preparePosts.every(post => JSON.stringify(post.body) === "{}"), `${scenario}: prepare body was not the exact empty shared DTO.`);
+  assert(browserPaths.every(path => path === "/api/v1/source-assets/uploads" || path === uploadPath || path === preparePath || path === inspectionPath), `${scenario}: browser did not use same-origin API paths.`);
+  assert(puts.every(put => put.uploadToken === token), `${scenario}: PUT retry changed the short-lived upload token.`);
+  assert(puts.every(put => put.contentType === puts[0].contentType && put.contentType === "image/png"), `${scenario}: PUT retry changed the original Content-Type.`);
+  assert(puts.every(put => Buffer.compare(put.body, puts[0].body) === 0 && Buffer.compare(put.body, bytes) === 0), `${scenario}: PUT retry changed the original bytes.`);
   const visibleText = await page.locator("body").innerText();
   assert(!visibleText.includes(token) && !visibleText.includes(assetId) && !visibleText.includes(fileName) && !visibleText.includes(sha256) && !visibleText.includes("objectKey"), "Inspection UI leaked upload internals or server facts.");
   assert(!visibleText.includes("OCR") && !visibleText.includes("置信度"), "Inspection UI exposed unimplemented OCR details.");
@@ -249,17 +256,17 @@ try {
 
   const browser = await chromium.launch({ channel: "msedge", headless: true });
   try {
-    for (const [currentScenario, expectedStatus, expectedPreparePosts, expectedGets] of [
-      ["success", "succeeded", 1],
-      ["low-resolution", "needs_confirmation", 1],
-      ["failed", "failed", 1],
-      ["retryable", "retryable_error", 1],
-      ["prepare-network-unknown", "succeeded", 2],
-      ["prepare-processing", "succeeded", 1, 1],
-      ["prepare-final", "succeeded", 1, 0],
-      ["get-network-unknown", "succeeded", 1],
-      ["post-network-unknown", "succeeded", 1],
-      ["put-network-unknown", "succeeded", 1],
+    for (const [currentScenario, expectedStatus, expectedPreparePosts, expectedGets, expectedUploadPosts, expectedUploadPuts] of [
+      ["success", "succeeded", 1, 1, 1, 1],
+      ["low-resolution", "needs_confirmation", 1, 1, 1, 1],
+      ["failed", "failed", 1, 1, 1, 1],
+      ["retryable", "retryable_error", 1, 1, 1, 1],
+      ["prepare-network-unknown", "succeeded", 2, 1, 1, 1],
+      ["prepare-processing", "succeeded", 1, 1, 1, 1],
+      ["prepare-final", "succeeded", 1, 0, 1, 1],
+      ["get-network-unknown", "succeeded", 1, 1, 1, 1],
+      ["post-network-unknown", "succeeded", 1, 1, 2, 1],
+      ["put-network-unknown", "succeeded", 1, 1, 1, 2],
     ]) {
       resetFixtureState(currentScenario);
       browserPaths = [];
@@ -268,7 +275,12 @@ try {
         const path = new URL(request.url()).pathname;
         if (path.startsWith("/api/v1/")) browserPaths.push(path);
       });
-      const visibleText = await visitAndInspect(page, expectedStatus, expectedPreparePosts, expectedGets ?? 1);
+      const visibleText = await visitAndInspect(page, expectedStatus, {
+        expectedUploadPosts,
+        expectedUploadPuts,
+        expectedPreparePosts,
+        expectedGets,
+      });
       if (currentScenario === "success") {
         assert(visibleText.includes("图片基础检查通过，识别尚未开始"), "Success UI did not show the neutral inspection result.");
         await mkdir(screenshots, { recursive: true });
@@ -303,7 +315,7 @@ try {
       const path = new URL(request.url()).pathname;
       if (path.startsWith("/api/v1/")) browserPaths.push(path);
     });
-    await visitAndInspect(timeoutPage, "timeout", 1);
+    await visitAndInspect(timeoutPage, "timeout");
     await timeoutPage.close();
 
     resetFixtureState("cancel");
