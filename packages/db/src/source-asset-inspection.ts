@@ -26,7 +26,7 @@ function jpegDimensions(bytes: Buffer): Dimensions | null {
     while (offset < bytes.length && bytes[offset] === 0xff) offset += 1;
     if (offset >= bytes.length) return null;
     const marker = bytes[offset++];
-    if (marker === 0xd9 || marker === 0xda) return null;
+    if (marker === undefined || marker === 0xd9 || marker === 0xda) return null;
     if ((marker >= 0xd0 && marker <= 0xd7) || marker === 0x01) continue;
     if (offset + 2 > bytes.length) return null;
     const length = bytes.readUInt16BE(offset);

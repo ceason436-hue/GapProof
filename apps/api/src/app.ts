@@ -2,7 +2,6 @@ import Fastify, {
   type FastifyReply,
   type FastifyRequest,
 } from "fastify";
-import { Type } from "@sinclair/typebox";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { v7 as uuidv7 } from "uuid";
@@ -55,6 +54,7 @@ import {
   type PrepareSourceAssetRequest,
   SourceAssetPrepareQueuedViewSchema,
   type SourceAssetPrepareQueuedView,
+  SourceAssetPrepareViewSchema,
   SourceAssetProcessingViewSchema,
   type SourceAssetProcessingView,
   TaskCompletionViewSchema,
@@ -860,7 +860,7 @@ export async function buildApi(options: BuildApiOptions) {
         params: SourceAssetIdParamsSchema,
         body: PrepareSourceAssetRequestSchema,
         response: {
-          200: apiResponseSchema(Type.Union([SourceAssetPrepareQueuedViewSchema, SourceAssetProcessingViewSchema])),
+          200: apiResponseSchema(SourceAssetPrepareViewSchema),
           202: apiResponseSchema(SourceAssetPrepareQueuedViewSchema),
           "4xx": ApiErrorResponseSchema,
           500: ApiErrorResponseSchema,
