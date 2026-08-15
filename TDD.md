@@ -2,15 +2,15 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.28"
+version: "0.3.29"
 status: "DRAFT_FOR_IMPLEMENTATION"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.35"
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.27"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.36"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.28"
 ---
 
 # 知隙 GapProof 技术设计文档（TDD）
@@ -461,7 +461,7 @@ D1 客观复测 attempts 已冻结为：
 
 F1b Server Component 在服务端使用私有 `GAPPROOF_API_ORIGIN` 组成绝对 URL 并设置 `cache:"no-store"`；浏览器端仍只允许同源 `/api/v1/**`。无参数与 `?source=api` 均进入正式 API 模式，只有 `?source=mock` 可启用合成页面；API 空列表、缺失 current/overview、无效学生时区或配置/网络错误不得回退 Mock。
 
-F1c 为服务端 `currentTaskId` 指向的 ready D1 增加客户端作答：提交前 GET Case 获取权威 `stateVersion`，请求/响应直接消费共享 contracts。一次已确认用户意图生成一个浏览器 UUIDv7 幂等键；`apiPost` 对网络结果未知或显式可重试错误只用同 key/body 重试一次。`VERSION_CONFLICT` 只刷新最新 Case 并要求再次确认，不自动重交；两次网络结果仍未知时锁定选择和提交。D1 的 `support_required` 只显示达到两次自动重排上限、需要老师或家长协助，不声称已接人工服务。D7 后端 attempts 已上线，但当前前端仍只读，须由独立切片接入同一安全交互语义。
+F1c 为服务端 `currentTaskId` 指向的 ready D1/D7 增加客户端作答：提交前 GET Case 获取权威 `stateVersion`，请求/响应直接消费共享 contracts。一次已确认用户意图生成一个浏览器 UUIDv7 幂等键；`apiPost` 对网络结果未知或显式可重试错误只用同 key/body 重试一次。`VERSION_CONFLICT` 只刷新最新 Case 并要求再次确认，不自动重交；两次网络结果仍未知时锁定选择和提交。`support_required` 只显示达到两次自动重排上限、需要老师或家长协助，不声称已接人工服务。
 
 Demo 虚拟时钟接口已冻结为：
 
@@ -1207,15 +1207,18 @@ Serverless 很适合短 API 和自动扩容，但 OCR、多轮模型、报告、
 - 已实现 `GET /v1/students/{studentId}/today` 与 `POST /v1/tasks/{taskId}/submit`；完成干预后在同一事务写入 `intervention_completed { taskId, d1TaskId, d1ScheduledFor }`、完成原任务、创建 `scheduled` 的 D+1 任务并推进到 `d1_scheduled`。`scheduledFor = completedAt + 24h`，`dueAt = scheduledFor + 12h`，mastery 仅为 `pending_retest`。
 - 完成干预的同一 PostgreSQL 事务现通过 pg-boss `fromDrizzle(transaction, sql)` 写入延迟 `retest.due` Job，Job ID 与 D+1 task ID 相同；独立 `RetestDueWorker` 只把指定 Case、指定 `d1_retest` 的 `scheduled → ready`，重复/并发执行只生效一次。
 - 新增 `Clock/SystemClock/FixedClock`、`RetestDueJobData { caseId, taskId }`、`app.demo_clocks`、`demo_clock_advanced` 与迁移 `packages/db/drizzle/0004_goofy_vindicator.sql`；虚拟时钟按 Case 隔离、带版本并受环境开关保护。
-- 已实现任务详情、Today `timeZone/currentTaskId/overview` 与 guided/D1/D7 判别联合；`currentTaskId` 选择 ready D1/D7/guided，overview 为真实只读投影。D7 后端可作答，但当前前端仍只读。
+- 已实现任务详情、Today `timeZone/currentTaskId/overview` 与 guided/D1/D7 判别联合；`currentTaskId` 选择 ready D1/D7/guided，overview 为真实只读投影。guided、D1、D7 前端均按权威 Case 版本和受控写语义可安全作答。
 - 已实现 guided 安全完成与 D1/D7 `POST /v1/tasks/{taskId}/attempts`：权威 Case 版本、UUIDv7 用户意图、私有 `exact-choice-v1` 评分、D7 144h + 12h 调度、`repair_verified`、持久 `replan_count`、两次策略与 `support_required` 封顶。幂等重放/旧 D1 namespace、并发去重、乐观锁、事务回滚、不再入队与公开响应脱敏均有测试。
-- 已实现 `app.source_assets`、冻结 `asset_type/asset_processing_status` 与 0006/0007 migrations；共享上传/prepare/status contracts、幂等 API、HMAC 短期 token、同源内容 PUT、本地目录 StorageAdapter、`source_asset.quality_check` Worker 与前端 `/materials/new` 已形成真实字节上传和确定性图片基础检查闭环。数据库保存必要对象元数据、质量 JSON 与更新时间，文件名不入库，公开响应不暴露对象键/token/文件名/hash/OCR 内容；本地目录适配器与 `image-header-v1` 不是生产 S3、完整图片质量模型或 OCR，也不创建 Case 或学习结论。
+- 已实现 `app.source_assets`、冻结 `asset_type/asset_processing_status` 与 0006/0007 migrations；共享上传/prepare/status/start contracts、幂等 API、HMAC 短期 token、同源内容 PUT、本地目录 StorageAdapter、质量 Worker 与前端 `/materials/new` 已形成真实字节上传、确定性基础检查和显式创建/绑定合成 Case 闭环。上传与检查本身不会自动创建 Case；本地目录适配器与 `image-header-v1` 不是生产 OSS、完整图片质量模型或真实 OCR。
 - 遗留 `run-next` Fake OCR 现只允许 `simulation=true && synthetic=true` 的 Demo Case：API 在入队前拒绝，Worker 在执行前再次拒绝；非 Demo 返回 `DEMO_CASE_REQUIRED` 且不入队、不写证据。该路径仍是固定合成 asset 的 `fake_ocr` / `fake-parse-paper-v1`，不是 OCR Provider。
-- `/materials/demo/review` 是独立无网络合成页面，所有修改和“演示确认”只留在浏览器组件状态；受控 Fixture 断言零 `/api/v1` 请求并覆盖确认、空态、错误态和敏感内部字段缺席。它不消费上传 asset、不创建/推进 Case，也不替代待冻结的 extraction read DTO 与确认写入接口。
-- F0 Mock、默认 API、真实 overview、ready guided 与 D1 客户端提交已完成对应技术门禁。guided 浏览器 Fixture 验证同源提交、Case GET 失败恢复、冲突重新确认和网络未知锁定；D1 `support_required` 仅展示封顶与协助建议。
-- 当前证据为 126 条快速测试、54 条真实 PostgreSQL/API/Worker 集成测试、81 条 apps/web 测试、migration drift、Mock/API/Demo 双视口、guided/Demo/上传/D1 浏览器 Fixture、TypeScript 严格类型检查和 Next.js production build 通过；最终发布前按暂存态复核计数。
+- `/materials/demo/review` 是独立无网络合成页面，所有修改和“演示确认”只留在浏览器组件状态；受控 Fixture 断言零 `/api/v1` 请求并覆盖确认、空态、错误态和敏感内部字段缺席。它不消费上传 asset、不创建/推进 Case，与已实现的同一 Case `/materials/{caseId}/review` 严格分离。
+- 已冻结 `SyntheticExtractionView` 与 `GET /v1/cases/{caseId}/extraction`：只允许同一 Case 的 `awaiting_confirmation` 合成证据，返回 `stateVersion`、`recognitionSource:synthetic_fixture`、`uploadedAssetUsedForRecognition:false` 与公开题干，不暴露工具 warnings、答案键或内部置信度。确认仍使用既有 authoritative version、UUIDv7 幂等键、修正项越界校验与冲突保护。
+- `/materials/{caseId}/review` 以 1s→2s→3s 受控轮询读取同一 Case extraction；确认后依次调用 run-next、hypotheses、probe attempts 和下一次 run-next，导航到 Today guided。每个写入为独立 UUIDv7 意图；同 key/body 只重试一次未知结果，冲突先刷新再由用户重新确认，`NETWORK_UNKNOWN` 后锁定。
+- `bun run demo:stack` 可复现启动 Docker PostgreSQL、迁移/seed、API、Worker、Web 与 `.local/gapproof/uploads`；数据库默认显式使用 `127.0.0.1`，避免 Windows `localhost` 的 IPv4/IPv6 双监听歧义。Next dev 只允许启动脚本发现的本机 IPv4/localhost，不开放通配来源；签名 secret 每次运行随机生成且不输出。
+- `findLatestCaseEvidenceEventByType` 以 `occurred_at DESC, created_at DESC, UUIDv7 id DESC` 确定性选择最新证据，避免两次复测共享业务时钟时第二次 replan 误读第一次事件。
+- 当前证据为 140 条快速测试、58 条真实 PostgreSQL/API/Worker 集成测试、95 条 apps/web 测试、migration drift、上传/同一 Case review/guided/D1/D7/Demo 浏览器 Fixture、Mock/API/Demo 双视口、TypeScript 严格类型检查、Next.js production build、隐私扫描与真实栈烟测通过。
 
-该快照不等于真实 OCR Phase A 完成：真实图片字节可上传到受控本地目录，前端可经监护确认显式创建/绑定合成 Case 并排队受守卫 Fake OCR，但真实 OCR/同一 Case 识别读取确认、真实 AI 干预、真实题库、通知、报告与真实模型 Provider 仍未实现。上传字节不参与 Fake OCR；合成确认页与重排仅是规则化工程骨架，不是现实识别或个性化内容。
+该快照不等于真实 OCR Phase A 完成：真实图片字节可上传到受控本地目录，前端可经监护确认显式创建/绑定同一合成 Case、读取/确认该 Case 的 synthetic extraction 并继续规则化学习路径；但真实 OCR、真实 AI 干预、真实题库、通知、报告与真实模型 Provider 仍未实现。上传字节不参与 Fake OCR；合成确认页与重排仅是规则化工程骨架，不是现实识别或个性化内容。
 
 ### 21.1 Phase A：Thin Slice（先证明闭环）
 
@@ -1599,6 +1602,7 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 7. 新建前端/后端执行任务默认显式指定 `gpt-5.6-luna` 与 `high` 推理强度；新建协调/文档治理任务默认显式指定 `gpt-5.6-sol` 与 `medium` 推理强度。后续迁移与版本继续继承，偏离时必须记录用户指令、主机能力或安全恢复原因。
 8. 本协调目标中的初赛验收只评估项目本身的代码、契约、交互、测试、数据/隐私边界与可复现性；简介、PPT/PDF、视频、报名、提交系统及其他参赛材料不计入完成条件。
 9. 用户已为本项目选择 Codex“完全访问”；后续前端、后端、协调/文档治理版本在平台实际授予的权限内直接完成常规核验、项目文件读写、分支/工作树、构建/测试、精确暂存、提交与既定远端推送，不重复请求批准。平台强制拦截时使用同权限范围内等价安全路径并记录；不得借此绕过安全政策、扩大切片或执行未明确要求的破坏性操作。
+10. 临近比赛截止时，以“风险可控范围内最大化验收价值”为默认切片原则：优先端到端、可点击、可复现的纵向结果，允许同一 bounded slice 同步修改前端、后端、contracts、测试与必要文档；完整切片结束后集中跑全门禁，不为追求极小 diff 拆散主流程。
 
 | Push ID | 日期 | 分支 | 状态 | 提交摘要 | 主要内容 | 验证 |
 |---|---|---|---|---|---|---|
@@ -1622,8 +1626,16 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-018 | 2026-08-15 | `main` | `pushed` | `feat: submit D7 retests safely from Today` | 合并 ready D7 前端安全作答、权威 Case `stateVersion`、UUIDv7、同 key/body 单次未知重试、冲突刷新后重新确认与 `NETWORK_UNKNOWN` 锁定；只显示 `repair_verified` / `replan_required` / `support_required` 中性结果，不开放报告。同步四主文档与完全访问长期治理；显式创建 Case/启动识别、真实 OCR 与异步报告仍未实现 | 130 条快速测试、54 条真实 PostgreSQL/API/Worker 集成测试、88 条 apps/web 测试、Drizzle migration drift、D7/D1/guided/上传/Demo 浏览器 Fixture、Mock/API/Demo 双视口、全仓及 web TypeScript、Next.js production build、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；同轮推送并核对本地/远端 SHA 一致 |
 | PUSH-019 | 2026-08-15 | `main` | `pushed` | `feat: start synthetic recognition from inspected uploads` | 新增已检查 asset 的显式 `synthetic_demo` 启动契约/API：要求 `guardianConfirmed:true`，同事务创建并绑定唯一合成 Case、写幂等记录和排队 run-next；Job 固定 synthetic fixture，上传字节不参与 Fake OCR。source asset 自创建起保留期封顶 7 天；前端按钮、确认后 24h 缩短/主动删除、真实 OCR 仍未实现 | 131 条快速测试、57 条真实 PostgreSQL/API/Worker 集成测试、88 条 apps/web 测试、Drizzle migration drift、全仓及 web TypeScript、Next.js production build、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；同轮推送并核对本地/远端 SHA 一致 |
 | PUSH-020 | 2026-08-15 | `main` | `pushed` | `feat: complete explicit synthetic OCR acceptance flow` | 上传页仅在基础检查通过后显示监护确认与显式“开始识别并创建案例”；使用独立 UUIDv7、同 key/body 单次未知重试及最终锁定。成功仅声明合成 Case 已创建/识别已排队和上传图片未用于识别；不跳转旧 Demo、不泄露内部字段。按 DEC-OCR-ACCEPT-001 达到本轮项目本身初赛验收，真实 OCR/同一 Case 识别确认仍未实现 | 134 条快速测试、57 条真实 PostgreSQL/API/Worker 集成测试、91 条 apps/web 测试、Drizzle migration drift、上传/Demo/guided/D1/D7 浏览器 Fixture、Mock/API/Demo 及显式启动双视口、全仓及 web TypeScript、Next.js production build、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；同轮推送并核对本地/远端 SHA 一致 |
+| PUSH-021 | 2026-08-15 | `main` | `pushed` | `feat: complete same-case synthetic learning flow` | 发布同一 Case extraction 读取/修正/确认与诊断→guided→D1→D7 导航、`bun run demo:stack` 可复现真实 API 本地栈、局域网开发资源受限允许来源、`127.0.0.1` 数据库确定性，以及同时钟 replan 证据排序修复。真实字节只用于上传/基础检查，Fake OCR 仍使用 synthetic fixture；真实 OCR、删除策略和报告未提升 | 140 fast、58 PostgreSQL/API/Worker integration、95 apps/web、双 TypeScript、Next production build、migration drift、上传/同一 Case review/Demo/guided/D1/D7 浏览器 Fixture、Mock/API/真实 API 视觉、真实栈烟测、`git diff --check` 与敏感/隐私/暂存范围审计通过；代码批次已推至 `a0d1b79271355ec5b9aecbe81220c30edc64bbbe`，文档批次同轮推送后复核本地/远端一致 |
 
 ## 27. 变更日志
+
+### v0.3.29 — 2026-08-15
+
+- 冻结同一 Case `SyntheticExtractionView`/GET 契约与持久 extraction 来源；确认写入继续使用权威版本、UUIDv7、幂等重放、冲突保护和修正项边界。
+- 新增同一 Case review 到诊断、guided、D1、D7 的可点击合成路径，以及一键真实 API 本地栈；开发来源限制在本机地址，数据库默认固定 IPv4 loopback，运行时签名密钥不落库、不进日志。
+- 修复两条同业务时间 `retest_evaluated` 的最新证据选择；两次目标用例和完整 58 项数据库/API/Worker 门禁通过。
+- 同步 PROJECT_MASTER v0.1.36、PRD v0.1.28、DESIGN v0.2.26 与 PUSH-021。真实 OCR、确认后 24h/主动删除、正式 30–50 页基准、派生留存、真实个性化/学习效果和异步报告保持 unresolved/deferred。
 
 ### v0.3.28 — 2026-08-15
 

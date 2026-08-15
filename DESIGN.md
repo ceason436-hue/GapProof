@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.25"
+version: "0.2.26"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "本轮项目本身初赛验收标准已达到（仅合成 OCR 工程证据）；PUSH-020 显式可点击启动闭环已通过门禁待发布"
+current_design_stage: "PUSH-021 已发布：真实 API 本地栈与同一 Case 合成识别确认、诊断、guided、D1、D7 可点击闭环完成；真实 OCR 与报告仍 unresolved/deferred"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -86,11 +86,11 @@ upstream_documents:
 
 ### 0.3.2 当前阶段与下一步
 
-**已完成**：学生端“今日”页的桌面视觉结构、颜色角色、主要卡片层级和关键静态内容已确定；默认 API、真实 Today overview、ready guided、ready D1 与 ready D7 安全作答已完成对应构建和自动化门禁。写入均使用权威 Case 版本、共享 contracts 和 UUIDv7 幂等意图；D7 Fixture 覆盖成功、冲突重新确认与两次未知结果锁定。无参数入口展示服务端 7 日足迹、nullable 周目标、待确认数、脱敏进展与下次检查；合成 Mock 仅显式启用。`/materials/new` 已完成真实单图选择、校验、上传、异步基础检查；`/materials/demo/review` 是持久 Demo 标记的无网络合成识别确认演示。
+**已完成**：学生端“今日”页桌面视觉结构与 Stitch V1.1 冻结裁切保持不变；默认 API、真实 Today overview、ready guided、D1、D7 安全作答均已通过门禁。`/materials/new` 已完成真实单图选择、上传、基础检查、监护确认与显式创建/绑定同一合成 Case；`/materials/{caseId}/review` 读取、修正和确认同一 Case 的 synthetic extraction，并继续诊断、确认小题、干预与 Today。写入使用权威 Case 版本、共享 contracts、UUIDv7、冲突重新确认和 `NETWORK_UNKNOWN` 锁定；合成 Mock 仅显式启用，独立 `/materials/demo/review` 仍是零网络 Fixture。
 
-**尚未完成**：真实模糊度、方向、缺页与恶意文件检查，真实 OCR 与同一上传 Case 的识别结果读取/确认写入；其他学生 P0 页面、家长端页面、Logo 紧裁/SVG/Favicon 与最终品牌规范、完整交互原型。异步报告本轮 deferred。
+**尚未完成**：真实模糊度、方向、缺页与恶意文件检查，阿里云真实 OCR、原图确认后 24h/主动删除、真实图片题目区域展示、其他学生/家长页面、Logo 紧裁/SVG/Favicon 与最终品牌规范。异步报告本轮 deferred。
 
-**下一步**：本轮合成项目验收已达到；后续若继续工程能力，优先选择真实 OCR Provider Spike 或同一 Case 识别读取/确认 UI，并继续保持真实/合成状态隔离。任何新字段不得从视觉稿或合成 Fixture 反推业务状态。
+**下一步**：项目本身 P0 合成纵向闭环已达到；暂停扩展并由用户选择 P1，优先候选为真实 OCR Provider Spike、原图删除/主动删除或现场 Demo 健康与故障恢复。任何新字段不得从视觉稿或合成 Fixture 反推业务状态。
 
 ### 0.4 设计底线
 
@@ -480,9 +480,9 @@ Tab 规则：
 
 **首个主操作**：“检查图片内容”。基础检查成功后的独立主操作为“开始识别并创建案例”。
 
-当前 `[PROTOTYPE]` 页面开放单张 JPEG/PNG/WebP、1B–10MiB 的“开始上传”。上传期间锁定重复提交；上传后自动进入基础检查，依次展示 preparing/queued/processing，并在 30 秒内按 1s→2s→3s 读取权威状态；隐藏或离页停止轮询。低分辨率等确定性原因进入需确认，失败/可重试/超时均有中性恢复文案；成功只显示“图片基础检查通过，识别尚未开始，不会自动生成学习结论”，并允许重新选择。页面不得显示短期 token、对象键、内部 asset ID、服务端文件名、hash、OCR 文本或置信度；当前还不能进入 `/materials/:id/review` 或展示 OCR 结果。
+当前 `[PROTOTYPE]` 页面开放单张 JPEG/PNG/WebP、1B–10MiB 的“开始上传”。上传期间锁定重复提交；上传后自动进入基础检查，依次展示 preparing/queued/processing，并在 30 秒内按 1s→2s→3s 读取权威状态；隐藏或离页停止轮询。低分辨率等确定性原因进入需确认，失败/可重试/超时均有中性恢复文案；成功只显示“图片基础检查通过，识别尚未开始，不会自动生成学习结论”。页面不得显示短期 token、对象键、内部 asset/Case ID、服务端文件名、hash、OCR 文本或置信度；显式创建成功后只提供“查看并确认识别内容”导航，Case ID 仅作为内部路由参数。
 
-基础检查成功不得自动创建/绑定 Case 或启动 OCR。页面先展示处理说明，再由用户显式点击“开始识别并创建案例”；该动作将来必须对应独立、幂等、可审计的用户意图。真实 OCR 启动前还要展示阿里云处理告知、不得用于训练的说明和监护确认状态；未满 18 岁未确认时按钮不可用。当前这些真实写入与状态尚未实现，不能用 Demo 本地确认替代。
+基础检查成功不得自动创建/绑定 Case 或启动识别。页面先展示处理说明，再由用户显式点击“开始识别并创建案例”；当前该动作已对应独立 UUIDv7、幂等、可审计的 synthetic_demo 意图，要求监护确认并原子绑定同一 Case。它持续说明上传图片字节不会用于 Fake OCR，不能替代真实 OCR。未来真实 OCR 启动前仍必须展示阿里云处理告知、不得用于训练说明与监护确认事实；当前 Provider 与真实处理告知执行尚未实现。
 
 **错误文案示例**：
 
@@ -494,6 +494,8 @@ Tab 规则：
 ### 5.4 识别结果确认 `/materials/:id/review`
 
 **目标**：让用户看见系统识别了什么，并修正不确定内容。
+
+**当前 `[PROTOTYPE]` 实现**：路由为 `/materials/{caseId}/review`，醒目标记“合成识别演示”“上传图片未用于识别”“不是真实学生 OCR”。页面按 1s→2s→3s 读取同一 Case 的 `SyntheticExtractionView`，允许修正题干、逐项确认并继续诊断/确认小题/干预；隐藏或离页停止轮询。确认、run-next 和作答使用独立 UUIDv7、权威 Case 版本、冲突重新确认与网络未知锁定。由于上传字节未进入 Fake OCR，当前不展示原始图片或宣称题目区域定位。
 
 **桌面布局**：
 
@@ -1776,6 +1778,13 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 ---
 
 ## 22. 版本记录
+
+### v0.2.26 — 2026-08-15
+
+- `/materials/new` 显式创建成功后新增“查看并确认识别内容”；内部路由保持同一 Case，不向页面正文暴露 ID。
+- 新增 `/materials/{caseId}/review` 合成识别确认页：受控轮询、题干修正/逐项确认、诊断与 probe、进入 guided/Today；持续披露 synthetic fixture、上传图片未用于识别和真实 Provider 后置。
+- 加载、冲突、网络未知、合成边界和恢复文案通过浏览器 Fixture；Today Stitch V1.1 深色卡书本越界裁切未改变。
+- 同步 PROJECT_MASTER v0.1.36、PRD v0.1.28、TDD v0.3.29 与 PUSH-021。真实 OCR、真实图片定位、删除入口、学习效果和报告仍未实现。
 
 ### v0.2.25 — 2026-08-15
 
