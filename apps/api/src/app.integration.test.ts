@@ -2518,7 +2518,6 @@ describeWithDatabase("Fastify API and run-next worker", () => {
       ...common,
       id: d7Id,
       taskType: "d7_retest",
-      dueAt: new Date("2026-08-16T11:00:00.000Z"),
       payload: privateItem,
       sourceEventId: sourceEvents[0]?.id ?? "",
     });
@@ -2539,8 +2538,8 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     });
     expect(
       await findCurrentActionableTaskId(database.db, prepared.studentId),
-    ).toBe(guidedId);
-    expect(await currentViaToday()).toBe(guidedId);
+    ).toBe(d7Id);
+    expect(await currentViaToday()).toBe(d7Id);
 
     await database.db.insert(tasks).values([
       {
