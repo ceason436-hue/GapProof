@@ -2,15 +2,15 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.27"
+version: "0.3.28"
 status: "DRAFT_FOR_IMPLEMENTATION"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.34"
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.26"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.35"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.27"
 ---
 
 # 知隙 GapProof 技术设计文档（TDD）
@@ -1215,7 +1215,7 @@ Serverless 很适合短 API 和自动扩容，但 OCR、多轮模型、报告、
 - F0 Mock、默认 API、真实 overview、ready guided 与 D1 客户端提交已完成对应技术门禁。guided 浏览器 Fixture 验证同源提交、Case GET 失败恢复、冲突重新确认和网络未知锁定；D1 `support_required` 仅展示封顶与协助建议。
 - 当前证据为 126 条快速测试、54 条真实 PostgreSQL/API/Worker 集成测试、81 条 apps/web 测试、migration drift、Mock/API/Demo 双视口、guided/Demo/上传/D1 浏览器 Fixture、TypeScript 严格类型检查和 Next.js production build 通过；最终发布前按暂存态复核计数。
 
-该快照不等于 Phase A 完成：真实图片字节可上传到受控本地目录，显式合成识别启动后端可创建/绑定 Case 并排队受守卫 Fake OCR，但前端按钮、真实 OCR/识别确认、真实 AI 干预、真实题库、通知、报告、真实模型 Provider 和上传到修复证明的完整端到端 Playwright Demo 仍未实现。上传字节不参与 Fake OCR；两次差异化重排仅是规则化合成骨架，不是现实个性化内容。
+该快照不等于真实 OCR Phase A 完成：真实图片字节可上传到受控本地目录，前端可经监护确认显式创建/绑定合成 Case 并排队受守卫 Fake OCR，但真实 OCR/同一 Case 识别读取确认、真实 AI 干预、真实题库、通知、报告与真实模型 Provider 仍未实现。上传字节不参与 Fake OCR；合成确认页与重排仅是规则化工程骨架，不是现实识别或个性化内容。
 
 ### 21.1 Phase A：Thin Slice（先证明闭环）
 
@@ -1621,8 +1621,16 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-017 | 2026-08-15 | `main` | `pushed` | `feat: complete guided tasks and cap retest replans` | 合并 guided 安全完成、ready D7 服务端评分、`repair_verified`、持久两次差异化重排与 `support_required` 封顶；同步五项最终产品决策与严格 `report_ready`。D7 前端、真实 OCR、显式创建 Case/启动识别、异步报告仍未实现；规则内容仍为合成骨架 | 126 条快速测试、54 条真实 PostgreSQL/API/Worker 集成测试、81 条 apps/web 测试、Drizzle migration drift、guided/D1/上传/Demo 浏览器 Fixture、Mock/API/Demo 双视口、全仓 TypeScript、Next.js production build、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；同轮推送并核对本地/远端 SHA 一致 |
 | PUSH-018 | 2026-08-15 | `main` | `pushed` | `feat: submit D7 retests safely from Today` | 合并 ready D7 前端安全作答、权威 Case `stateVersion`、UUIDv7、同 key/body 单次未知重试、冲突刷新后重新确认与 `NETWORK_UNKNOWN` 锁定；只显示 `repair_verified` / `replan_required` / `support_required` 中性结果，不开放报告。同步四主文档与完全访问长期治理；显式创建 Case/启动识别、真实 OCR 与异步报告仍未实现 | 130 条快速测试、54 条真实 PostgreSQL/API/Worker 集成测试、88 条 apps/web 测试、Drizzle migration drift、D7/D1/guided/上传/Demo 浏览器 Fixture、Mock/API/Demo 双视口、全仓及 web TypeScript、Next.js production build、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；同轮推送并核对本地/远端 SHA 一致 |
 | PUSH-019 | 2026-08-15 | `main` | `pushed` | `feat: start synthetic recognition from inspected uploads` | 新增已检查 asset 的显式 `synthetic_demo` 启动契约/API：要求 `guardianConfirmed:true`，同事务创建并绑定唯一合成 Case、写幂等记录和排队 run-next；Job 固定 synthetic fixture，上传字节不参与 Fake OCR。source asset 自创建起保留期封顶 7 天；前端按钮、确认后 24h 缩短/主动删除、真实 OCR 仍未实现 | 131 条快速测试、57 条真实 PostgreSQL/API/Worker 集成测试、88 条 apps/web 测试、Drizzle migration drift、全仓及 web TypeScript、Next.js production build、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；同轮推送并核对本地/远端 SHA 一致 |
+| PUSH-020 | 2026-08-15 | `main` | `pushed` | `feat: complete explicit synthetic OCR acceptance flow` | 上传页仅在基础检查通过后显示监护确认与显式“开始识别并创建案例”；使用独立 UUIDv7、同 key/body 单次未知重试及最终锁定。成功仅声明合成 Case 已创建/识别已排队和上传图片未用于识别；不跳转旧 Demo、不泄露内部字段。按 DEC-OCR-ACCEPT-001 达到本轮项目本身初赛验收，真实 OCR/同一 Case 识别确认仍未实现 | 134 条快速测试、57 条真实 PostgreSQL/API/Worker 集成测试、91 条 apps/web 测试、Drizzle migration drift、上传/Demo/guided/D1/D7 浏览器 Fixture、Mock/API/Demo 及显式启动双视口、全仓及 web TypeScript、Next.js production build、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；同轮推送并核对本地/远端 SHA 一致 |
 
 ## 27. 变更日志
+
+### v0.3.28 — 2026-08-15
+
+- 前端复用共享 start-recognition schema：仅成功基础检查显示监护确认与显式按钮；start intent 使用独立 UUIDv7、同 key/body 一次未知重试，最终未知锁定。
+- 浏览器 Fixture 从真实选择文件、上传、prepare、轮询进入 start POST，覆盖成功、两次未知锁定与 already-bound 明确重试；断言 same-origin、精确 DTO、start/upload key 分离及内部字段不泄露。
+- 新增 `source-recognition-start-success` 双视口截图，持久标记合成演示与上传图片未用于识别；不改变 Today Stitch V1.1 冻结裁切。
+- 134 fast、57 PostgreSQL/API/Worker integration、91 apps/web、双 TypeScript、Next production build、migration drift 和全部浏览器/视觉门禁通过。同步 PROJECT_MASTER v0.1.35、PRD v0.1.27、DESIGN v0.2.25 与 PUSH-020；本轮合成验收达到，不提升真实 OCR/学习效果状态。
 
 ### v0.3.27 — 2026-08-15
 

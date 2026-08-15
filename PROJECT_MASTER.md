@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.34"
+version: "0.1.35"
 status: "ACTIVE"
-current_stage: "项目本身初赛验收冲刺；PUSH-019 显式合成识别启动后端已通过门禁待发布；前端可点击入口仍待接入"
+current_stage: "本轮项目本身初赛验收标准已达到（仅合成 OCR 工程证据）；PUSH-020 显式可点击启动闭环已通过门禁待发布"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -144,7 +144,7 @@ next_action:
 
 `[FACT]` GOAI 无界应用赛道参赛手册列出的初赛截止日期为 2026-08-16；具体当天截止时刻、入口、文件大小及后续通知仍须在官网、提交系统或官方群再次核对。
 
-`[DECISION]` 当前处于：**项目本身初赛验收冲刺；学生端“今日”页默认入口已接入真实 API，ready guided、D1 与 D7 均有受控提交；D7 客观复测通过仅显示 `repair_verified` 中性结果，失败最多两次规则化合成重排后进入 `support_required`。当前初赛项目验收允许使用醒目标注的合成 OCR Demo；真实阿里云 OCR 后置。图片基础检查成功后的显式合成识别启动 API 已能原子创建/绑定 Case 并排队受守卫 Fake OCR，但前端“开始识别并创建案例”按钮仍未接入；上传字节不参与识别。异步报告不属于本轮项目验收；`report_ready` 仅保留“报告已生成、有权威引用且当前可读”的严格语义**。
+`[DECISION]` 当前处于：**本轮项目本身初赛验收标准已达到，但 OCR 证据严格限定为醒目标注的合成工程 Demo。学生端“今日”页默认 API 已接入 ready guided、D1 与 D7 受控提交；D7 通过仅显示 `repair_verified`，失败最多两次规则化合成重排后进入 `support_required`。上传页在基础检查通过后提供监护确认与显式“开始识别并创建案例”，同源 API 原子创建/绑定合成 Case 并排队受守卫 Fake OCR；上传图片字节不参与识别，真实阿里云 OCR 后置。异步报告不属于本轮验收；`report_ready` 仍只表示报告已生成、有权威引用且当前可读**。
 
 ### 1.2 已完成
 
@@ -188,7 +188,7 @@ next_action:
 - `[PLANNED]` 尚未建立 30–40 个技能节点及 12 个深度节点的图谱 V0.1。
 - `[PLANNED]` 尚未制作比赛用原创模拟试卷、合成学生轨迹和独立金标集。
 - `[PLANNED]` 尚未确认至少一位英语教育背景人员能否短时抽检核心金标内容。
-- `[PROTOTYPE]` 已建立最小后端 Thin Slice，并完成真实图片字节上传、确定性图片 header/尺寸质量检查、显式合成识别启动 API、受 Demo 守卫的 Fake OCR、无网络合成识别确认演示、确定性干预生成、guided/D1/D7 前端安全提交、D1/D7 后端评分及两次规则化重排封顶；尚未形成从真实 OCR 识别到修复证明的完整端到端 Demo。显式启动前端按钮、识别结果读取/确认写入、真实 OCR/AI 干预、真实题库、真实个性化内容与通知仍未实现；异步报告本轮 deferred。
+- `[PROTOTYPE]` 已建立本轮合成验收 Thin Slice：真实图片字节上传与基础检查后，用户经监护确认显式启动合成 Case/Fake OCR；另有醒目标注、无网络的合成识别确认演示；随后已有确定性干预、guided/D1/D7 前端安全提交、服务端评分及两次规则化重排封顶证据。它满足 DEC-OCR-ACCEPT-001 的本轮项目验收，但不是同一上传 Case 的识别读取/确认 UI，也不证明真实 OCR/AI、真实题库、个性化内容、人工服务或学习效果；异步报告本轮 deferred。
 - `[PROTOTYPE]` 学生端“今日”页 F0 Mock、F1b 只读 API、F1c ready D1 客户端作答及真实概览投影已完成对应技术门禁；受控 HTTP 浏览器 Fixture 已证明成功、冲突和网络未知三条交互边界。默认入口现为 API，只有显式 `?source=mock` 使用合成页面；业务主闭环仍未完成，其余学生 P0 页面、家长端页面和评委最小页仍未完成。
 - `[PLANNED]` 尚未完成正式 500 字简介、初赛 PPT、视频、README、数据卡、依赖清单和合规一页纸。
 - `[PLANNED]` 尚未产生可报告的工程评测结果或真实学生学习效果。
@@ -2061,7 +2061,7 @@ review_date:
 | 合成 Case | `[PROTOTYPE]` | 已完成 1 个原创合成 Case 及低置信、复测失败重排、D+7 成功分支；仍需扩充同题同错不同根因与回归集 | 数据 Schema/教材映射 |
 | 学生“今日”页视觉基线 | `[PROTOTYPE]` | 已选定 Stitch 桌面稿；默认 API、真实概览及 guided、ready D1、ready D7 安全作答已通过技术门禁，合成 Mock 仅显式启用；冻结书本越界裁切保持不变 | DESIGN v0.2.23 |
 | 其余学生/家长关键页设计 | `[PLANNED]` | 覆盖主闭环并遵循今日页设计准则 | 视觉基线 |
-| 可点击 Thin Slice | `[PLANNED]` | 上传到修复证明全链路 | 设计/开发 |
+| 可点击 Thin Slice | `[PROTOTYPE]` | 本轮合成验收链已覆盖上传/基础检查、显式创建 Case/合成识别启动、合成确认演示、干预与 D1/D7；真实 OCR 与同一上传 Case 的识别确认 UI 未完成 | 真实 Provider/识别读取与确认写入 |
 | 数据与合规页 | `[PLANNED]` | 类型、来源、授权、脱敏、删除、边界 | 数据选择 |
 | Demo 视频 | `[PLANNED]` | 3–4 分钟、事件回放标识、备用 | 原型稳定 |
 | 一致性审计 | `[PLANNED]` | 简介/PPT/视频/代码状态一致 | 全材料 |
@@ -2118,6 +2118,13 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.35 — 2026-08-15
+
+- `/materials/new` 在 `succeeded + quality.passed` 后显示持久合成披露、监护确认与精确“开始识别并创建案例”按钮；未确认、needs_confirmation、failed 或 timeout 均不得启动。
+- 显式点击使用独立 UUIDv7 start intent；同 key/body 只重试一次未知结果，第二次未知后锁定。成功只显示“案例已创建，合成识别已排队/上传图片未用于识别”，不显示 assetId/caseId/jobId、对象键、文件名、hash、token 或 OCR 内容，也不自动跳转无关联 Demo 页。
+- 134 fast、57 PostgreSQL/API/Worker integration、91 apps/web、双 TypeScript、Next production build、migration drift、上传/Demo/guided/D1/D7 浏览器 Fixture与 Mock/API/Demo 双视口通过；新增显式启动成功 1440×900/1366×768 证据。
+- 本轮项目本身初赛验收按 DEC-OCR-ACCEPT-001 判定达到；该结论不证明真实 OCR、同一 Case 识别读取/确认、30–50 页基准、派生留存、真实个性化或学习效果。同步 PRD v0.1.27、TDD v0.3.28、DESIGN v0.2.25 与 PUSH-020。
 
 ### v0.1.34 — 2026-08-15
 
