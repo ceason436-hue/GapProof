@@ -2524,8 +2524,8 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     });
     expect(
       await findCurrentActionableTaskId(database.db, prepared.studentId),
-    ).toBeNull();
-    expect(await currentViaToday()).toBeNull();
+    ).toBe(d7Id);
+    expect(await currentViaToday()).toBe(d7Id);
 
     await database.db.insert(tasks).values({
       ...common,
