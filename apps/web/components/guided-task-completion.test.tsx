@@ -1,7 +1,11 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
-import { GuidedTaskCompletion, toCaseErrorState, toSubmitErrorState } from "./guided-task-completion";
+import { describe, expect, it, vi } from "vitest";
+import { GuidedTaskCompletion, refreshTodayAfterConfirmedSubmit, toCaseErrorState, toSubmitErrorState } from "./guided-task-completion";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}));
 
 const task = {
   id: "0198b111-1111-7000-8000-000000000012",
@@ -38,5 +42,11 @@ describe("GuidedTaskCompletion", () => {
   it("keeps Case sync failures separate from an unknown submitted result", () => {
     expect(toCaseErrorState(new TypeError("case read failed"))).toMatchObject({ kind: "case_error", code: "CASE_SYNC_FAILED" });
     expect(toSubmitErrorState(new TypeError("submit result unknown"))).toMatchObject({ kind: "error", code: "NETWORK_UNKNOWN" });
+  });
+
+  it("refreshes Today after a confirmed successful submission", () => {
+    const refresh = vi.fn();
+    refreshTodayAfterConfirmedSubmit(refresh);
+    expect(refresh).toHaveBeenCalledOnce();
   });
 });

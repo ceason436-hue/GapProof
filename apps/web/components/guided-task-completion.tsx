@@ -1,6 +1,7 @@
 "use client";
 
 import type { GuidedInterventionTaskView } from "@gapproof/contracts";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ApiClientError } from "@/lib/api-client";
 import { formatTaskDateTime } from "@/lib/today-adapter";
@@ -19,6 +20,10 @@ type CompletionState =
   | { kind: "success"; scheduledFor: string }
   | { kind: "case_error"; code: string; requestId?: string; retryable?: boolean }
   | { kind: "error"; code: string; requestId?: string; retryable?: boolean };
+
+export function refreshTodayAfterConfirmedSubmit(refresh: () => void) {
+  refresh();
+}
 
 export function toCaseErrorState(error: unknown): Extract<CompletionState, { kind: "case_error" }> {
   if (error instanceof ApiClientError) {
@@ -57,6 +62,7 @@ function errorMessage(state: Extract<CompletionState, { kind: "error" }>) {
 }
 
 export function GuidedTaskCompletion({ task, timeZone }: { task: GuidedInterventionTaskView; timeZone: string }) {
+  const router = useRouter();
   const requiredStepIds = task.steps.map(step => step.id);
   const [expectedVersion, setExpectedVersion] = useState<number | null>(null);
   const [completedStepIds, setCompletedStepIds] = useState<string[]>([]);
@@ -108,6 +114,7 @@ export function GuidedTaskCompletion({ task, timeZone }: { task: GuidedIntervent
     try {
       const response = await submitGuidedTask(task.id, intent.body, intent.idempotencyKey);
       setState({ kind: "success", scheduledFor: response.data.scheduledRetest.scheduledFor });
+      refreshTodayAfterConfirmedSubmit(router.refresh);
     } catch (error) {
       if (error instanceof ApiClientError && error.response.error.code === "VERSION_CONFLICT") {
         try {

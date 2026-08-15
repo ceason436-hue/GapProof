@@ -56,6 +56,11 @@ const currentD7 = {
   taskType: "d7_retest",
   item: retestItem("d7-current"),
 };
+const currentD1 = {
+  ...taskBase("0198b111-1111-7000-8000-000000000015", "ready", "明日复习新题检查"),
+  taskType: "d1_retest",
+  item: retestItem("d1-current"),
+};
 
 const overview = ({ hasStartedJourney = true, completedToday = 0, weeklyGoal = null, pendingConfirmationCount = 0, recentProgress = [], nextCheck = null } = {}) => ({
   hasStartedJourney,
@@ -117,6 +122,39 @@ const fixtures = {
         dueAt: scheduledD1.dueAt,
         estimatedMinutes: scheduledD1.estimatedMinutes,
       },
+    }),
+  },
+  "current-d1": {
+    studentId,
+    timeZone: "Asia/Tokyo",
+    currentTaskId: currentD1.id,
+    tasks: [currentD1, scheduledD7],
+    overview: overview({
+      weeklyGoal: { targetDays: 5, completedDays: 2 },
+      nextCheck: {
+        taskId: scheduledD7.id,
+        taskType: "d7_retest",
+        title: scheduledD7.title,
+        scheduledFor: scheduledD7.scheduledFor,
+        dueAt: scheduledD7.dueAt,
+        estimatedMinutes: scheduledD7.estimatedMinutes,
+      },
+    }),
+  },
+  completed: {
+    studentId,
+    timeZone: "Asia/Shanghai",
+    currentTaskId: null,
+    tasks: [],
+    overview: overview({
+      completedToday: 2,
+      weeklyGoal: { targetDays: 5, completedDays: 2 },
+      recentProgress: [{
+        eventId: "0198b111-1111-7000-8000-000000000031",
+        caseId,
+        kind: "practice_completed",
+        occurredAt: "2026-08-16T01:00:00.000Z",
+      }],
     }),
   },
   empty: {
@@ -184,9 +222,9 @@ try {
   try {
     for (const [state, fixture] of Object.entries(fixtures)) {
       fixtureName = state;
-      for (const [width, height] of [[1440, 900], [1366, 768]]) {
+      for (const [width, height] of [[1440, 900], [1366, 768], [768, 1024], [390, 844]]) {
         const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
-        if (state === "current-guided" || state === "current-d7") {
+        if (state === "current-guided" || state === "current-d1" || state === "current-d7") {
           await page.route(`${webOrigin}/api/v1/cases/${caseId}`, async route => {
             if (route.request().method() !== "GET") {
               await route.fallback();
@@ -199,7 +237,7 @@ try {
                 data: {
                   id: caseId,
                   studentId,
-                  state: state === "current-d7" ? "d7_scheduled" : "intervention_active",
+                  state: state === "current-d7" ? "d7_scheduled" : state === "current-d1" ? "d1_scheduled" : "intervention_active",
                   stateVersion: 4,
                   title: "Synthetic guided case",
                   simulation: true,
@@ -216,13 +254,18 @@ try {
 
         const expectedSelector = state === "current-guided"
           ? '[data-current-task-type="guided_intervention"]'
+          : state === "current-d1"
+            ? '[data-current-task-type="d1_retest"]'
           : state === "current-d7"
             ? '[data-current-task-type="d7_retest"]'
           : state === "scheduled-null"
             ? '[data-current-task="none"]'
-            : '[data-first-use-today]';
+            : state === "completed"
+              ? '[data-completed-today="true"]'
+              : '[data-first-use-today]';
         await page.locator(expectedSelector).waitFor();
         if (state === "current-guided") await page.locator('[data-guided-task-state="idle"]').waitFor();
+        if (state === "current-d1") await page.locator('[data-d1-attempt-state="idle"]').waitFor();
         if (state === "current-d7") await page.locator('[data-d7-attempt-state="idle"]').waitFor();
         if (state !== "empty" && await page.locator("[data-today-overview]").count() !== 1) {
           throw new Error(`Default Today entry did not render the API overview for ${state}.`);
@@ -233,6 +276,50 @@ try {
         }
         if (state === "scheduled-null" && await page.locator('[data-task-status="scheduled"]').count() !== 2) {
           throw new Error("Scheduled-only fixture did not render both D1 and D7 tasks.");
+        }
+        if (state !== "empty") {
+          const structure = await page.locator("[data-live-today-dashboard]").evaluate(dashboard => {
+            const grid = dashboard.querySelector(":scope > .today-grid");
+            const main = grid?.querySelector(":scope > .main-column");
+            const right = grid?.querySelector(":scope > .right-column");
+            const hero = main?.querySelector(":scope > .hero-card");
+            const overviewPanel = main?.querySelector(":scope > .overview");
+            const footprint = right?.querySelector(":scope > .footprint");
+            const continuation = right?.querySelector(":scope > .continue");
+            const nextCheck = right?.querySelector(":scope > .next-check");
+            if (!(grid instanceof HTMLElement) || !(main instanceof HTMLElement) || !(right instanceof HTMLElement) ||
+                !(hero instanceof HTMLElement) || !(overviewPanel instanceof HTMLElement) ||
+                !(footprint instanceof HTMLElement) || !(continuation instanceof HTMLElement) || !(nextCheck instanceof HTMLElement)) {
+              return null;
+            }
+            const gridStyle = getComputedStyle(grid);
+            const heroStyle = getComputedStyle(hero);
+            const heroRect = hero.getBoundingClientRect();
+            const footprintRect = footprint.getBoundingClientRect();
+            return {
+              gridDisplay: gridStyle.display,
+              gridColumns: gridStyle.gridTemplateColumns,
+              gridGap: gridStyle.columnGap,
+              heroBackground: heroStyle.backgroundColor,
+              alignedColumns: Math.abs(heroRect.top - footprintRect.top) < 1,
+              rightFollowsMain: footprintRect.top >= main.getBoundingClientRect().bottom,
+              mainChildren: [...main.children].map(element => element.className),
+              rightChildren: [...right.children].map(element => element.className),
+            };
+          });
+          const desktopStructureValid = width > 900
+            ? structure?.gridDisplay === "grid" && structure.gridGap === "40px" && structure.alignedColumns &&
+              structure.gridColumns.trim().split(/\s+/).length === 2
+            : width > 640
+              ? structure?.gridDisplay === "grid" && structure.rightFollowsMain && structure.gridColumns.trim().split(/\s+/).length === 1
+              : structure?.gridDisplay === "block" && structure.rightFollowsMain;
+          if (!structure || !desktopStructureValid ||
+              structure.heroBackground !== "rgb(28, 28, 30)" ||
+              structure.mainChildren.length !== 2 || !structure.mainChildren[0].includes("hero-card") || !structure.mainChildren[1].includes("overview") ||
+              structure.rightChildren.length !== 3 || !structure.rightChildren[0].includes("footprint") ||
+              !structure.rightChildren[1].includes("continue") || structure.rightChildren[2] !== "next-check") {
+            throw new Error(`${state} ${width}x${height} did not preserve the frozen Today skeleton: ${JSON.stringify(structure)}`);
+          }
         }
 
         const audit = await page.evaluate(() => {
@@ -254,7 +341,7 @@ try {
             attemptsLinks: document.querySelectorAll('a[href*="/attempts"]').length,
           };
         });
-        if (audit.windowScrollY !== 0 || audit.horizontalOverflow || audit.forms || audit.attemptsLinks ||
+        if (audit.horizontalOverflow || audit.forms || audit.attemptsLinks ||
             audit.before.topbarTop !== audit.after.topbarTop || audit.before.sidebarTop !== audit.after.sidebarTop) {
           throw new Error(`${state} ${width}x${height} regression: ${JSON.stringify(audit)}`);
         }

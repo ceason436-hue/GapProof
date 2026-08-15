@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { d7AttemptResultCopy } from "./d7-attempt-panel";
+import { describe, expect, it, vi } from "vitest";
+import { d7AttemptResultCopy, refreshTodayAfterConfirmedD7Submit } from "./d7-attempt-panel";
 
 describe("D7 attempt result mapping", () => {
   it.each([
@@ -11,5 +11,11 @@ describe("D7 attempt result mapping", () => {
     expect(result.title).toBe(title);
     expect(result.detail).toContain(detail);
     expect(`${result.title} ${result.detail}`).not.toMatch(/报告|永久掌握|真实个性化|answerKey|scoringMethod|0198b111|服务端|Case/);
+  });
+
+  it("refreshes Today after a confirmed successful submission", () => {
+    const refresh = vi.fn();
+    refreshTodayAfterConfirmedD7Submit(refresh);
+    expect(refresh).toHaveBeenCalledOnce();
   });
 });

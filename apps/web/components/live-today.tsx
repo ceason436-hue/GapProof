@@ -4,6 +4,7 @@ import { AppShell } from "./app-shell";
 import { D1AttemptPanel } from "./d1-attempt-panel";
 import { D7AttemptPanel } from "./d7-attempt-panel";
 import { GuidedTaskCompletion } from "./guided-task-completion";
+import { Icon } from "./icons";
 import { ApiClientError } from "@/lib/api-client";
 import { WebConfigurationError } from "@/lib/runtime-config";
 import {
@@ -39,9 +40,9 @@ const progressCopy: Record<TodayOverview["recentProgress"][number]["kind"], stri
   plan_adjusted: "后续学习安排已更新",
 };
 
-function OverviewActivity({ overview }: { overview: TodayOverview }) {
-  return <section className="overview-activity" aria-labelledby="activity-title">
-    <h3 id="activity-title">本周学习足迹</h3>
+export function TodayFootprint({ overview }: { overview: TodayOverview }) {
+  return <section className="footprint overview-activity" aria-labelledby="activity-title">
+    <h2 id="activity-title">本周学习足迹</h2>
     <div className="day-grid server-day-grid" role="list" aria-label="本周学习足迹">
       {overview.activityDays.map((day, index) => <span
         className={`${activityLevel(day.completedTaskCount)}${index === overview.activityDays.length - 1 ? " today" : ""}`}
@@ -53,6 +54,7 @@ function OverviewActivity({ overview }: { overview: TodayOverview }) {
       />)}
     </div>
     <p>最右侧是今天；每天完成的任务越多，颜色越深。</p>
+    <OverviewGoal overview={overview}/>
   </section>;
 }
 
@@ -84,11 +86,10 @@ function OverviewProgress({ overview }: { overview: TodayOverview }) {
 }
 
 export function TodayOverviewPanel({ overview }: { overview: TodayOverview }) {
-  return <article className="live-panel overview-panel" data-today-overview>
+  return <section className="overview overview-panel" data-today-overview>
     <h2>今日概览</h2>
-    <div className="overview-summary"><OverviewActivity overview={overview}/><OverviewGoal overview={overview}/></div>
-    <div className="overview-facts"><OverviewPending overview={overview}/><OverviewProgress overview={overview}/></div>
-  </article>;
+    <div className="overview-grid overview-facts"><OverviewPending overview={overview}/><OverviewProgress overview={overview}/></div>
+  </section>;
 }
 
 export function FirstUseToday() {
@@ -148,34 +149,47 @@ export function RetestCard({
 }
 
 function GuidedCurrent({ task, timeZone }: { task: GuidedInterventionTaskView; timeZone: string }) {
-  return <article className="live-panel current-panel" data-current-task-type={task.taskType}>
-    <span className="task-kind">今天的引导练习</span>
-    <h2>完成今天的针对练习</h2>
-    <p>按下面的步骤完成练习，做完后再安排下一次复习。</p>
-    <TaskDates scheduledFor={task.scheduledFor} dueAt={task.dueAt} timeZone={timeZone}/>
-    <p className="read-only-note">预计约 {task.estimatedMinutes} 分钟；完成后会安排下一次复习。</p>
-    <GuidedTaskCompletion task={task} timeZone={timeZone}/>
+  return <article className="hero-card live-task-hero" data-current-task-type={task.taskType}>
+    <HeroArt/><span className="time-chip"><Icon name="clock"/> 预计 {task.estimatedMinutes} 分钟</span>
+    <div className="hero-content">
+      <div className="task-label-row"><span className="dark-chip"><i/> 今天的引导练习</span></div>
+      <h2>{task.title}</h2>
+      <p>{task.rationale}</p>
+      <TaskDates scheduledFor={task.scheduledFor} dueAt={task.dueAt} timeZone={timeZone}/>
+      <p className="read-only-note">逐项完成并提交后，将根据本次记录安排后续复习。</p>
+      <GuidedTaskCompletion task={task} timeZone={timeZone}/>
+    </div>
   </article>;
 }
 
 function D1Current({ task, timeZone }: { task: D1RetestTaskView; timeZone: string }) {
-  return <article className="live-panel current-panel" data-current-task-type={task.taskType}>
-    <span className="task-kind">明日复习</span>
-    <h2>明日复习题</h2>
-    <p>{task.item.prompt}</p>
-    <TaskDates scheduledFor={task.scheduledFor} dueAt={task.dueAt} timeZone={timeZone}/>
-    <D1AttemptPanel task={task} timeZone={timeZone}/>
+  return <article className="hero-card live-task-hero" data-current-task-type={task.taskType}>
+    <HeroArt/><span className="time-chip"><Icon name="clock"/> 预计 {task.estimatedMinutes} 分钟</span>
+    <div className="hero-content">
+      <div className="task-label-row"><span className="dark-chip"><i/> 明日复习</span></div>
+      <h2>{task.title}</h2>
+      <p>{task.item.prompt}</p>
+      <TaskDates scheduledFor={task.scheduledFor} dueAt={task.dueAt} timeZone={timeZone}/>
+      <D1AttemptPanel task={task} timeZone={timeZone}/>
+    </div>
   </article>;
 }
 
 function D7Current({ task, timeZone }: { task: D7RetestTaskView; timeZone: string }) {
-  return <article className="live-panel current-panel" data-current-task-type={task.taskType}>
-    <span className="task-kind">7 天后巩固</span>
-    <h2>7 天后巩固题</h2>
-    <p>{task.item.prompt}</p>
-    <TaskDates scheduledFor={task.scheduledFor} dueAt={task.dueAt} timeZone={timeZone}/>
-    <D7AttemptPanel task={task}/>
+  return <article className="hero-card live-task-hero" data-current-task-type={task.taskType}>
+    <HeroArt/><span className="time-chip"><Icon name="clock"/> 预计 {task.estimatedMinutes} 分钟</span>
+    <div className="hero-content">
+      <div className="task-label-row"><span className="dark-chip"><i/> 7 天后巩固</span></div>
+      <h2>{task.title}</h2>
+      <p>{task.item.prompt}</p>
+      <TaskDates scheduledFor={task.scheduledFor} dueAt={task.dueAt} timeZone={timeZone}/>
+      <D7AttemptPanel task={task}/>
+    </div>
   </article>;
+}
+
+function HeroArt() {
+  return <svg className="book-art" aria-hidden="true" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>;
 }
 
 function CurrentContractError({ current }: { current: Extract<CurrentTaskSelection, { kind: "contract_error" }> }) {
@@ -184,19 +198,24 @@ function CurrentContractError({ current }: { current: Extract<CurrentTaskSelecti
     : current.code === "CURRENT_TASK_READ_ONLY"
       ? "这项巩固练习还没到开始时间。"
       : "这项任务的状态刚刚发生了变化。";
-  return <article className="live-panel contract-error" data-current-contract-error={current.code}>
-    <span className="task-kind">需要刷新</span>
-    <h2>当前任务暂不可用</h2>
-    <p>{detail} 请返回今日页刷新后再试。</p>
+  return <article className="hero-card live-task-hero contract-error" data-current-contract-error={current.code}>
+    <HeroArt/><div className="hero-content">
+      <div className="task-label-row"><span className="dark-chip"><i/> 需要刷新</span></div>
+      <h2>当前任务暂不可用</h2>
+      <p>{detail} 请返回今日页刷新后再试。</p>
+    </div>
   </article>;
 }
 
-function CurrentPanel({ current, timeZone }: { current: CurrentTaskSelection; timeZone: string }) {
+function CurrentPanel({ current, timeZone, completed }: { current: CurrentTaskSelection; timeZone: string; completed: boolean }) {
   if (current.kind === "none") {
-    return <article className="live-panel" data-current-task="none">
-      <span className="task-kind">今天的安排</span>
-      <h2>当前没有待完成任务</h2>
-      <p>可以休息一下，或开始一次新的检查。</p>
+    return <article className="hero-card live-task-hero" data-current-task="none" data-completed-today={completed ? "true" : "false"}>
+      <HeroArt/><div className="hero-content">
+        <div className="task-label-row"><span className="dark-chip"><i/> 今天的安排</span></div>
+        <h2>{completed ? "今天先到这里" : "当前没有待完成任务"}</h2>
+        <p>{completed ? "已有记录会保留；想继续时，可以开始一次新的检查。" : "已安排的后续复习会在到达开始时间后出现在这里。"}</p>
+        {completed ? <div className="cta-row"><Link className="lime-button" href="/diagnose">开始新的检查 <Icon name="arrow"/></Link><Link className="hero-secondary-link" href="/student/progress">查看已有进展</Link></div> : null}
+      </div>
     </article>;
   }
   if (current.kind === "contract_error") return <CurrentContractError current={current}/>;
@@ -204,6 +223,73 @@ function CurrentPanel({ current, timeZone }: { current: CurrentTaskSelection; ti
   return current.task.taskType === "d1_retest"
     ? <D1Current task={current.task} timeZone={timeZone}/>
     : <D7Current task={current.task} timeZone={timeZone}/>;
+}
+
+function TodayDateSummary({ overview }: { overview: TodayOverview }) {
+  const today = overview.activityDays[overview.activityDays.length - 1];
+  if (!today) return null;
+  const [, month = "", day = ""] = today.localDate.split("-");
+  return <div className="date-summary" data-today-local-date={today.localDate}>
+    <strong>{Number(month)} 月 {Number(day)} 日</strong>
+    <span>今日完成 {today.completedTaskCount} 项</span>
+  </div>;
+}
+
+export function selectLaterRetests(retests: RetestTaskView[], currentTaskId: string | null) {
+  return retests.filter(retest => retest.id !== currentTaskId);
+}
+
+function ContinueTasks({ retests, timeZone, currentTaskId }: { retests: RetestTaskView[]; timeZone: string; currentTaskId: string | null }) {
+  const laterRetests = selectLaterRetests(retests, currentTaskId);
+  return <section className="continue" aria-labelledby="continue-title">
+    <h2 id="continue-title">稍后继续</h2>
+    <div className="continue-list">
+      {laterRetests.length
+        ? laterRetests.map(retest => <RetestCard key={retest.id} retest={retest} timeZone={timeZone}/>)
+        : <div className="unavailable-row"><strong>还没有后续复习</strong><span>完成今天的练习后再来看看。</span></div>}
+    </div>
+  </section>;
+}
+
+export function TodayDashboard({
+  current,
+  overview,
+  retests,
+  timeZone,
+  completed,
+}: {
+  current: CurrentTaskSelection;
+  overview: TodayOverview;
+  retests: RetestTaskView[];
+  timeZone: string;
+  completed: boolean;
+}) {
+  const heading = completed
+    ? "今天的任务已完成"
+    : current.kind === "selected"
+      ? `今天先完成：${current.task.title}`
+      : current.kind === "contract_error"
+        ? "今天的安排需要刷新"
+        : "今天暂时没有待完成任务";
+  const summary = completed
+    ? "今天没有待做任务；新的检查或复习安排好后会出现在这里。"
+    : "按自己的节奏完成，再看看后续复习安排。";
+  const currentTaskId = current.kind === "selected" ? current.task.id : null;
+
+  return <section className="today-page" data-live-today-dashboard>
+    <div className="title-row"><div><h1>{heading}</h1><p>{summary}</p></div><TodayDateSummary overview={overview}/></div>
+    <div className="today-grid">
+      <div className="main-column">
+        <CurrentPanel current={current} timeZone={timeZone} completed={completed}/>
+        <TodayOverviewPanel overview={overview}/>
+      </div>
+      <aside className="right-column">
+        <TodayFootprint overview={overview}/>
+        <ContinueTasks retests={retests} timeZone={timeZone} currentTaskId={currentTaskId}/>
+        <OverviewNextCheck nextCheck={overview.nextCheck} timeZone={timeZone}/>
+      </aside>
+    </div>
+  </section>;
 }
 
 function LiveError({ error }: { error: unknown }) {
@@ -231,30 +317,20 @@ export async function LiveToday() {
     const response = await fetchDemoStudentToday();
     const model = toTodayReadModel(response.data);
     if (!model.overview.hasStartedJourney) return <FirstUseToday/>;
-    if (model.taskCount === 0 && model.current.kind === "none") return <AppShell actionHref="/diagnose" actionLabel="开始新的检查"><section className="today-page">
-      <div className="title-row"><div><h1>今天的任务已完成</h1><p>做得不错。想继续时，可以开始一次新的检查。</p></div></div>
-      <article className="state-card"><div><h2>今天先到这里</h2><p>已有记录会保留；需要时可以上传新材料，或先做 3 道快速检查题。</p><div className="button-row"><Link className="primary-blue" href="/diagnose">开始新的检查</Link><Link className="ghost-link" href="/student/progress">查看已有进展</Link></div></div></article>
-      <TodayOverviewPanel overview={model.overview}/>
-    </section></AppShell>;
+    const completed = model.taskCount === 0 && model.current.kind === "none";
+    if (completed) return <AppShell actionHref="/diagnose" actionLabel="开始新的检查"><TodayDashboard
+      current={model.current}
+      overview={model.overview}
+      retests={model.retests}
+      timeZone={model.timeZone}
+      completed
+    /></AppShell>;
 
     const actionLabel = model.current.kind === "selected"
       ? model.current.task.taskType === "guided_intervention" ? "完成今天的练习" : model.current.task.taskType === "d1_retest" ? "完成明日复习" : "完成巩固练习"
       : model.current.kind === "contract_error" ? "当前任务不可用" : "暂无当前任务";
     return <AppShell actionDisabled actionLabel={actionLabel}>
-      <section className="today-page">
-        <div className="title-row"><div><h1>今天从这一项开始</h1><p>按自己的节奏完成，做完后再看看下一次复习安排。</p></div></div>
-        <div className="live-today-grid">
-          <div className="live-main-column">
-            <CurrentPanel current={model.current} timeZone={model.timeZone}/>
-            <TodayOverviewPanel overview={model.overview}/>
-          </div>
-          <aside className="live-panel"><OverviewNextCheck nextCheck={model.overview.nextCheck} timeZone={model.timeZone}/><h2>后续复习</h2><p>到时间后，复习任务会出现在今天的学习安排里。</p><div className="retest-list">
-            {model.retests.length
-              ? model.retests.map(retest => <RetestCard key={retest.id} retest={retest} timeZone={model.timeZone}/>)
-              : <div className="unavailable-row"><strong>还没有后续复习</strong><span>完成今天的练习后再来看看。</span></div>}
-          </div></aside>
-        </div>
-      </section>
+      <TodayDashboard current={model.current} overview={model.overview} retests={model.retests} timeZone={model.timeZone} completed={false}/>
     </AppShell>;
   } catch (error) {
     return <LiveError error={error}/>;

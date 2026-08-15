@@ -1,6 +1,7 @@
 "use client";
 
 import type { D7RetestAttemptView, D7RetestTaskView } from "@gapproof/contracts";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ApiClientError } from "@/lib/api-client";
 import {
@@ -20,6 +21,10 @@ type SubmitState =
   | { kind: "case_error"; code: string; requestId?: string }
   | { kind: "error"; code: string; requestId?: string; retryable?: boolean }
   | { kind: "success"; state: D7AttemptResultState; stateVersion: number };
+
+export function refreshTodayAfterConfirmedD7Submit(refresh: () => void) {
+  refresh();
+}
 
 export function d7AttemptResultCopy(state: D7AttemptResultState) {
   if (state === "repair_verified") {
@@ -77,6 +82,7 @@ function errorCopy(state: Extract<SubmitState, { kind: "error" }>) {
 }
 
 export function D7AttemptPanel({ task }: { task: D7RetestTaskView }) {
+  const router = useRouter();
   const [expectedVersion, setExpectedVersion] = useState<number | null>(null);
   const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
   const [state, setState] = useState<SubmitState>({ kind: "loading_case" });
@@ -128,6 +134,7 @@ export function D7AttemptPanel({ task }: { task: D7RetestTaskView }) {
     try {
       const response = await submitD7Attempt(task.id, intent.body, intent.idempotencyKey);
       setState({ kind: "success", state: response.data.state, stateVersion: response.data.stateVersion });
+      refreshTodayAfterConfirmedD7Submit(router.refresh);
     } catch (error) {
       if (error instanceof ApiClientError && error.response.error.code === "VERSION_CONFLICT") {
         try {

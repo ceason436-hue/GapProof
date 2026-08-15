@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { d1AttemptResultCopy } from "./d1-attempt-panel";
+import { describe, expect, it, vi } from "vitest";
+import { d1AttemptResultCopy, refreshTodayAfterConfirmedD1Submit } from "./d1-attempt-panel";
 
 describe("D1 attempt result mapping", () => {
   it("maps support_required to bounded human-help copy without a learning claim", () => {
@@ -17,5 +17,11 @@ describe("D1 attempt result mapping", () => {
       title: "正在调整接下来的计划",
       detail: "新的安排还在准备中，请稍后回到今日页查看。",
     });
+  });
+
+  it("refreshes Today after a confirmed successful submission", () => {
+    const refresh = vi.fn();
+    refreshTodayAfterConfirmedD1Submit(refresh);
+    expect(refresh).toHaveBeenCalledOnce();
   });
 });

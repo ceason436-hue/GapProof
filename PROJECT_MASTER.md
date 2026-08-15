@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.42"
+version: "0.1.43"
 status: "ACTIVE"
-current_stage: "PUSH-027 已发布：学生端首次使用/上传状态文案与交互已收口；DeepSeek structured provider seam 已默认关闭并通过隔离门禁，未接 API/Worker/UI，未执行真实模型调用"
+current_stage: "PUSH-028 已发布：真实 API Today 已汇流到冻结 Mock 视觉骨架，任务提交成功后刷新权威页面状态；不改变 OCR、个性化、学生记录或学习效果边界"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -2120,6 +2120,11 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.43 — 2026-08-16
+
+- 修复真实 API Today 与已确认 Mock 首页长期分叉造成的视觉回归：active、无当前任务和已完成状态统一使用深色当前任务 Hero、主栏今日概览及无整列外框的右栏学习足迹/稍后继续/下次检查。
+- guided、D1、D7 仅在服务端确认提交成功后刷新 Today 权威读模型；冲突、加载失败、普通失败和 `NETWORK_UNKNOWN` 不触发刷新。105 项 Web 测试、双 TypeScript、Next build 及 6 状态 × 4 视口真实 API 视觉门禁通过；同步 PRD v0.1.35、TDD v0.3.36、DESIGN v0.2.33 与 PUSH-028，不新增 OCR、个性化、学生记录或学习效果声明。
 
 ### v0.1.42 — 2026-08-16
 

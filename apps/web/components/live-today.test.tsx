@@ -2,7 +2,7 @@ import type { D1RetestTaskView, D7RetestTaskView, TodayOverview } from "@gapproo
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { FirstUseToday, OverviewNextCheck, RetestCard, TodayOverviewPanel } from "./live-today";
+import { FirstUseToday, OverviewNextCheck, RetestCard, selectLaterRetests, TodayDashboard, TodayFootprint, TodayOverviewPanel } from "./live-today";
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/image", () => ({ default: ({ alt }: { alt: string }) => createElement("img", { alt }) }));
@@ -62,6 +62,12 @@ describe("D+1/D+7 status cards", () => {
     expect(d7).toContain("开始巩固");
     expect(`${d1}${d7}`).not.toMatch(/D\+1|D\+7|服务端|ready D/);
   });
+
+  it("keeps the current retest out of the later-task list", () => {
+    const current = retest("d1_retest", "ready");
+    const later = { ...retest("d7_retest", "scheduled"), id: "66666666-6666-4666-8666-666666666666" };
+    expect(selectLaterRetests([current, later], current.id)).toEqual([later]);
+  });
 });
 
 const overview: TodayOverview = {
@@ -91,13 +97,20 @@ const overview: TodayOverview = {
 describe("Today overview projection", () => {
   it("renders only service facts and neutral progress copy", () => {
     const html = renderToStaticMarkup(createElement(TodayOverviewPanel, { overview }));
-    expect(html).toContain('data-local-date="2026-08-16"');
     expect(html).toContain('data-pending-confirmations="2"');
-    expect(html).toContain("2 / 5 天");
     expect(html).toContain("完成了一次练习");
+    expect(html).toContain('class="overview overview-panel"');
+    expect(html).not.toContain("本周学习足迹");
     expect(html).not.toContain("eventId");
     expect(html).not.toContain("caseId");
     expect(html).not.toContain("已掌握");
+  });
+
+  it("projects activity and the weekly goal into the right-column footprint", () => {
+    const html = renderToStaticMarkup(createElement(TodayFootprint, { overview }));
+    expect(html).toContain('class="footprint overview-activity"');
+    expect(html).toContain('data-local-date="2026-08-16"');
+    expect(html).toContain("2 / 5 天");
   });
 
   it("keeps a D7 next check read-only and handles no check", () => {
@@ -118,7 +131,13 @@ describe("Today overview projection", () => {
       recentProgress: [],
       nextCheck: null,
     };
-    const html = renderToStaticMarkup(createElement(TodayOverviewPanel, { overview: empty }));
+    const html = renderToStaticMarkup(createElement(TodayDashboard, {
+      current: { kind: "none" },
+      overview: empty,
+      retests: [],
+      timeZone: "Asia/Tokyo",
+      completed: true,
+    }));
     expect(html).toContain("目标待设置");
     expect(html).toContain("当前没有待确认事项");
     expect(html).toContain("暂无新的学习进展");
@@ -137,5 +156,49 @@ describe("FirstUseToday", () => {
     expect(html).not.toContain("第一次使用");
     expect(html).not.toContain("服务端返回空任务列表");
     expect(html).not.toMatch(/合成 Demo|真实 API|Mock|Case/);
+  });
+});
+
+describe("Today frozen dashboard structure", () => {
+  it("uses the mock visual hierarchy for a started API journey", () => {
+    const html = renderToStaticMarkup(createElement(TodayDashboard, {
+      current: { kind: "none" },
+      overview,
+      retests: [retest("d1_retest", "scheduled")],
+      timeZone: "Asia/Tokyo",
+      completed: false,
+    }));
+    const main = html.indexOf('class="main-column"');
+    const hero = html.indexOf('class="hero-card live-task-hero"');
+    const overviewPanel = html.indexOf('class="overview overview-panel"');
+    const right = html.indexOf('class="right-column"');
+    const footprint = html.indexOf('class="footprint overview-activity"');
+    const continuation = html.indexOf('class="continue"');
+    const nextCheck = html.indexOf('class="next-check"');
+
+    expect(html).toContain('class="today-grid"');
+    expect(main).toBeLessThan(hero);
+    expect(hero).toBeLessThan(overviewPanel);
+    expect(overviewPanel).toBeLessThan(right);
+    expect(right).toBeLessThan(footprint);
+    expect(footprint).toBeLessThan(continuation);
+    expect(continuation).toBeLessThan(nextCheck);
+    expect(html).not.toMatch(/live-today-grid|class="live-panel/);
+  });
+
+  it("keeps the completed state in the same dashboard skeleton", () => {
+    const html = renderToStaticMarkup(createElement(TodayDashboard, {
+      current: { kind: "none" },
+      overview,
+      retests: [],
+      timeZone: "Asia/Tokyo",
+      completed: true,
+    }));
+    expect(html).toContain('data-live-today-dashboard="true"');
+    expect(html).toContain('data-completed-today="true"');
+    expect(html).toContain('class="today-grid"');
+    expect(html).toContain('class="main-column"');
+    expect(html).toContain('class="right-column"');
+    expect(html).not.toContain('class="state-card"');
   });
 });
