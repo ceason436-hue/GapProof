@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   PrepareSourceAssetRequestSchema,
   SourceAssetPrepareQueuedViewSchema,
+  SourceAssetPrepareViewSchema,
   SourceAssetProcessingViewSchema,
   SourceAssetQualityCheckJobDataSchema,
 } from "./api.ts";
@@ -28,11 +29,13 @@ describe("source asset inspection contracts", () => {
   });
 
   it("accepts a queued command response without storage or OCR fields", () => {
-    expect(Value.Check(SourceAssetPrepareQueuedViewSchema, {
+    const queued = {
       assetId,
       stage: "image_quality_check",
       processingStatus: "queued",
-    })).toBe(true);
+    };
+    expect(Value.Check(SourceAssetPrepareQueuedViewSchema, queued)).toBe(true);
+    expect(Value.Check(SourceAssetPrepareViewSchema, queued)).toBe(true);
     expect(Value.Check(SourceAssetPrepareQueuedViewSchema, {
       assetId,
       stage: "ocr",
@@ -57,6 +60,7 @@ describe("source asset inspection contracts", () => {
       },
     };
     expect(Value.Check(SourceAssetProcessingViewSchema, view)).toBe(true);
+    expect(Value.Check(SourceAssetPrepareViewSchema, view)).toBe(true);
     expect(Value.Check(SourceAssetProcessingViewSchema, {
       ...view,
       ocrText: "must not be exposed",

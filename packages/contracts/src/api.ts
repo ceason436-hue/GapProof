@@ -175,6 +175,15 @@ export type SourceAssetProcessingView = Static<
   typeof SourceAssetProcessingViewSchema
 >;
 
+export const SourceAssetPrepareViewSchema = Type.Union([
+  SourceAssetPrepareQueuedViewSchema,
+  SourceAssetProcessingViewSchema,
+]);
+
+export type SourceAssetPrepareView = Static<
+  typeof SourceAssetPrepareViewSchema
+>;
+
 export const SourceAssetQualityCheckJobDataSchema = Type.Object({
   assetId: Type.String({ format: "uuid" }),
 }, { additionalProperties: false });
