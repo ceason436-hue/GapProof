@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.37"
+version: "0.1.38"
 status: "ACTIVE"
-current_stage: "PUSH-022 已发布：真实 API 首次使用引导、上传/三题合成检查双入口、上传状态可视化与学生侧栏事实空状态已完成；真实 OCR、真实个性化与报告仍 unresolved/deferred"
+current_stage: "PUSH-023 已发布：默认关闭的阿里云 OCR Provider 安全 Spike 已完成，仅接受合成/脱敏输入且未接生产链路；真实 OCR、真实个性化与报告仍 unresolved/deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -129,6 +129,7 @@ next_action:
 - 背景窗口达到 `80%` 仅为 soft warning：停止扩范围，优先完成当前 bounded slice、测试与 clean commit，不因高百分比单独迁移。每次自动压缩后须 recovery audit，核对 `main/origin` SHA、四文档版本、Push Log、branch/base/HEAD/clean、活动任务、当前切片、未决决策与禁区；全部匹配可继续，任何事实矛盾、遗忘决策、误报 Mock/`[PLANNED]`、分支或范围不清均须 safe checkpoint 后迁移。
 - 写入型前后端任务允许 1–2 次压缩（第 2 次开始收口，第 3 次为 hard cap）；只读审计任务最多 4 次（第 5 次停止）；协调任务最多 3 次（第 3 次收口交接，第 4 次为 hard cap）。事实漂移不受次数预算保护，须立即迁移。
 - 迁移保持选择性：只替换达到阈值或漂移的任务，健康任务继续使用；仅协调任务自身触发阈值时才迁移控制面。新任务从最新 Git 锚点创建，不携带旧全文上下文。
+- 健康的前后端执行角色优先复用当前协调线程下的 successor，不为版本号变化重复创建左侧独立线程；successor 继续接受 bounded slice、共享工作区并只交结构化终报。只有 successor 达到压缩 hard cap、事实漂移、无法可靠恢复，或用户需要直接进入该执行对话时，才为对应角色创建左侧新线程。协调/文档治理始终保留唯一左侧可见控制面，达到自身 hard cap 时显式创建下一协调版本；每次只迁移超限角色。
 - 协调迁移时只更新同一个 heartbeat target，并停止旧协调的持续目标/自动续跑；不得复制 heartbeat。执行任务不创建独立长期目标。
 - 新建前端或后端执行任务时默认显式使用 `gpt-5.6-luna`、`high` 推理强度；新建协调/文档治理任务时默认显式使用 `gpt-5.6-sol`、`medium` 推理强度。仅在用户另行指定、目标主机不支持或安全恢复需要时偏离，并在交接中记录原因；该规则适用于后续版本与选择性迁移。
 - 用户已在 Codex 客户端为本项目选择“完全访问”；当前及后续前端、后端、协调/文档治理版本在平台实际授予的权限内，常规只读核验、分支/工作树操作、项目文件读写、构建/测试、精确暂存、提交与既定远端推送直接执行，不重复请求用户批准。若某条路径仍被平台强制拦截，改用同权限范围内的等价安全路径并如实记录；本规则不绕过平台安全政策，不扩大任务范围，也不授权未明确要求的破坏性操作或外部主体权限。
@@ -192,12 +193,13 @@ next_action:
 - `[PLANNED]` 尚未确认至少一位英语教育背景人员能否短时抽检核心金标内容。
 - `[PROTOTYPE]` 已建立完整可点击的合成验收 Thin Slice：真实图片字节上传与基础检查后，用户经监护确认显式创建/绑定同一合成 Case，受守卫 Fake OCR 产生同一 Case extraction，用户读取、修正、确认后继续确定性诊断、guided、D1/D7、安全重排与封顶。它满足 DEC-OCR-ACCEPT-001，但不证明真实 OCR/AI、真实题库、真实个性化、人工服务或学习效果；上传字节未用于识别，异步报告 deferred。
 - `[PROTOTYPE]` 学生端默认入口已使用真实 API，只有显式 `?source=mock` 使用合成首页；Today overview、guided、D1、D7 与同一 Case review 均有受控浏览器证据。项目本身 P0 合成业务主闭环已完成；其他学生页面、家长端页面和评委扩展页仍未完成。
+- `[PROTOTYPE]` 已新增默认关闭的 `AlibabaOcrSpikeAdapter` 与可注入 HTTPS transport seam：只接受 `synthetic/desensitized` 输入和受限机器提示，限制 100ms–30s 超时，稳定映射认证、权限、408、429、5xx、网络、空结果与低置信状态；原始 Provider payload、URL 查询、凭据、warnings 和精确置信度不进入 `ToolResult`。它未接入上传、Case、Worker、API 或 UI，也未冻结阿里云官方签名/响应协议、配置真实凭据或发起真实调用，因此不构成真实 OCR 已接入或验收。
 - `[PLANNED]` 尚未完成正式 500 字简介、初赛 PPT、视频、README、数据卡、依赖清单和合规一页纸。
 - `[PLANNED]` 尚未产生可报告的工程评测结果或真实学生学习效果。
 
 ### 1.4 项目本身下一步候选（P1，须由用户确认）
 
-1. Provider Adapter 与阿里云 OCR Spike；先用合成/脱敏样本验证服务端 HTTPS、凭据隔离和处理告知，不提升为真实 OCR 已验收。
+1. 在已完成的安全 adapter seam 上冻结阿里云官方 SDK/签名与响应归一化协议；先完成 Provider 合同/训练政策核验、服务端 consent/status 契约和可审计处理告知，再考虑任何真实调用或 UI 入口。
 2. 实现原图确认后 24 小时删除、上传起最多 7 天封顶和主动删除入口；冻结派生 OCR/Case 证据留存前保持 unresolved。
 3. 补充一键 Demo 的健康检查、结构化日志、故障恢复与现场演示说明。
 4. 建立合成/脱敏 OCR 小型基准；正式 30–50 页质量基准仍按 unresolved 管理。
@@ -2117,6 +2119,13 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.38 — 2026-08-16
+
+- 发布默认关闭、仅内部使用的阿里云 OCR Provider 安全 Spike；只接受合成/脱敏 HTTPS source，配置和输入 fail closed，错误语义稳定，原始响应、URL 查询、凭据、Provider warnings 与精确置信度不进入结果。
+- Spike 未接上传、Case、Worker、API 或 Web，未使用真实凭据、真实材料或真实学生数据，未发起真实阿里云调用；官方签名/响应协议、处理同意、状态持久化与真实 UI 仍待后续切片。
+- 将 healthy successor 优先复用、仅在 hard cap/事实漂移/恢复失败/用户直接可见需求时创建对应左侧线程写入长期规则；协调器继续独占四文档、Push Log 与 main 推送。
+- 162 fast、59 PostgreSQL/API/Worker integration、98 apps/web、双 TypeScript、Next build、migration drift、上传与 onboarding 浏览器 Fixture及隐私扫描通过；同步 PRD v0.1.30、TDD v0.3.31、DESIGN v0.2.28 与 PUSH-023。真实 OCR、删除策略、真实个性化/学习效果和异步报告仍 unresolved/deferred。
 
 ### v0.1.37 — 2026-08-16
 

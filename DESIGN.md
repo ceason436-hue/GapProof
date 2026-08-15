@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.27"
+version: "0.2.28"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "PUSH-022 已发布：真实 API 首次使用引导、上传/三题合成检查双入口、上传状态可视化与学生侧栏事实空状态完成；真实 OCR、真实个性化与报告仍 unresolved/deferred"
+current_design_stage: "PUSH-023 已发布：阿里云 OCR Provider 安全 Spike 完成但未接 UI 或生产链路；真实 OCR、真实个性化与报告仍 unresolved/deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -88,9 +88,9 @@ upstream_documents:
 
 **已完成**：学生端“今日”页桌面视觉结构与 Stitch V1.1 冻结裁切保持不变；默认 API、真实 Today overview、ready guided、D1、D7 安全作答均已通过门禁。服务端 `hasStartedJourney:false` 时显示真实首次使用引导，提供“上传材料”和“三题快速检查”两条入口；上传选择后显示缩略图、类型/大小与五步状态。`/diagnose`、`/diagnose/quick-check` 及 `/student/plan`、`/student/progress`、`/student/report` 已具备正确路由、侧栏选中态和事实空状态，报告明确未开放。`/materials/new` 已完成真实单图选择、上传、基础检查、监护确认与显式创建/绑定同一合成 Case；`/materials/{caseId}/review` 读取、修正和确认同一 Case 的 synthetic extraction，并继续诊断、确认小题、干预与 Today。写入使用权威 Case 版本、共享 contracts、UUIDv7、冲突重新确认和 `NETWORK_UNKNOWN` 锁定；合成 Mock 仅显式启用，独立 `/materials/demo/review` 仍是零网络 Fixture。
 
-**尚未完成**：三题检查仍是无记录的原创合成 Fixture，不是完整 5–8 题诊断、真实个性化或学习效果；真实模糊度、方向、缺页与恶意文件检查，阿里云真实 OCR、原图确认后 24h/主动删除、真实图片题目区域展示、学生/家长非空数据页面、Logo 紧裁/SVG/Favicon 与最终品牌规范。异步报告本轮 deferred。
+**尚未完成**：三题检查仍是无记录的原创合成 Fixture，不是完整 5–8 题诊断、真实个性化或学习效果；默认关闭的阿里云 OCR 安全 Spike 没有 UI、真实调用或生产接线。真实 Provider 页面前仍须冻结服务端 provider mode、处理告知/同意、监护确认、权威状态查询和删除事实；真实模糊度、方向、缺页与恶意文件检查，原图确认后 24h/主动删除、真实图片题目区域展示、学生/家长非空数据页面、Logo 紧裁/SVG/Favicon 与最终品牌规范尚未完成。异步报告本轮 deferred。
 
-**下一步**：项目本身 P0 合成纵向闭环已达到；暂停扩展并由用户选择 P1，优先候选为真实 OCR Provider Spike、原图删除/主动删除或现场 Demo 健康与故障恢复。任何新字段不得从视觉稿或合成 Fixture 反推业务状态。
+**下一步**：真实 OCR UI 继续保持关闭；先核验 Provider 合同/训练政策并冻结服务端 consent/status/删除契约。只有这些事实可审计后，才新增与 synthetic 分离的阿里云处理告知、处理同意和监护确认界面。任何新字段不得从视觉稿或合成 Fixture 反推业务状态。
 
 ### 0.4 设计底线
 
@@ -1780,6 +1780,12 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 ---
 
 ## 22. 版本记录
+
+### v0.2.28 — 2026-08-16
+
+- 登记阿里云 OCR Provider 安全 Spike 已完成但未接 UI、Worker、API 或真实材料；当前 `/materials/new` 继续只展示醒目标注的 synthetic flow，不出现可能误导为真实 Provider 已接入的按钮或状态。
+- 冻结未来真实 Provider UI 前置：服务端 provider mode、阿里云处理/用途告知、独立处理同意、未满 18 岁监护确认、权威状态查询和删除事实必须先可审计；不得展示凭据、原始响应、内部 ID、精确置信度或未验证保留承诺。
+- 162 fast、59 integration、98 web、双 typecheck、Next build、migration drift、上传/onboarding 浏览器与隐私门禁通过；同步 PROJECT_MASTER v0.1.38、PRD v0.1.30、TDD v0.3.31 与 PUSH-023。真实 OCR、删除策略、真实学生记录/个性化/学习效果和报告仍 unresolved/deferred。
 
 ### v0.2.27 — 2026-08-16
 

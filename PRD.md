@@ -7,10 +7,10 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档状态 | Draft v0.1.29 |
+| 文档状态 | Draft v0.1.30 |
 | 产品名称 | 知隙 GapProof |
 | 文档角色 | 产品需求、业务流程、功能范围与验收标准 |
-| 当前阶段 | PUSH-022 已发布：真实 API 首次使用引导、上传/三题合成检查双入口、上传状态可视化与学生侧栏事实空状态完成；真实 OCR、真实个性化与报告仍 unresolved/deferred |
+| 当前阶段 | PUSH-023 已发布：默认关闭的阿里云 OCR Provider 安全 Spike 完成，仅接受合成/脱敏输入且未接生产链路；真实 OCR、真实个性化与报告仍 unresolved/deferred |
 | 产品形态 | Web 应用 |
 | 目标教材 | 上海教育出版社《义务教育教科书（五·四学制）英语 八年级上册》 |
 | 适用版本 | 目标教材以 ISBN、当前 PDF 哈希和内容快照锁定；版权页不可取得，版次、印次和册次保持未知 |
@@ -452,6 +452,8 @@ MVP 使用原创模拟试卷、预置学生 Case 和合成学习轨迹，不声�
 - 不默认使用儿童输入训练模型；
 - 所有关键模型调用和数据访问可审计。
 
+当前 `[PROTOTYPE]` 仅完成阿里云 OCR 的隔离安全 adapter/transport seam：默认关闭，只允许合成或脱敏 HTTPS source，不接受真实学生模式，也未接上传、Case、Worker、API 或页面。它仅证明输入保护、超时、错误映射、响应归一化和敏感字段不外泄；未冻结阿里云官方签名/响应协议，未使用真实凭据或发起真实调用，不能表述为真实 OCR 已实现、已验收或可供学生使用。
+
 ## 11. Demo 方案
 
 ### 11.1 双入口
@@ -659,6 +661,7 @@ PROJECT_MASTER.md
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
+| 0.1.30 | 2026-08-16 | 发布默认关闭、仅接受 synthetic/desensitized HTTPS 输入的阿里云 OCR Provider 安全 Spike；未接上传/Case/Worker/API/UI，未使用真实凭据、材料或学生数据，未发起真实 Provider 调用。稳定错误语义、粗粒度置信度与敏感字段隔离已通过门禁；同步 PROJECT_MASTER v0.1.38、TDD v0.3.31、DESIGN v0.2.28、PUSH-023。真实 OCR、处理 consent/status、删除策略、真实个性化/学习效果和报告仍 unresolved/deferred |
 | 0.1.29 | 2026-08-16 | 发布真实 API 首次使用 onboarding、上传/三题原创合成检查双入口、上传缩略图与五步状态、正确侧栏路由和计划/进步/报告事实空状态。快速检查固定不创建 Case、学习记录或报告；146 fast、59 integration、98 web 与完整门禁通过。同步 PROJECT_MASTER v0.1.37、TDD v0.3.30、DESIGN v0.2.27、PUSH-022；真实 OCR、真实个性化、学习效果、删除策略与异步报告仍 unresolved/deferred |
 | 0.1.28 | 2026-08-15 | 发布可复现真实 API 本地栈、同一 Case synthetic extraction 读取/修正/确认及诊断→guided→D1→D7 导航；修复局域网预览资源来源和同时钟 replan 证据确定性排序。140 fast、58 integration、95 web 与完整门禁通过；同步 PROJECT_MASTER v0.1.36、TDD v0.3.29、DESIGN v0.2.26、PUSH-021。真实 OCR、原图 24h/主动删除、30–50 页基准、派生留存和异步报告仍 unresolved/deferred |
 | 0.1.27 | 2026-08-15 | 发布上传页显式“开始识别并创建案例”、监护确认、合成/未使用上传图片披露、独立 UUIDv7 start intent、单次未知重试与锁定；成功仅表示合成 Case 创建/任务入队。按 DEC-OCR-ACCEPT-001 判定本轮项目本身初赛验收达到；同步 PROJECT_MASTER v0.1.35、TDD v0.3.28、DESIGN v0.2.25 与 PUSH-020。真实 OCR、同一 Case 识别确认、30–50 页基准、派生留存和异步报告仍 unresolved/deferred |

@@ -2,15 +2,15 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.30"
+version: "0.3.31"
 status: "DRAFT_FOR_IMPLEMENTATION"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.37"
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.29"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.38"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.30"
 ---
 
 # 知隙 GapProof 技术设计文档（TDD）
@@ -1216,9 +1216,10 @@ Serverless 很适合短 API 和自动扩容，但 OCR、多轮模型、报告、
 - `/materials/{caseId}/review` 以 1s→2s→3s 受控轮询读取同一 Case extraction；确认后依次调用 run-next、hypotheses、probe attempts 和下一次 run-next，导航到 Today guided。每个写入为独立 UUIDv7 意图；同 key/body 只重试一次未知结果，冲突先刷新再由用户重新确认，`NETWORK_UNKNOWN` 后锁定。
 - Today `overview.hasStartedJourney` 由服务端按学生是否存在未删除 Case 投影，前端据此区分首次使用与已有旅程但当前无任务。`GET /v1/quick-checks/synthetic` 仅返回 3 道 `synthetic_demo/original_fixture` 题目且不包含答案键；`POST /v1/quick-checks/synthetic/attempts` 使用 UUIDv7、同步 in-flight 锁和同 key/body 一次网络未知重试，服务端以私有答案确定性评分。结果强制 `learningRecordCreated:false`、`reportReady:false`，不创建 Case、学习证据或幂等数据库记录；最终未知后前端锁定，避免不确定请求被重复提交。
 - `/diagnose` 提供上传与三题合成检查双入口，`/diagnose/quick-check` 承载上述无记录体验；`/student/plan`、`/student/progress`、`/student/report` 只展示各自事实空状态，报告明确未开放。上传选图只在浏览器内生成缩略图和五步状态，不向 UI 暴露本地文件名、对象键、hash、token 或内部编号。
+- `packages/tools/src/parse-paper/alibaba-ocr-spike.ts` 提供默认关闭的内部安全 Spike，不实现现有 `ParsePaperAdapter` 生产接线。输入仅允许 `synthetic/desensitized`、无 userinfo/hash 的 HTTPS source URL、最多 8 个机器 token page hints；timeout 限制 100ms–30s。transport 只接收 source URL 与受限提示，不接收 Case/student/trace 标识；401/403/408/429/5xx/网络与无效响应映射为稳定错误，空结果或低置信进入 `needs_confirmation`。原始 Provider payload、URL 查询、headers/凭据、Provider warnings 与精确置信度不会进入 `ToolResult`。
 - `bun run demo:stack` 可复现启动 Docker PostgreSQL、迁移/seed、API、Worker、Web 与 `.local/gapproof/uploads`；数据库默认显式使用 `127.0.0.1`，避免 Windows `localhost` 的 IPv4/IPv6 双监听歧义。Next dev 只允许启动脚本发现的本机 IPv4/localhost，不开放通配来源；签名 secret 每次运行随机生成且不输出。
 - `findLatestCaseEvidenceEventByType` 以 `occurred_at DESC, created_at DESC, UUIDv7 id DESC` 确定性选择最新证据，避免两次复测共享业务时钟时第二次 replan 误读第一次事件。
-- 当前证据为 146 条快速测试、59 条真实 PostgreSQL/API/Worker 集成测试、98 条 apps/web 测试、migration drift、上传/同一 Case review/Demo/guided/D1/D7/首次使用与三题检查浏览器 Fixture、普通与真实 API 双视口视觉回归、双 TypeScript 严格类型检查、Next.js production build、隐私扫描与真实栈烟测通过。
+- 当前证据为 162 条快速测试、59 条真实 PostgreSQL/API/Worker 集成测试、98 条 apps/web 测试、migration drift、上传与首次使用/三题检查浏览器 Fixture、双 TypeScript 严格类型检查、Next.js production build及隐私扫描通过。Spike 没有生产路由，因此浏览器证据只证明现有 synthetic UI 未回归，不证明浏览器或 Worker 调用了阿里云。
 
 该快照不等于真实 OCR Phase A 完成：真实图片字节可上传到受控本地目录，前端可经监护确认显式创建/绑定同一合成 Case、读取/确认该 Case 的 synthetic extraction 并继续规则化学习路径；但真实 OCR、真实 AI 干预、真实题库、通知、报告与真实模型 Provider 仍未实现。上传字节不参与 Fake OCR；合成确认页与重排仅是规则化工程骨架，不是现实识别或个性化内容。
 
@@ -1605,6 +1606,7 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 8. 本协调目标中的初赛验收只评估项目本身的代码、契约、交互、测试、数据/隐私边界与可复现性；简介、PPT/PDF、视频、报名、提交系统及其他参赛材料不计入完成条件。
 9. 用户已为本项目选择 Codex“完全访问”；后续前端、后端、协调/文档治理版本在平台实际授予的权限内直接完成常规核验、项目文件读写、分支/工作树、构建/测试、精确暂存、提交与既定远端推送，不重复请求批准。平台强制拦截时使用同权限范围内等价安全路径并记录；不得借此绕过安全政策、扩大切片或执行未明确要求的破坏性操作。
 10. 临近比赛截止时，以“风险可控范围内最大化验收价值”为默认切片原则：优先端到端、可点击、可复现的纵向结果，允许同一 bounded slice 同步修改前端、后端、contracts、测试与必要文档；完整切片结束后集中跑全门禁，不为追求极小 diff 拆散主流程。
+11. 前后端优先复用 healthy successor；版本变化本身不触发左侧新线程。只有 successor 达到 hard cap、事实漂移、无法可靠恢复，或用户明确需要直接进入该执行对话时，才选择性创建对应左侧线程。协调/文档治理保持唯一左侧控制面并独占四文档、Push Log、main 提交与推送；协调自身达到 hard cap 时显式迁移到下一协调版本。
 
 | Push ID | 日期 | 分支 | 状态 | 提交摘要 | 主要内容 | 验证 |
 |---|---|---|---|---|---|---|
@@ -1630,8 +1632,16 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-020 | 2026-08-15 | `main` | `pushed` | `feat: complete explicit synthetic OCR acceptance flow` | 上传页仅在基础检查通过后显示监护确认与显式“开始识别并创建案例”；使用独立 UUIDv7、同 key/body 单次未知重试及最终锁定。成功仅声明合成 Case 已创建/识别已排队和上传图片未用于识别；不跳转旧 Demo、不泄露内部字段。按 DEC-OCR-ACCEPT-001 达到本轮项目本身初赛验收，真实 OCR/同一 Case 识别确认仍未实现 | 134 条快速测试、57 条真实 PostgreSQL/API/Worker 集成测试、91 条 apps/web 测试、Drizzle migration drift、上传/Demo/guided/D1/D7 浏览器 Fixture、Mock/API/Demo 及显式启动双视口、全仓及 web TypeScript、Next.js production build、`git diff --check`、敏感/私有材料/生成缓存与暂存范围审计通过；同轮推送并核对本地/远端 SHA 一致 |
 | PUSH-021 | 2026-08-15 | `main` | `pushed` | `feat: complete same-case synthetic learning flow` | 发布同一 Case extraction 读取/修正/确认与诊断→guided→D1→D7 导航、`bun run demo:stack` 可复现真实 API 本地栈、局域网开发资源受限允许来源、`127.0.0.1` 数据库确定性，以及同时钟 replan 证据排序修复。真实字节只用于上传/基础检查，Fake OCR 仍使用 synthetic fixture；真实 OCR、删除策略和报告未提升 | 140 fast、58 PostgreSQL/API/Worker integration、95 apps/web、双 TypeScript、Next production build、migration drift、上传/同一 Case review/Demo/guided/D1/D7 浏览器 Fixture、Mock/API/真实 API 视觉、真实栈烟测、`git diff --check` 与敏感/隐私/暂存范围审计通过；代码批次已推至 `a0d1b79271355ec5b9aecbe81220c30edc64bbbe`，文档批次同轮推送后复核本地/远端一致 |
 | PUSH-022 | 2026-08-16 | `main` | `pushed` | `docs: record first-use diagnosis acceptance` | 发布真实 API Today 首次使用引导、上传/三题原创合成检查双入口、上传缩略图与五步状态、正确侧栏路由及计划/进步/报告事实空状态。三题检查固定不创建 Case、学习记录或报告；实现提交为 `647bf407abad7bc4ad788535d88b991600536ed9`。真实 OCR、真实个性化、真实学习效果、删除策略和异步报告未提升 | 146 fast、59 PostgreSQL/API/Worker integration、98 apps/web、双 TypeScript、Next production build、migration drift、上传/同一 Case review/Demo/guided/D1/D7/首次使用与三题检查 7 条浏览器主链、普通/真实 API 视觉、隐私扫描、真实栈烟测与暂存范围审计通过；本轮文档提交推送后核对本地 `main`、`origin/main` 与 GitHub refs 一致 |
+| PUSH-023 | 2026-08-16 | `main` | `pushed` | `feat: add safe Alibaba OCR provider spike` | 新增默认关闭、仅内部使用的 Alibaba OCR adapter/HTTPS transport seam；只接受 synthetic/desensitized source，输入与配置 fail closed，稳定映射 Provider 错误并隔离原始响应、凭据、URL 查询、warnings 和精确置信度。未接上传、Case、Worker、API 或 UI，未发起真实调用；同时登记 healthy successor 优先复用规则 | 162 fast、59 PostgreSQL/API/Worker integration、98 apps/web、双 TypeScript、Next production build、migration drift、上传与 onboarding 浏览器 Fixture、`git diff --check`、敏感/隐私与暂存范围审计通过；预览 Worker 与 integration 队列竞争、并行 Next fixture 锁均经隔离串行重跑通过；同轮推送并核对本地/远端 SHA 一致 |
 
 ## 27. 变更日志
+
+### v0.3.31 — 2026-08-16
+
+- 新增默认关闭的 Alibaba OCR Provider 安全 Spike：合成/脱敏输入、HTTPS、受限 page hints、超时边界、稳定错误映射、响应 Schema 校验、粗粒度置信度和敏感字段隔离。
+- Spike 未实现生产 `ParsePaperAdapter` 接线，未接上传、Case、Worker、API 或 UI，未冻结官方签名/响应协议、使用真实凭据或发起真实调用；不能称真实 OCR 已实现或验收。
+- 登记 healthy successor 优先复用、只在 hard cap/事实漂移/恢复失败/用户直接可见需求时选择性新建左侧线程；协调器保持唯一控制面。
+- 162 fast、59 PostgreSQL/API/Worker integration、98 apps/web、双 TypeScript、Next build、migration drift、上传/onboarding 浏览器与隐私扫描通过；同步 PROJECT_MASTER v0.1.38、PRD v0.1.30、DESIGN v0.2.28 与 PUSH-023。
 
 ### v0.3.30 — 2026-08-16
 
