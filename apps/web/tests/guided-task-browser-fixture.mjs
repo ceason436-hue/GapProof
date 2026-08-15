@@ -53,7 +53,7 @@ const readJsonBody = request => new Promise((resolveBody, rejectBody) => {
 });
 let scenario = "success";
 let caseReads = 0;
-let dropNextCaseReads = 0;
+let caseReadFailureMode = null;
 const posts = [];
 const fixtureServer = createServer(async (request, response) => {
   if (request.method === "GET" && request.url === `/v1/students/${studentId}/today`) {
@@ -63,12 +63,12 @@ const fixtureServer = createServer(async (request, response) => {
   }
   if (request.method === "GET" && request.url === `/v1/cases/${caseId}`) {
     caseReads += 1;
-    if (scenario === "case-not-found" && caseReads === 1) {
+    if (caseReadFailureMode === "not_found") {
       response.writeHead(404, { "Content-Type": "application/json" });
       response.end(JSON.stringify({ error: { code: "RESOURCE_NOT_FOUND", message: "Synthetic case not found.", retryable: false }, requestId: "guided-case-not-found", traceId: "guided-case-not-found" }));
       return;
     }
-    if (dropNextCaseReads > 0) { dropNextCaseReads -= 1; request.socket.destroy(); return; }
+    if (caseReadFailureMode === "network") { request.socket.destroy(); return; }
     const stateVersion = (scenario === "conflict" || scenario === "conflict-get-failure") && posts.length > 0 ? 5 : 4;
     response.writeHead(200, { "Content-Type": "application/json" });
     response.end(JSON.stringify(envelope({ id: caseId, studentId, state: "intervention_active", stateVersion, title: "Synthetic guided fixture", simulation: true, synthetic: true, updatedAt: "2026-08-16T00:00:00.000Z" })));
@@ -79,7 +79,7 @@ const fixtureServer = createServer(async (request, response) => {
     posts.push({ body, idempotencyKey: request.headers["idempotency-key"] });
     if (scenario === "network-unknown") { request.socket.destroy(); return; }
     if ((scenario === "conflict" || scenario === "conflict-get-failure") && posts.length === 1) {
-      if (scenario === "conflict-get-failure") dropNextCaseReads = 3;
+      if (scenario === "conflict-get-failure") caseReadFailureMode = "network";
       response.writeHead(409, { "Content-Type": "application/json" });
       response.end(JSON.stringify({ error: { code: "VERSION_CONFLICT", message: "Synthetic version conflict.", retryable: false }, requestId: "guided-conflict-request", traceId: "guided-conflict-trace" }));
       return;
@@ -116,7 +116,7 @@ try {
   const browser = await chromium.launch({ channel: "msedge", headless: true });
   try {
     for (const currentScenario of ["success", "conflict", "network-unknown", "initial-get-failure", "pre-submit-get-failure", "conflict-get-failure", "case-not-found"]) {
-      scenario = currentScenario; caseReads = 0; dropNextCaseReads = currentScenario === "initial-get-failure" ? 3 : 0; posts.length = 0;
+      scenario = currentScenario; caseReads = 0; caseReadFailureMode = currentScenario === "initial-get-failure" ? "network" : currentScenario === "case-not-found" ? "not_found" : null; posts.length = 0;
       const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
       await page.addInitScript(() => {
         window.__guidedUuidCalls = 0;
@@ -134,6 +134,7 @@ try {
         assert((await page.locator("body").innerText()).includes("未能同步任务版本") || currentScenario === "case-not-found", `${currentScenario}: neutral sync error was missing.`);
         assert(!(await page.locator("body").innerText()).includes("提交结果未确认"), `${currentScenario}: GET failure was mislabeled as submission unknown.`);
         assert(await page.getByRole("button", { name: "重新同步任务" }).isEnabled(), `${currentScenario}: resync was not actionable.`);
+        caseReadFailureMode = null;
         await page.getByRole("button", { name: "重新同步任务" }).click();
         await page.locator('[data-guided-task-state="idle"]').waitFor();
         for (const stepId of stepIds) await page.locator(`input[type="checkbox"][value="${stepId}"]`).check();
@@ -143,12 +144,13 @@ try {
       } else if (currentScenario === "pre-submit-get-failure") {
         await page.locator('[data-guided-task-state="idle"]').waitFor({ timeout: 10_000 });
         for (const stepId of stepIds) await page.locator(`input[type="checkbox"][value="${stepId}"]`).check();
-        dropNextCaseReads = 3;
+        caseReadFailureMode = "network";
         await page.getByRole("button", { name: "确认完成任务" }).click();
         await page.locator('[data-guided-task-state="case_error"]').waitFor();
         assert(posts.length === 0, "pre-submit-get-failure: Case GET failure caused a POST.");
         assert(await page.evaluate(() => window.__guidedUuidCalls) === 0, "pre-submit-get-failure: Case GET failure generated an intent.");
         assert(!(await page.locator("body").innerText()).includes("提交结果未确认"), "pre-submit-get-failure: GET failure was mislabeled as submission unknown.");
+        caseReadFailureMode = null;
         await page.getByRole("button", { name: "重新同步任务" }).click();
         await page.locator('[data-guided-task-state="idle"]').waitFor();
         await page.getByRole("button", { name: "确认完成任务" }).click();
@@ -161,6 +163,7 @@ try {
         await page.locator('[data-guided-task-state="case_error"]').waitFor();
         assert(posts.length === 1, "conflict-get-failure: conflict refresh GET caused an automatic second POST.");
         assert(!(await page.locator("body").innerText()).includes("提交结果未确认"), "conflict-get-failure: GET failure was mislabeled as submission unknown.");
+        caseReadFailureMode = null;
         await page.getByRole("button", { name: "重新同步任务" }).click();
         await page.locator('[data-guided-task-state="idle"]').waitFor();
         assert(posts.length === 1, "conflict-get-failure: resync automatically submitted.");
