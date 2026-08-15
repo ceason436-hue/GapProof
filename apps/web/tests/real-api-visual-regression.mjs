@@ -106,24 +106,6 @@ const fixtures = {
 
 let fixtureName = "current-guided";
 const fixtureServer = createServer((request, response) => {
-  if (fixtureName === "current-guided" && request.url === `/v1/cases/${caseId}`) {
-    response.writeHead(200, { "Content-Type": "application/json" });
-    response.end(JSON.stringify({
-      data: {
-        id: caseId,
-        studentId,
-        state: "intervention_active",
-        stateVersion: 4,
-        title: "Synthetic guided case",
-        simulation: true,
-        synthetic: true,
-        updatedAt: "2026-08-15T01:00:00.000Z",
-      },
-      requestId: "synthetic-current-guided-case-request",
-      traceId: "synthetic-current-guided-case-trace",
-    }));
-    return;
-  }
   if (request.url === `/v1/students/${studentId}/today`) {
     response.writeHead(200, { "Content-Type": "application/json" });
     response.end(JSON.stringify({
@@ -180,6 +162,32 @@ try {
       fixtureName = state;
       for (const [width, height] of [[1440, 900], [1366, 768]]) {
         const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
+        if (state === "current-guided") {
+          await page.route(`${webOrigin}/api/v1/cases/${caseId}`, async route => {
+            if (route.request().method() !== "GET") {
+              await route.fallback();
+              return;
+            }
+            await route.fulfill({
+              status: 200,
+              contentType: "application/json",
+              body: JSON.stringify({
+                data: {
+                  id: caseId,
+                  studentId,
+                  state: "intervention_active",
+                  stateVersion: 4,
+                  title: "Synthetic guided case",
+                  simulation: true,
+                  synthetic: true,
+                  updatedAt: "2026-08-15T01:00:00.000Z",
+                },
+                requestId: "synthetic-current-guided-case-request",
+                traceId: "synthetic-current-guided-case-trace",
+              }),
+            });
+          });
+        }
         await page.goto(`${webOrigin}/student/today`, { waitUntil: "networkidle" });
 
         const expectedSelector = state === "current-guided"
