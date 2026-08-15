@@ -8,6 +8,7 @@ vi.mock("next/image", () => ({
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
+  usePathname: () => "/materials/new",
 }));
 
 describe("SourceUpload component", () => {

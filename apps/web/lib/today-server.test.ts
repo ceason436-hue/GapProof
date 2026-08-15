@@ -26,6 +26,7 @@ describe("server-side Today fetch", () => {
         currentTaskId: null,
         tasks: [],
         overview: {
+          hasStartedJourney: false,
           activityDays: Array.from({ length: 7 }, (_, index) => ({ localDate: `2026-08-${String(10 + index).padStart(2, "0")}`, completedTaskCount: 0 })),
           weeklyGoal: null,
           pendingConfirmationCount: 0,

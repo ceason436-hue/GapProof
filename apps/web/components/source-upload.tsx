@@ -33,6 +33,7 @@ import {
   syntheticRecognitionErrorMessage,
 } from "@/lib/source-recognition";
 import { beginSourceUploadLifecycle } from "@/lib/source-upload-lifecycle";
+import { uploadJourneyPosition } from "@/lib/source-upload-journey";
 import { AppShell } from "./app-shell";
 
 type UploadStatus =
@@ -59,6 +60,8 @@ type UploadIntent = {
 };
 
 type StartRecognitionStatus = "idle" | "starting" | "success" | "error" | "network_unknown";
+
+const uploadJourneyLabels = ["选择图片", "安全上传", "基础检查", "创建案例", "确认识别"] as const;
 
 function formatUploadError(error: unknown): string {
   if (error instanceof ApiClientError) return "上传或图片检查没有完成，请稍后重试。";
@@ -89,6 +92,7 @@ export function SourceUpload({ studentId }: { studentId: string }) {
   const activeAbortRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
   const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<UploadStatus>("idle");
   const [message, setMessage] = useState("请选择一张图片，再开始上传。支持 JPG、PNG 或 WebP，大小 1B–10MiB。");
   const [qualityPassed, setQualityPassed] = useState(false);
@@ -112,6 +116,13 @@ export function SourceUpload({ studentId }: { studentId: string }) {
       document.removeEventListener("visibilitychange", stopWhenHidden);
     };
   }, []);
+
+  useEffect(() => {
+    if (!file) { setPreviewUrl(null); return; }
+    const nextUrl = URL.createObjectURL(file);
+    setPreviewUrl(nextUrl);
+    return () => URL.revokeObjectURL(nextUrl);
+  }, [file]);
 
   const setSafeState = (nextStatus: UploadStatus, nextMessage: string) => {
     if (!mountedRef.current) return;
@@ -142,7 +153,7 @@ export function SourceUpload({ studentId }: { studentId: string }) {
       setSafeState("error", validation.message);
       return;
     }
-    setSafeState("idle", "图片已选择；点击“开始上传”后才会创建一次上传意图。文件名只用于本次请求。");
+    setSafeState("idle", "已选择 1 张图片；点击“开始上传”后才会创建上传意图。");
   };
 
   const showInspectionView = (view: SourceAssetProcessingView) => {
@@ -418,6 +429,14 @@ export function SourceUpload({ studentId }: { studentId: string }) {
             />
             <p id="source-upload-help" className="upload-help">文件会直接上传到短期授权的对象地址；页面不会展示服务端文件名、对象键或内部编号。</p>
           </div>
+          {file && currentValidation.ok ? <div className="selected-upload-preview" data-selected-upload>
+            {previewUrl ? <img src={previewUrl} alt="你刚刚选择的学习材料预览"/> : <div className="selected-upload-placeholder" aria-hidden="true"/>}
+            <div><strong>已选择 1 张图片</strong><span>{file.type.replace("image/", "").toUpperCase()} · {file.size < 1024 * 1024 ? `${Math.max(1, Math.round(file.size / 1024))} KiB` : `${(file.size / 1024 / 1024).toFixed(1)} MiB`}</span><small>尚未上传；不显示本地文件名。</small></div>
+          </div> : null}
+          {file && currentValidation.ok ? <ol className="upload-journey-steps" aria-label="材料处理进度">{uploadJourneyLabels.map((label, index) => {
+            const position = uploadJourneyPosition(status, startRecognitionStatus);
+            return <li key={label} className={index < position ? "complete" : index === position ? "current" : "pending"} aria-current={index === position ? "step" : undefined}><span>{index < position ? "✓" : index + 1}</span><strong>{label}</strong></li>;
+          })}</ol> : null}
           <UploadStatusMessage status={status} message={message}/>
           <div className="upload-actions">
             <button className="primary-blue" type="button" onClick={() => void startUpload()} disabled={!canSubmit}>

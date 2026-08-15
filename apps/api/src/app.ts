@@ -65,6 +65,10 @@ import {
   type SourceAssetPrepareQueuedView,
   SourceAssetPrepareViewSchema,
   SourceAssetProcessingViewSchema,
+  SubmitSyntheticQuickCheckRequestSchema,
+  type SubmitSyntheticQuickCheckRequest,
+  SyntheticQuickCheckResultSchema,
+  SyntheticQuickCheckViewSchema,
   type SourceAssetProcessingView,
   TaskCompletionViewSchema,
   type TaskCompletionView,
@@ -138,6 +142,11 @@ import {
   createSourceAssetUploadToken,
   verifySourceAssetUploadToken,
 } from "./source-asset-token.ts";
+import {
+  scoreSyntheticQuickCheck,
+  SyntheticQuickCheckInputError,
+  syntheticQuickCheckView,
+} from "./synthetic-quick-check.ts";
 
 export interface BuildApiOptions {
   readonly database: Database;
@@ -804,6 +813,49 @@ export async function buildApi(options: BuildApiOptions) {
   });
 
   const clock = options.clock ?? new SystemClock();
+
+  api.get(
+    "/v1/quick-checks/synthetic",
+    {
+      schema: {
+        response: {
+          200: apiResponseSchema(SyntheticQuickCheckViewSchema),
+          "4xx": ApiErrorResponseSchema,
+          500: ApiErrorResponseSchema,
+        },
+      },
+    },
+    async (request) => success(request, syntheticQuickCheckView()),
+  );
+
+  api.post<{ Body: SubmitSyntheticQuickCheckRequest }>(
+    "/v1/quick-checks/synthetic/attempts",
+    {
+      schema: {
+        body: SubmitSyntheticQuickCheckRequestSchema,
+        response: {
+          200: apiResponseSchema(SyntheticQuickCheckResultSchema),
+          "4xx": ApiErrorResponseSchema,
+          500: ApiErrorResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      getIdempotencyKey(request);
+      try {
+        return success(request, scoreSyntheticQuickCheck(request.body));
+      } catch (error) {
+        if (error instanceof SyntheticQuickCheckInputError) {
+          throw new ApiHttpError(
+            400,
+            "INVALID_INPUT",
+            "The synthetic quick-check answers are incomplete or invalid.",
+          );
+        }
+        throw error;
+      }
+    },
+  );
 
   api.post<{ Body: InitiateSourceAssetUploadRequest }>(
     "/v1/source-assets/uploads",

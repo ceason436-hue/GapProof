@@ -20,7 +20,7 @@ const webOrigin = `http://127.0.0.1:${webPort}`;
 const studentId = "0198c111-1111-7000-8000-000000000001";
 const assetId = "0198c111-1111-7000-8000-000000000002";
 const token = "fixture-upload-token-012345678901234567890123";
-const bytes = Buffer.from("synthetic browser upload bytes\n", "utf8");
+const bytes = await readFile(resolve(webRoot, "../../reference/stitch_gapproof_ai/logo.png"));
 const sha256 = createHash("sha256").update(bytes).digest("hex");
 const fileName = "fixture-wrong-answer.png";
 const uploadPath = `/api/v1/source-assets/${assetId}/content`;
@@ -249,6 +249,11 @@ const visitAndInspect = async (page, expectedStatus, {
   assert(await page.getByRole("heading", { name: "上传一张错题或作业图片" }).count() === 1, "Default materials page did not render the upload UI.");
   assert(await page.getByText("真实上传会在后续阶段接入", { exact: false }).count() === 0, "Upload route still renders the F0 placeholder.");
   await choose(page);
+  await page.locator("[data-selected-upload]").waitFor({ timeout: 5_000 });
+  assert(await page.locator("[data-selected-upload]").count() === 1, "Selected image state was not visible before upload.");
+  assert(await page.getByText("已选择 1 张图片", { exact: true }).count() === 1, "Selected image count was not shown.");
+  assert(await page.getByText("选择图片", { exact: true }).count() >= 1 && await page.getByText("确认识别", { exact: true }).count() === 1, "Five-step upload journey was not shown.");
+  assert(!(await page.locator("body").innerText()).includes(fileName), "Local filename leaked into the rendered page.");
   await page.getByRole("button", { name: "开始上传" }).click();
   try {
     await page.locator(`[data-upload-status="${expectedStatus}"]`).waitFor({ timeout: 40_000 });

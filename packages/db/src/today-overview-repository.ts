@@ -92,8 +92,18 @@ export async function findTodayOverview(
   database: TodayOverviewDatabase,
   input: TodayOverviewInput,
 ): Promise<TodayOverview> {
-  const [completedTaskRows, pendingConfirmationRows, progressRows, nextCheckRows] =
+  const [startedCaseRows, completedTaskRows, pendingConfirmationRows, progressRows, nextCheckRows] =
     await Promise.all([
+      database
+        .select({ id: cases.id })
+        .from(cases)
+        .where(
+          and(
+            eq(cases.studentId, input.studentId),
+            isNull(cases.deletedAt),
+          ),
+        )
+        .limit(1),
       database
         .select({ completedAt: tasks.completedAt })
         .from(tasks)
@@ -183,6 +193,7 @@ export async function findTodayOverview(
     .slice(0, 2);
 
   return {
+    hasStartedJourney: startedCaseRows.length > 0,
     activityDays: dates.map((date) => ({
       localDate: date,
       completedTaskCount: completedCounts.get(date) ?? 0,

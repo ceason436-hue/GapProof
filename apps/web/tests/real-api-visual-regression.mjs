@@ -57,7 +57,8 @@ const currentD7 = {
   item: retestItem("d7-current"),
 };
 
-const overview = ({ completedToday = 0, weeklyGoal = null, pendingConfirmationCount = 0, recentProgress = [], nextCheck = null } = {}) => ({
+const overview = ({ hasStartedJourney = true, completedToday = 0, weeklyGoal = null, pendingConfirmationCount = 0, recentProgress = [], nextCheck = null } = {}) => ({
+  hasStartedJourney,
   activityDays: Array.from({ length: 7 }, (_, index) => ({
     localDate: `2026-08-${String(10 + index).padStart(2, "0")}`,
     completedTaskCount: index === 6 ? completedToday : 0,
@@ -123,7 +124,7 @@ const fixtures = {
     timeZone: "Europe/Paris",
     currentTaskId: null,
     tasks: [],
-    overview: overview(),
+    overview: overview({ hasStartedJourney: false }),
   },
 };
 
@@ -219,12 +220,16 @@ try {
             ? '[data-current-task-type="d7_retest"]'
           : state === "scheduled-null"
             ? '[data-current-task="none"]'
-            : ".state-card";
+            : '[data-first-use-today]';
         await page.locator(expectedSelector).waitFor();
         if (state === "current-guided") await page.locator('[data-guided-task-state="idle"]').waitFor();
         if (state === "current-d7") await page.locator('[data-d7-attempt-state="idle"]').waitFor();
         if (state !== "empty" && await page.locator("[data-today-overview]").count() !== 1) {
           throw new Error(`Default Today entry did not render the API overview for ${state}.`);
+        }
+        if (state === "empty") {
+          if (await page.getByRole("link", { name: "上传错题或作业" }).count() !== 1) throw new Error("First-use upload entry missing.");
+          if (await page.getByRole("link", { name: "没有材料，先做 3 道题" }).count() !== 1) throw new Error("First-use quick-check entry missing.");
         }
         if (state === "scheduled-null" && await page.locator('[data-task-status="scheduled"]').count() !== 2) {
           throw new Error("Scheduled-only fixture did not render both D1 and D7 tasks.");

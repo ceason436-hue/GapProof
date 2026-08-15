@@ -2,9 +2,11 @@ import type { D1RetestTaskView, D7RetestTaskView, TodayOverview } from "@gapproo
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { OverviewNextCheck, RetestCard, TodayOverviewPanel } from "./live-today";
+import { FirstUseToday, OverviewNextCheck, RetestCard, TodayOverviewPanel } from "./live-today";
 
 vi.mock("server-only", () => ({}));
+vi.mock("next/image", () => ({ default: ({ alt }: { alt: string }) => createElement("img", { alt }) }));
+vi.mock("next/navigation", () => ({ usePathname: () => "/student/today" }));
 
 function retest(
   taskType: "d1_retest" | "d7_retest",
@@ -62,6 +64,7 @@ describe("D+1/D+7 status cards", () => {
 });
 
 const overview: TodayOverview = {
+  hasStartedJourney: true,
   activityDays: Array.from({ length: 7 }, (_, index) => ({
     localDate: `2026-08-${String(10 + index).padStart(2, "0")}`,
     completedTaskCount: index === 6 ? 2 : index === 5 ? 1 : 0,
@@ -107,6 +110,7 @@ describe("Today overview projection", () => {
   it("does not invent activity or progress for a new-user overview", () => {
     const empty: TodayOverview = {
       ...overview,
+      hasStartedJourney: false,
       activityDays: overview.activityDays.map(day => ({ ...day, completedTaskCount: 0 })),
       weeklyGoal: null,
       pendingConfirmationCount: 0,
@@ -119,5 +123,15 @@ describe("Today overview projection", () => {
     expect(html).toContain("暂无新的学习进展");
     expect(html).not.toContain("坚持");
     expect(html).not.toContain("2 / 5 天");
+  });
+});
+
+describe("FirstUseToday", () => {
+  it("offers both truthful first-use entry points", () => {
+    const html = renderToStaticMarkup(createElement(FirstUseToday));
+    expect(html).toContain("上传错题或作业");
+    expect(html).toContain("没有材料，先做 3 道题");
+    expect(html).toContain("合成 Demo");
+    expect(html).not.toContain("服务端返回空任务列表");
   });
 });

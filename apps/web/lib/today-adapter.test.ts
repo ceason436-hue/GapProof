@@ -13,6 +13,7 @@ const studentId = "11111111-1111-4111-8111-111111111111";
 const caseId = "22222222-2222-4222-8222-222222222222";
 const scheduledFor = "2026-08-16T12:00:00.000Z";
 const overview: TodayOverview = {
+  hasStartedJourney: false,
   activityDays: Array.from({ length: 7 }, (_, index) => ({
     localDate: `2026-08-${String(10 + index).padStart(2, "0")}`,
     completedTaskCount: index === 6 ? 1 : 0,

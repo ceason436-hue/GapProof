@@ -18,6 +18,8 @@ import type {
   LearningTaskView,
   SourceAssetProcessingView,
   StartSyntheticRecognitionView,
+  SyntheticQuickCheckResult,
+  SyntheticQuickCheckView,
   TaskCompletionView,
   TodayTasksView,
   UploadedSourceAssetView,
@@ -330,6 +332,67 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     expect(body.error.code).toBe("INVALID_INPUT");
     expect(body.requestId).toBeTruthy();
     expect(body.traceId).toBeTruthy();
+  });
+
+  it("serves and scores the three-question synthetic quick check without private answers or records", async () => {
+    const casesBefore = (await database.db.select({ id: cases.id }).from(cases)).length;
+    const eventsBefore = (await database.db.select({ id: learningEvidenceEvents.id }).from(learningEvidenceEvents)).length;
+    const idempotencyBefore = (await database.db.select({ id: apiIdempotencyRecords.id }).from(apiIdempotencyRecords)).length;
+    const questionsResponse = await api.inject({
+      method: "GET",
+      url: "/v1/quick-checks/synthetic",
+    });
+    const questions = questionsResponse.json<ApiResponse<SyntheticQuickCheckView>>().data;
+    expect(questionsResponse.statusCode).toBe(200);
+    expect(questions.questions).toHaveLength(3);
+    expect(JSON.stringify(questions)).not.toContain("expectedChoiceId");
+
+    const resultResponse = await api.inject({
+      method: "POST",
+      url: "/v1/quick-checks/synthetic/attempts",
+      headers: { "idempotency-key": "synthetic-quick-check-v1" },
+      payload: { answers: [
+        { itemId: "quick-check-participle-v1", selectedChoiceId: "choice-wrote" },
+        { itemId: "quick-check-past-v1", selectedChoiceId: "choice-went" },
+        { itemId: "quick-check-passive-v1", selectedChoiceId: "choice-was-written" },
+      ] },
+    });
+    const result = resultResponse.json<ApiResponse<SyntheticQuickCheckResult>>().data;
+    expect(resultResponse.statusCode).toBe(200);
+    expect(result).toMatchObject({
+      correctCount: 2,
+      finding: "irregular_participle",
+      learningRecordCreated: false,
+      reportReady: false,
+    });
+    const replayResponse = await api.inject({
+      method: "POST",
+      url: "/v1/quick-checks/synthetic/attempts",
+      headers: { "idempotency-key": "synthetic-quick-check-v1" },
+      payload: { answers: [
+        { itemId: "quick-check-participle-v1", selectedChoiceId: "choice-wrote" },
+        { itemId: "quick-check-past-v1", selectedChoiceId: "choice-went" },
+        { itemId: "quick-check-passive-v1", selectedChoiceId: "choice-was-written" },
+      ] },
+    });
+    expect(replayResponse.statusCode).toBe(200);
+    expect(replayResponse.json<ApiResponse<SyntheticQuickCheckResult>>().data).toEqual(result);
+    expect((await database.db.select({ id: cases.id }).from(cases))).toHaveLength(casesBefore);
+    expect((await database.db.select({ id: learningEvidenceEvents.id }).from(learningEvidenceEvents))).toHaveLength(eventsBefore);
+    expect((await database.db.select({ id: apiIdempotencyRecords.id }).from(apiIdempotencyRecords))).toHaveLength(idempotencyBefore);
+
+    const invalid = await api.inject({
+      method: "POST",
+      url: "/v1/quick-checks/synthetic/attempts",
+      headers: { "idempotency-key": "synthetic-quick-check-invalid-v1" },
+      payload: { answers: [
+        { itemId: "quick-check-participle-v1", selectedChoiceId: "choice-written" },
+        { itemId: "quick-check-past-v1", selectedChoiceId: "choice-went" },
+        { itemId: "quick-check-passive-v1", selectedChoiceId: "not-a-choice" },
+      ] },
+    });
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.json<ApiErrorResponse>().error.code).toBe("INVALID_INPUT");
   });
 
   it("creates and replays the same synthetic case idempotently", async () => {

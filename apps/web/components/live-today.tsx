@@ -1,4 +1,5 @@
 import type { D1RetestTaskView, D7RetestTaskView, GuidedInterventionTaskView, TodayOverview } from "@gapproof/contracts";
+import Link from "next/link";
 import { AppShell } from "./app-shell";
 import { D1AttemptPanel } from "./d1-attempt-panel";
 import { D7AttemptPanel } from "./d7-attempt-panel";
@@ -88,6 +89,16 @@ export function TodayOverviewPanel({ overview }: { overview: TodayOverview }) {
     <div className="overview-summary"><OverviewActivity overview={overview}/><OverviewGoal overview={overview}/></div>
     <div className="overview-facts"><OverviewPending overview={overview}/><OverviewProgress overview={overview}/></div>
   </article>;
+}
+
+export function FirstUseToday() {
+  return <AppShell actionHref="/diagnose" actionLabel="开始第一次检查"><section className="today-page" data-first-use-today>
+    <div className="title-row"><div><span className="status-chip">真实 API 模式</span><h1>从第一次检查开始</h1><p>选择适合你的入口；页面不会用 Mock 任务填充真实账户。</p></div></div>
+    <div className="onboarding-grid">
+      <article className="onboarding-main"><span className="eyebrow">推荐路径</span><h2>把一次检查走完整</h2><ol><li><span className="step-number">1</span><div><strong>选择开始方式</strong><span>上传错题，或先做 3 道合成快速诊断题。</span></div></li><li><span className="step-number">2</span><div><strong>确认系统读到的内容</strong><span>上传路径会由你显式创建并确认同一 Case。</span></div></li><li><span className="step-number">3</span><div><strong>进入后续学习任务</strong><span>真实 API 会显示已有的 guided、D+1 与 D+7 状态。</span></div></li></ol><div className="button-row"><Link className="primary-blue" href="/materials/new">上传错题或作业</Link><Link className="ghost-link" href="/diagnose/quick-check">没有材料，先做 3 道题</Link></div></article>
+      <aside className="prepare-card"><h2>开始前你需要知道</h2><ul><li>上传图片不会自动创建案例。</li><li>当前识别为醒目标注的合成 Demo，不读取上传图片。</li><li>快速诊断不写学习记录，也不生成报告。</li></ul><p>真实 OCR、原图自动删除和异步报告仍未开放。</p></aside>
+    </div>
+  </section></AppShell>;
 }
 
 export function OverviewNextCheck({ nextCheck, timeZone }: { nextCheck: TodayOverview["nextCheck"]; timeZone: string }) {
@@ -229,12 +240,12 @@ export async function LiveToday() {
   try {
     const response = await fetchDemoStudentToday();
     const model = toTodayReadModel(response.data);
-    if (model.taskCount === 0 && model.current.kind === "none") {
-      return <AppShell actionDisabled actionLabel="暂无当前任务"><section className="today-page">
-        <div className="title-row"><div><span className="status-chip">真实 API 模式</span><h1>今天暂时没有任务</h1><p>服务端返回空任务列表；页面没有使用 Mock 内容填充。</p></div></div>
-        <article className="state-card"><div><h2>这是服务端确认的空状态</h2><p>新的任务或检查由服务端创建后才会显示。</p></div></article>
-      </section></AppShell>;
-    }
+    if (!model.overview.hasStartedJourney) return <FirstUseToday/>;
+    if (model.taskCount === 0 && model.current.kind === "none") return <AppShell actionHref="/diagnose" actionLabel="开始新的检查"><section className="today-page">
+      <div className="title-row"><div><span className="status-chip">真实 API 模式</span><h1>今天的任务已完成</h1><p>当前没有需要继续的任务，你可以开始一次新的检查。</p></div></div>
+      <article className="state-card"><div><h2>今天先到这里</h2><p>已有记录会保留；需要时可以上传新材料，或先做三题合成快速检查。</p><div className="button-row"><Link className="primary-blue" href="/diagnose">开始新的检查</Link><Link className="ghost-link" href="/student/progress">查看已有进展</Link></div></div></article>
+      <TodayOverviewPanel overview={model.overview}/>
+    </section></AppShell>;
 
     const actionLabel = model.current.kind === "selected"
       ? model.current.task.taskType === "guided_intervention" ? "完成引导任务" : model.current.task.taskType === "d1_retest" ? "D+1 检查" : "D+7 检查"

@@ -20,6 +20,7 @@ const activityDays = Array.from({ length: 7 }, (_, index) => ({
 describe("Today overview contract", () => {
   it("accepts only factual, answer-free homepage projections", () => {
     const overview = {
+      hasStartedJourney: true,
       activityDays,
       weeklyGoal: null,
       pendingConfirmationCount: 1,
@@ -43,6 +44,7 @@ describe("Today overview contract", () => {
 
   it("rejects invented goals, answer leakage, and non-retest next checks", () => {
     expect(Value.Check(TodayOverviewSchema, {
+      hasStartedJourney: false,
       activityDays,
       weeklyGoal: { targetDays: 0, completedDays: 0 },
       pendingConfirmationCount: 0,
@@ -51,6 +53,7 @@ describe("Today overview contract", () => {
     })).toBe(false);
 
     expect(Value.Check(TodayOverviewSchema, {
+      hasStartedJourney: false,
       activityDays,
       weeklyGoal: null,
       pendingConfirmationCount: 0,
@@ -65,6 +68,7 @@ describe("Today overview contract", () => {
     })).toBe(false);
 
     expect(Value.Check(TodayOverviewSchema, {
+      hasStartedJourney: false,
       activityDays,
       weeklyGoal: null,
       pendingConfirmationCount: 0,

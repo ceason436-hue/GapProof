@@ -50,6 +50,7 @@ const today = {
   currentTaskId: taskId,
   tasks: [task],
   overview: {
+    hasStartedJourney: true,
     activityDays: Array.from({ length: 7 }, (_, index) => ({
       localDate: `2026-08-${String(10 + index).padStart(2, "0")}`,
       completedTaskCount: index === 6 ? 1 : 0,

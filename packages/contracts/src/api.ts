@@ -43,6 +43,71 @@ export const CreateCaseRequestSchema = Type.Object({
 
 export type CreateCaseRequest = Static<typeof CreateCaseRequestSchema>;
 
+export const SyntheticQuickCheckChoiceSchema = Type.Object({
+  id: Type.String({ minLength: 1 }),
+  label: Type.String({ minLength: 1 }),
+}, { additionalProperties: false });
+
+export const SyntheticQuickCheckQuestionSchema = Type.Object({
+  itemId: Type.String({ minLength: 1 }),
+  prompt: Type.String({ minLength: 1 }),
+  choices: Type.Array(SyntheticQuickCheckChoiceSchema, { minItems: 2 }),
+}, { additionalProperties: false });
+
+export const SyntheticQuickCheckViewSchema = Type.Object({
+  mode: Type.Literal("synthetic_demo"),
+  source: Type.Literal("original_fixture"),
+  estimatedMinutes: Type.Literal(3),
+  questions: Type.Array(SyntheticQuickCheckQuestionSchema, {
+    minItems: 3,
+    maxItems: 3,
+  }),
+}, { additionalProperties: false });
+
+export type SyntheticQuickCheckView = Static<
+  typeof SyntheticQuickCheckViewSchema
+>;
+
+export const SyntheticQuickCheckAnswerSchema = Type.Object({
+  itemId: Type.String({ minLength: 1 }),
+  selectedChoiceId: Type.String({ minLength: 1 }),
+}, { additionalProperties: false });
+
+export const SubmitSyntheticQuickCheckRequestSchema = Type.Object({
+  answers: Type.Array(SyntheticQuickCheckAnswerSchema, {
+    minItems: 3,
+    maxItems: 3,
+  }),
+}, { additionalProperties: false });
+
+export type SubmitSyntheticQuickCheckRequest = Static<
+  typeof SubmitSyntheticQuickCheckRequestSchema
+>;
+
+export const SyntheticQuickCheckFindingSchema = Type.Union([
+  Type.Literal("irregular_participle"),
+  Type.Literal("past_tense"),
+  Type.Literal("passive_voice"),
+  Type.Literal("mixed_review"),
+]);
+
+export const SyntheticQuickCheckResultSchema = Type.Object({
+  mode: Type.Literal("synthetic_demo"),
+  source: Type.Literal("original_fixture"),
+  scoringMethod: Type.Literal("exact-choice-v1"),
+  correctCount: Type.Integer({ minimum: 0, maximum: 3 }),
+  totalCount: Type.Literal(3),
+  finding: SyntheticQuickCheckFindingSchema,
+  summary: Type.String({ minLength: 1 }),
+  recommendation: Type.String({ minLength: 1 }),
+  learningRecordCreated: Type.Literal(false),
+  reportReady: Type.Literal(false),
+}, { additionalProperties: false });
+
+export type SyntheticQuickCheckResult = Static<
+  typeof SyntheticQuickCheckResultSchema
+>;
+
 export const StudentUploadMimeTypeSchema = Type.Union([
   Type.Literal("image/jpeg"),
   Type.Literal("image/png"),
@@ -448,6 +513,8 @@ export const TodayNextCheckSchema = Type.Object({
 }, { additionalProperties: false });
 
 export const TodayOverviewSchema = Type.Object({
+  /** True after the student has at least one non-deleted Case. */
+  hasStartedJourney: Type.Boolean(),
   /** Seven consecutive local calendar days ending on the server-authoritative today. */
   activityDays: Type.Array(TodayActivityDaySchema, {
     minItems: 7,
