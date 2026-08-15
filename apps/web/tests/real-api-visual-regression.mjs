@@ -51,6 +51,11 @@ const scheduledD7 = {
   taskType: "d7_retest",
   item: retestItem("d7"),
 };
+const currentD7 = {
+  ...taskBase("0198b111-1111-7000-8000-000000000014", "ready", "第 7 天新题检查"),
+  taskType: "d7_retest",
+  item: retestItem("d7-current"),
+};
 
 const overview = ({ completedToday = 0, weeklyGoal = null, pendingConfirmationCount = 0, recentProgress = [], nextCheck = null } = {}) => ({
   activityDays: Array.from({ length: 7 }, (_, index) => ({
@@ -94,6 +99,24 @@ const fixtures = {
     currentTaskId: null,
     tasks: [scheduledD1, scheduledD7],
     overview: overview({ nextCheck: null }),
+  },
+  "current-d7": {
+    studentId,
+    timeZone: "Asia/Tokyo",
+    currentTaskId: currentD7.id,
+    tasks: [currentD7, scheduledD1],
+    overview: overview({
+      weeklyGoal: { targetDays: 5, completedDays: 2 },
+      pendingConfirmationCount: 1,
+      nextCheck: {
+        taskId: scheduledD1.id,
+        taskType: "d1_retest",
+        title: scheduledD1.title,
+        scheduledFor: scheduledD1.scheduledFor,
+        dueAt: scheduledD1.dueAt,
+        estimatedMinutes: scheduledD1.estimatedMinutes,
+      },
+    }),
   },
   empty: {
     studentId,
@@ -162,7 +185,7 @@ try {
       fixtureName = state;
       for (const [width, height] of [[1440, 900], [1366, 768]]) {
         const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
-        if (state === "current-guided") {
+        if (state === "current-guided" || state === "current-d7") {
           await page.route(`${webOrigin}/api/v1/cases/${caseId}`, async route => {
             if (route.request().method() !== "GET") {
               await route.fallback();
@@ -175,7 +198,7 @@ try {
                 data: {
                   id: caseId,
                   studentId,
-                  state: "intervention_active",
+                  state: state === "current-d7" ? "d7_scheduled" : "intervention_active",
                   stateVersion: 4,
                   title: "Synthetic guided case",
                   simulation: true,
@@ -192,11 +215,14 @@ try {
 
         const expectedSelector = state === "current-guided"
           ? '[data-current-task-type="guided_intervention"]'
+          : state === "current-d7"
+            ? '[data-current-task-type="d7_retest"]'
           : state === "scheduled-null"
             ? '[data-current-task="none"]'
             : ".state-card";
         await page.locator(expectedSelector).waitFor();
         if (state === "current-guided") await page.locator('[data-guided-task-state="idle"]').waitFor();
+        if (state === "current-d7") await page.locator('[data-d7-attempt-state="idle"]').waitFor();
         if (state !== "empty" && await page.locator("[data-today-overview]").count() !== 1) {
           throw new Error(`Default Today entry did not render the API overview for ${state}.`);
         }

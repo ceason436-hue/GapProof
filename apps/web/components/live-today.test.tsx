@@ -30,7 +30,7 @@ function retest(
   } as D1RetestTaskView | D7RetestTaskView;
 }
 
-describe("D+1/D+7 read-only cards", () => {
+describe("D+1/D+7 status cards", () => {
   it.each([
     ["d1_retest", "scheduled"], ["d1_retest", "ready"], ["d1_retest", "completed"],
     ["d7_retest", "scheduled"], ["d7_retest", "ready"], ["d7_retest", "completed"],
@@ -46,7 +46,7 @@ describe("D+1/D+7 read-only cards", () => {
     expect(html).not.toContain("href=");
   });
 
-  it("labels ready D1 as actionable and D7 as read-only", () => {
+  it("labels ready D1 and D7 as available in the current task area", () => {
     const d1 = renderToStaticMarkup(createElement(RetestCard, {
       retest: retest("d1_retest", "ready"), timeZone: "Asia/Tokyo",
     }));
@@ -55,9 +55,9 @@ describe("D+1/D+7 read-only cards", () => {
     }));
     expect(d1).toContain("可以检查");
     expect(d1).toContain("ready D1 可以作答");
-    expect(d7).toContain("D+7 检查只读");
-    expect(d7).toContain("只读待接入");
-    expect(d7).not.toContain("可以检查");
+    expect(d7).toContain("可作答");
+    expect(d7).toContain("ready D7 可以作答");
+    expect(d7).toContain("D+7 可以检查");
   });
 });
 

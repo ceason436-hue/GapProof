@@ -1,6 +1,7 @@
-import type { D1RetestTaskView, GuidedInterventionTaskView, TodayOverview } from "@gapproof/contracts";
+import type { D1RetestTaskView, D7RetestTaskView, GuidedInterventionTaskView, TodayOverview } from "@gapproof/contracts";
 import { AppShell } from "./app-shell";
 import { D1AttemptPanel } from "./d1-attempt-panel";
+import { D7AttemptPanel } from "./d7-attempt-panel";
 import { GuidedTaskCompletion } from "./guided-task-completion";
 import { ApiClientError } from "@/lib/api-client";
 import { WebConfigurationError } from "@/lib/runtime-config";
@@ -111,7 +112,7 @@ export function RetestCard({
   const status = retest.status === "scheduled"
     ? "等待到期"
     : retest.status === "ready"
-      ? retest.taskType === "d7_retest" ? "只读待接入" : "可以检查"
+      ? retest.taskType === "d7_retest" ? "可作答" : "可以检查"
       : "已有完成记录";
   const note = retest.status === "scheduled"
     ? "等待服务端按学生时区激活。"
@@ -119,14 +120,14 @@ export function RetestCard({
       ? "这里只展示服务端完成状态，不生成掌握结论。"
       : retest.taskType === "d1_retest"
         ? "ready D1 可以作答，提交后由服务端记录。"
-        : "D+7 attempts 尚未实现，本轮保持只读。";
+        : "ready D7 可以作答，提交后由服务端记录。";
   const button = retest.status === "scheduled"
     ? "尚未到期"
     : retest.status === "completed"
       ? "已完成（只读）"
       : retest.taskType === "d1_retest"
         ? "可以检查"
-        : "D+7 检查只读";
+        : "D+7 可以检查";
 
   return <article className="retest-card" data-task-status={retest.status} data-task-type={retest.taskType}>
     <header>
@@ -160,6 +161,16 @@ function D1Current({ task, timeZone }: { task: D1RetestTaskView; timeZone: strin
   </article>;
 }
 
+function D7Current({ task, timeZone }: { task: D7RetestTaskView; timeZone: string }) {
+  return <article className="live-panel current-panel" data-current-task-type={task.taskType}>
+    <span className="task-kind">服务端当前任务 · D+7 检查</span>
+    <h2>{task.title}</h2>
+    <p>{task.item.prompt}</p>
+    <TaskDates scheduledFor={task.scheduledFor} dueAt={task.dueAt} timeZone={timeZone}/>
+    <D7AttemptPanel task={task}/>
+  </article>;
+}
+
 function CurrentContractError({ current }: { current: Extract<CurrentTaskSelection, { kind: "contract_error" }> }) {
   const detail = current.code === "CURRENT_TASK_NOT_FOUND"
     ? "currentTaskId 没有对应任务。"
@@ -183,9 +194,10 @@ function CurrentPanel({ current, timeZone }: { current: CurrentTaskSelection; ti
     </article>;
   }
   if (current.kind === "contract_error") return <CurrentContractError current={current}/>;
-  return current.task.taskType === "guided_intervention"
-    ? <GuidedCurrent task={current.task} timeZone={timeZone}/>
-    : <D1Current task={current.task} timeZone={timeZone}/>;
+  if (current.task.taskType === "guided_intervention") return <GuidedCurrent task={current.task} timeZone={timeZone}/>;
+  return current.task.taskType === "d1_retest"
+    ? <D1Current task={current.task} timeZone={timeZone}/>
+    : <D7Current task={current.task} timeZone={timeZone}/>;
 }
 
 function LiveError({ error }: { error: unknown }) {
@@ -225,7 +237,7 @@ export async function LiveToday() {
     }
 
     const actionLabel = model.current.kind === "selected"
-      ? model.current.task.taskType === "guided_intervention" ? "完成引导任务" : "D+1 检查"
+      ? model.current.task.taskType === "guided_intervention" ? "完成引导任务" : model.current.task.taskType === "d1_retest" ? "D+1 检查" : "D+7 检查"
       : model.current.kind === "contract_error" ? "当前任务不可用" : "暂无当前任务";
     return <AppShell actionDisabled actionLabel={actionLabel}>
       <section className="today-page">
@@ -235,7 +247,7 @@ export async function LiveToday() {
             <CurrentPanel current={model.current} timeZone={model.timeZone}/>
             <TodayOverviewPanel overview={model.overview}/>
           </div>
-          <aside className="live-panel"><OverviewNextCheck nextCheck={model.overview.nextCheck} timeZone={model.timeZone}/><h2>D+1 / D+7 检查状态</h2><p>ready D1 可在当前任务区作答；D+7 仍只读。默认入口为 API，Mock 仅在显式 <code>?source=mock</code> 时启用。</p><div className="retest-list">
+          <aside className="live-panel"><OverviewNextCheck nextCheck={model.overview.nextCheck} timeZone={model.timeZone}/><h2>D+1 / D+7 检查状态</h2><p>ready D1/D7 可在当前任务区作答；列表卡片只展示服务端状态。默认入口为 API，Mock 仅在显式 <code>?source=mock</code> 时启用。</p><div className="retest-list">
             {model.retests.length
               ? model.retests.map(retest => <RetestCard key={retest.id} retest={retest} timeZone={model.timeZone}/>)
               : <div className="unavailable-row"><strong>暂无延迟检查</strong><span>服务端创建后才会显示。</span></div>}

@@ -8,7 +8,7 @@ import type {
 } from "@gapproof/contracts";
 
 export type RetestTaskView = D1RetestTaskView | D7RetestTaskView;
-export type CurrentActionableTask = GuidedInterventionTaskView | D1RetestTaskView;
+export type CurrentActionableTask = GuidedInterventionTaskView | D1RetestTaskView | D7RetestTaskView;
 
 export type CurrentTaskSelection =
   | { kind: "none" }
@@ -55,13 +55,6 @@ function selectCurrentTask(view: TodayTasksView): CurrentTaskSelection {
     return {
       kind: "contract_error",
       code: "CURRENT_TASK_NOT_READY",
-      referencedTask: task,
-    };
-  }
-  if (task.taskType === "d7_retest") {
-    return {
-      kind: "contract_error",
-      code: "CURRENT_TASK_READ_ONLY",
       referencedTask: task,
     };
   }

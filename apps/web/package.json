@@ -10,6 +10,7 @@
     "screenshots": "node tests/visual-regression.mjs",
     "screenshots:api": "node tests/real-api-visual-regression.mjs",
     "test:browser:d1": "node tests/d1-browser-fixture.mjs",
+    "test:browser:d7": "node tests/d7-browser-fixture.mjs",
     "test:browser:guided-task": "node tests/guided-task-browser-fixture.mjs",
     "test:browser:upload": "node tests/source-upload-browser-fixture.mjs",
     "test:browser:demo-review": "node tests/demo-review-browser-fixture.mjs",

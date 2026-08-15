@@ -102,12 +102,11 @@ describe("Today contract adapter", () => {
     },
   );
 
-  it("keeps a ready D7 reference read-only and never promotes another task", () => {
+  it("promotes a ready D7 reference as the server-selected current task", () => {
     const d7 = retest("d7_retest");
     expect(toTodayReadModel(today([d7, guided()], d7.id)).current).toMatchObject({
-      kind: "contract_error",
-      code: "CURRENT_TASK_READ_ONLY",
-      referencedTask: d7,
+      kind: "selected",
+      task: d7,
     });
   });
 
