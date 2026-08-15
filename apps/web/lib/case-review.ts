@@ -115,13 +115,13 @@ export function reviewErrorMessage(error: unknown, fallback: string): string {
   switch (code) {
     case "SCHEMA_INVALID":
     case "INVALID_INPUT":
-      return "这次请求没有通过校验；输入已保留，请确认后再试。";
+      return "有一项内容需要重新确认，已填写的内容仍会保留。";
     case "VERSION_CONFLICT":
-      return "内容已更新，已同步最新版本；请重新确认后提交。";
+      return "内容已更新，请重新确认后提交。";
     case "IDEMPOTENCY_KEY_REUSED":
-      return "这次提交标识已被占用；页面不会自动重交，请重新明确操作。";
+      return "这次操作没有完成，请重新确认后再试。";
     case "RESOURCE_NOT_FOUND":
-      return "没有找到这份 Case 内容；不会回退到演示页面，请稍后返回今日。";
+      return "没有找到这份内容，请稍后返回今日页再试。";
     case "EXTRACTION_NOT_READY":
       return "识别内容还在准备中，请稍后再试。";
     default:

@@ -7,10 +7,10 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档状态 | Draft v0.1.31 |
+| 文档状态 | Draft v0.1.32 |
 | 产品名称 | 知隙 GapProof |
 | 文档角色 | 产品需求、业务流程、功能范围与验收标准 |
-| 当前阶段 | PUSH-024 已发布：官方 SDK 的 RecognizeEduPaperOcr 开发态路径完成但未发起真实调用、未接生产链路；真实 OCR、真实个性化与报告仍 unresolved/deferred |
+| 当前阶段 | PUSH-025 已发布：授权脱敏材料的阿里云教育 OCR 开发态 smoke 已真实调用成功并返回 needs_confirmation；学生全路径产品文案完成治理，但真实 OCR 尚未接上传/API/Worker/UI，真实个性化与报告仍 unresolved/deferred |
 | 产品形态 | Web 应用 |
 | 目标教材 | 上海教育出版社《义务教育教科书（五·四学制）英语 八年级上册》 |
 | 适用版本 | 目标教材以 ISBN、当前 PDF 哈希和内容快照锁定；版权页不可取得，版次、印次和册次保持未知 |
@@ -452,7 +452,7 @@ MVP 使用原创模拟试卷、预置学生 Case 和合成学习轨迹，不声�
 - 不默认使用儿童输入训练模型；
 - 所有关键模型调用和数据访问可审计。
 
-当前 `[PROTOTYPE]` 仅完成阿里云 OCR 的隔离安全 adapter/transport seam：默认关闭，只允许合成或脱敏 HTTPS source，不接受真实学生模式，也未接上传、Case、Worker、API 或页面。它仅证明输入保护、超时、错误映射、响应归一化和敏感字段不外泄；未冻结阿里云官方签名/响应协议，未使用真实凭据或发起真实调用，不能表述为真实 OCR 已实现、已验收或可供学生使用。
+当前 `[PROTOTYPE]` 已完成阿里云 OCR 的隔离安全 adapter/官方 SDK transport：默认关闭，只允许授权的合成或脱敏输入，不接受真实学生模式，也未接上传、Case、Worker、API 或页面。一次授权测试材料的真实开发态 smoke 已证明二进制上传、鉴权和响应解析可用，但结果为 `needs_confirmation`，仍须人工确认；这不证明识别准确率、生产可用性、真实个性化、真实学生记录或学习效果。
 
 ## 11. Demo 方案
 
@@ -661,6 +661,7 @@ PROJECT_MASTER.md
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
+| 0.1.32 | 2026-08-16 | 完成授权脱敏材料的阿里云教育 OCR 真实开发态 smoke，调用链成功但结果为 `needs_confirmation`，未接上传/Case/API/Worker/UI；完成学生全路径产品文案和截图治理，内部工程术语不再默认可见，体验内容继续明确不保存为正式学习记录。同步 PROJECT_MASTER v0.1.40、TDD v0.3.33、DESIGN v0.2.30、PUSH-025；真实 OCR 产品接线、真实个性化、真实学生记录、学习效果与报告仍 unresolved/deferred |
 | 0.1.31 | 2026-08-16 | 接入阿里云官方 SDK 的 `RecognizeEduPaperOcr` 开发态 transport 与 `ParsePaperOutput` 归一化，新增 ignored `.env` 凭据入口和 synthetic/desensitized HTTPS smoke CLI。缺少可证明已轮换的新凭据及原创/脱敏可访问图片，未执行真实调用，也未接上传/Case/Worker/API/UI；同步 PROJECT_MASTER v0.1.39、TDD v0.3.32、DESIGN v0.2.29、PUSH-024。真实 OCR、真实学生记录、个性化、学习效果和报告仍 unresolved/deferred |
 | 0.1.30 | 2026-08-16 | 发布默认关闭、仅接受 synthetic/desensitized HTTPS 输入的阿里云 OCR Provider 安全 Spike；未接上传/Case/Worker/API/UI，未使用真实凭据、材料或学生数据，未发起真实 Provider 调用。稳定错误语义、粗粒度置信度与敏感字段隔离已通过门禁；同步 PROJECT_MASTER v0.1.38、TDD v0.3.31、DESIGN v0.2.28、PUSH-023。真实 OCR、处理 consent/status、删除策略、真实个性化/学习效果和报告仍 unresolved/deferred |
 | 0.1.29 | 2026-08-16 | 发布真实 API 首次使用 onboarding、上传/三题原创合成检查双入口、上传缩略图与五步状态、正确侧栏路由和计划/进步/报告事实空状态。快速检查固定不创建 Case、学习记录或报告；146 fast、59 integration、98 web 与完整门禁通过。同步 PROJECT_MASTER v0.1.37、TDD v0.3.30、DESIGN v0.2.27、PUSH-022；真实 OCR、真实个性化、学习效果、删除策略与异步报告仍 unresolved/deferred |

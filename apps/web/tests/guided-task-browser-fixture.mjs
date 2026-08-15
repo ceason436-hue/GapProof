@@ -132,11 +132,11 @@ try {
         await page.locator('[data-guided-task-state="case_error"]').waitFor({ timeout: 10_000 });
         assert(posts.length === 0, `${currentScenario}: Case GET failure caused a POST.`);
         assert(await page.evaluate(() => window.__guidedUuidCalls) === 0, `${currentScenario}: Case GET failure generated an intent.`);
-        assert((await page.locator("body").innerText()).includes("未能同步任务版本") || currentScenario === "case-not-found", `${currentScenario}: neutral sync error was missing.`);
+        assert((await page.locator("body").innerText()).includes("暂时无法加载最新内容") || currentScenario === "case-not-found", `${currentScenario}: neutral load error was missing.`);
         assert(!(await page.locator("body").innerText()).includes("提交结果未确认"), `${currentScenario}: GET failure was mislabeled as submission unknown.`);
-        assert(await page.getByRole("button", { name: "重新同步任务" }).isEnabled(), `${currentScenario}: resync was not actionable.`);
+        assert(await page.getByRole("button", { name: "重新加载" }).isEnabled(), `${currentScenario}: reload was not actionable.`);
         caseReadFailureMode = null;
-        await page.getByRole("button", { name: "重新同步任务" }).click();
+        await page.getByRole("button", { name: "重新加载" }).click();
         await page.locator('[data-guided-task-state="idle"]').waitFor();
         for (const stepId of stepIds) await page.locator(`input[type="checkbox"][value="${stepId}"]`).check();
         await page.getByRole("button", { name: "确认完成任务" }).click();
@@ -152,7 +152,7 @@ try {
         assert(await page.evaluate(() => window.__guidedUuidCalls) === 0, "pre-submit-get-failure: Case GET failure generated an intent.");
         assert(!(await page.locator("body").innerText()).includes("提交结果未确认"), "pre-submit-get-failure: GET failure was mislabeled as submission unknown.");
         caseReadFailureMode = null;
-        await page.getByRole("button", { name: "重新同步任务" }).click();
+        await page.getByRole("button", { name: "重新加载" }).click();
         await page.locator('[data-guided-task-state="idle"]').waitFor();
         await page.getByRole("button", { name: "确认完成任务" }).click();
         await page.locator('[data-guided-result="success"]').waitFor();
@@ -165,7 +165,7 @@ try {
         assert(posts.length === 1, "conflict-get-failure: conflict refresh GET caused an automatic second POST.");
         assert(!(await page.locator("body").innerText()).includes("提交结果未确认"), "conflict-get-failure: GET failure was mislabeled as submission unknown.");
         caseReadFailureMode = null;
-        await page.getByRole("button", { name: "重新同步任务" }).click();
+        await page.getByRole("button", { name: "重新加载" }).click();
         await page.locator('[data-guided-task-state="idle"]').waitFor();
         assert(posts.length === 1, "conflict-get-failure: resync automatically submitted.");
         await page.getByRole("button", { name: "确认完成任务" }).click();
@@ -184,7 +184,7 @@ try {
         assert(uuidV7Pattern.test(posts[0].idempotencyKey ?? ""), "success: Idempotency-Key was not UUIDv7.");
         assert(JSON.stringify(posts[0].body) === JSON.stringify({ expectedVersion: 4, completedStepIds: stepIds }), "success: request body was not exact.");
         const resultText = await page.locator('[data-guided-result="success"]').innerText();
-        assert(resultText.includes("D+1 已安排") && resultText.includes("下一次检查"), "success: neutral D+1 result missing.");
+        assert(resultText.includes("明日复习已安排") && resultText.includes("下一次检查"), "success: neutral next-day result missing.");
         assert(!/已掌握|已修复|个性化/.test(resultText), "success: learning-effect claim leaked.");
       } else if (currentScenario === "conflict") {
         await page.locator('[data-guided-task-state="conflict"]').waitFor();

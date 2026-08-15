@@ -178,7 +178,7 @@ try {
         assert(uuidV7Pattern.test(posts[0].idempotencyKey ?? ""), "success: Idempotency-Key was not UUIDv7.");
         assert(JSON.stringify(posts[0].body) === JSON.stringify({ expectedVersion: 4, itemId, selectedChoiceId }), "success: POST body did not use authoritative version/item/choice.");
         const resultText = await page.locator('[data-d7-attempt-result="repair_verified"]').innerText();
-        assert(resultText.includes("第 7 天新题检查已通过") && resultText.includes("修复验证已有证据"), "success: neutral repair verification copy missing.");
+        assert(resultText.includes("第 7 天新题检查已通过") && resultText.includes("只代表本次检查"), "success: neutral repair verification copy missing.");
         assert(!/报告|已掌握|永久|个性化|answerKey|scoringMethod|exact-choice-v1|0198b111/i.test(resultText), "success: sensitive or unsupported claim leaked.");
       } else if (currentScenario === "conflict") {
         await page.locator('[data-d7-attempt-state="conflict"]').waitFor();
@@ -192,7 +192,7 @@ try {
         assert(posts[0].idempotencyKey !== posts[1].idempotencyKey, "conflict: new confirmation reused the old UUID.");
       } else {
         await page.locator('[data-d7-attempt-state="error"]').waitFor();
-        assert(await page.getByText("提交结果未确认", { exact: false }).isVisible(), "network-unknown: guidance was not shown.");
+        assert(await page.getByText("暂时无法确认是否提交成功", { exact: false }).isVisible(), "network-unknown: guidance was not shown.");
         assert(posts.length === 2, `network-unknown: expected exactly two POSTs, observed ${posts.length}.`);
         assert(posts[0].idempotencyKey === posts[1].idempotencyKey, "network-unknown: retry changed the key.");
         assert(JSON.stringify(posts[0].body) === JSON.stringify(posts[1].body), "network-unknown: retry changed the body.");

@@ -7,7 +7,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "ocr:smoke": "bun scripts/alibaba-ocr-smoke.ts"
+    "ocr:smoke": "bun --env-file=../../.env scripts/alibaba-ocr-smoke.ts"
   },
   "dependencies": {
     "@alicloud/ocr-api20210707": "3.1.3",

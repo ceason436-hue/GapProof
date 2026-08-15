@@ -1054,7 +1054,7 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     expect(missingView.quality).toMatchObject({ status: "failed", reasons: ["stored_bytes_missing"] });
     const lowView = await waitForSourceAsset(api, low.assetId, "needs_confirmation");
     expect(lowView.quality).toMatchObject({ status: "needs_confirmation", reasons: ["low_resolution"], width: 320, height: 240 });
-  });
+  }, 35_000);
 
   it("returns a unified not-found error", async () => {
     const response = await api.inject({

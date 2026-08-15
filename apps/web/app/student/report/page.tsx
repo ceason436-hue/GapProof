@@ -1,5 +1,5 @@
 import { StudentFeatureState } from "@/components/student-feature-state";
 
 export default function ReportPage() {
-  return <StudentFeatureState eyebrow="学习报告" title="报告功能尚未开放" description="完成诊断或复测不等于报告已经生成。" cardTitle="当前没有可读取的报告" cardDescription="只有进入严格 report_ready、存在权威引用且当前可读时才能开放报告；异步学生/家长报告仍为 deferred。" icon="report"/>;
+  return <StudentFeatureState eyebrow="学习报告" title="报告功能暂未开放" description="完成检查后还需要积累足够的学习记录，才能形成报告。" cardTitle="当前还没有学习报告" cardDescription="你可以先完成今日任务。体验内容不会生成正式报告，也不代表真实学习效果。" icon="report"/>;
 }

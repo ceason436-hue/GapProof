@@ -50,7 +50,7 @@ export type ReviewState =
   | "intervention_accepted"
   | "error";
 
-const initialMessage = "正在读取这份 Case 的合成识别内容。";
+const initialMessage = "正在准备识别内容。";
 
 function wait(milliseconds: number, signal: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
@@ -70,27 +70,27 @@ export function reviewStateMessage(state: ReviewState): string {
   switch (state) {
     case "loading": return initialMessage;
     case "not_ready": return "识别内容尚未准备好；可以稍后重新加载。";
-    case "empty": return "暂时没有可确认的识别内容；不会回退到演示识别页面。";
+    case "empty": return "暂时没有可确认的识别内容，请稍后再试。";
     case "ready": return "请逐项确认识别内容；你可以先修正题干，再明确确认。";
     case "confirming": return "正在保存你的确认；不会显示答案或评分。";
-    case "confirm_conflict": return "内容已更新，已同步最新版本；请重新确认后提交。";
+    case "confirm_conflict": return "内容已更新，请重新确认后提交。";
     case "confirm_error": return "识别内容确认没有完成；请重新明确确认后再试。";
-    case "confirm_unknown": return "确认结果未确认；写入已锁定，页面不会再次提交。";
+    case "confirm_unknown": return "暂时无法确认是否保存成功。为避免重复操作，请返回今日页稍后查看。";
     case "confirmed": return "识别内容已由你确认。";
     case "run_next": return "正在准备找原因的小题。";
     case "hypotheses_loading": return "正在读取找原因的候选内容。";
     case "hypotheses": return "请选择最符合你情况的确认小题选项。";
     case "run_next_error": return "找原因内容没有准备好；请稍后重新明确开始。";
-    case "run_next_unknown": return "找原因准备结果未确认；写入已锁定，页面不会再次提交。";
+    case "run_next_unknown": return "下一步是否准备完成暂时无法确认，请返回今日页稍后查看。";
     case "probe_submitting": return "正在收到你的确认小题答案。";
     case "probe_conflict": return "找原因内容已更新；请重新确认小题后提交。";
     case "probe_error": return "确认小题没有完成；你的选择已保留，请重新提交。";
-    case "probe_unknown": return "确认小题结果未确认；写入已锁定，页面不会再次提交。";
+    case "probe_unknown": return "暂时无法确认是否提交成功，请返回今日页稍后查看。";
     case "probe_success": return "已收到，正在准备下一步。";
     case "intervention_error": return "引导任务准备没有完成；请重新明确开始。";
-    case "intervention_unknown": return "引导任务准备结果未确认；写入已锁定，页面不会再次提交。";
+    case "intervention_unknown": return "下一步是否准备完成暂时无法确认，请返回今日页稍后查看。";
     case "intervention_accepted": return "下一步已接受；可以返回今日继续任务。";
-    case "error": return "这份 Case 内容暂时无法读取；不会回退到旧演示页面。";
+    case "error": return "识别内容暂时无法读取，请稍后再试。";
   }
 }
 
@@ -151,7 +151,7 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
         } catch (error) {
           if (isAbort(signal, error)) return;
           if (apiErrorCode(error) !== "EXTRACTION_NOT_READY") {
-            safeState(apiErrorCode(error) === "RESOURCE_NOT_FOUND" ? "error" : "error", reviewErrorMessage(error, "这份 Case 内容暂时无法读取；不会回退到旧演示页面。"));
+            safeState(apiErrorCode(error) === "RESOURCE_NOT_FOUND" ? "error" : "error", reviewErrorMessage(error, "识别内容暂时无法读取，请稍后再试。"));
             return;
           }
           const delay = REVIEW_POLL_DELAYS_MS[Math.min(delayIndex, REVIEW_POLL_DELAYS_MS.length - 1)] ?? 3_000;
@@ -257,7 +257,7 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
           try {
             const latest = await getCase(caseId, signal);
             setExtraction(current => current ? { ...current, stateVersion: latest.data.stateVersion } : current);
-            safeState("confirmed", "内容已更新，已同步最新版本；请重新明确开始找原因。");
+            safeState("confirmed", "内容已更新，请重新确认后开始找原因。");
           } catch (refreshError) {
             safeState("run_next_error", reviewErrorMessage(refreshError, reviewStateMessage("run_next_error")));
           }
@@ -303,7 +303,7 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
           try {
             const latest = await getCase(caseId, signal);
             setAttempt(current => current ? { ...current, stateVersion: latest.data.stateVersion } : current);
-            safeState("probe_success", "内容已更新，已同步最新版本；请重新明确开始准备引导任务。");
+            safeState("probe_success", "内容已更新，请重新确认后开始准备引导练习。");
           } catch (refreshError) {
             safeState("run_next_error", reviewErrorMessage(refreshError, reviewStateMessage("run_next_error")));
           }
@@ -317,13 +317,13 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
   return <AppShell actionHref="/student/today" actionLabel="返回今日">
     <section className="case-review-page" data-review-state={state} aria-labelledby="case-review-title">
       <div className="case-review-boundary" role="note">
-        <strong>合成 OCR 演示</strong>
-        <span>上传图片未用于识别 · 非真实学生识别</span>
+        <strong>体验识别内容</strong>
+        <span>本次不会读取上传图片中的文字，也不会保存为正式学习记录</span>
       </div>
       <header className="case-review-heading">
-        <span className="status-chip">同一 Case 的识别确认</span>
+        <span className="status-chip">识别确认</span>
         <h1 id="case-review-title">查看并确认识别内容</h1>
-        <p>只展示服务端允许确认的题干；不会显示学生答案、答案键或精确置信度。</p>
+        <p>请逐项核对题干，发现不准确的地方可以直接修改。这里不会显示答案或评分。</p>
       </header>
       <p className={`case-review-live ${isAlertState(state) ? "error" : ""}`} aria-live={isAlertState(state) ? "assertive" : "polite"} role={isAlertState(state) ? "alert" : undefined}>{message}</p>
       {state === "loading" || state === "not_ready"
@@ -334,7 +334,7 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
         : null}
       {extraction && ["ready", "confirming", "confirm_conflict", "confirm_error", "confirm_unknown"].includes(state)
         ? <section className="case-review-panel" aria-labelledby="extraction-title">
-          <div className="case-review-panel-heading"><div><span>服务端识别内容</span><h2 id="extraction-title">逐项确认题干</h2></div><span className="case-review-tag">合成演示</span></div>
+          <div className="case-review-panel-heading"><div><span>待确认内容</span><h2 id="extraction-title">逐项确认题干</h2></div><span className="case-review-tag">体验内容</span></div>
           <div className="case-review-items">
             {extraction.items.map(item => {
               const checked = confirmedItemIds.includes(item.itemId);
@@ -346,7 +346,7 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
             })}
           </div>
           <button type="button" className="primary-blue" onClick={() => void submitExtraction()} disabled={!allConfirmed || !promptsValid || controlsLocked}>{state === "confirming" ? "正在保存" : state === "confirm_conflict" ? "确认后重新提交" : "确认识别内容"}</button>
-          {state === "confirm_unknown" ? <p className="case-review-feedback error" role="alert">确认结果未确认；请返回今日或稍后查看，页面不会再次写入。</p> : null}
+          {state === "confirm_unknown" ? <p className="case-review-feedback error" role="alert">暂时无法确认是否保存成功，请返回今日页稍后查看。</p> : null}
         </section>
         : null}
       {state === "confirmed"
@@ -357,20 +357,20 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
         : null}
       {hypotheses && ["hypotheses", "probe_submitting", "probe_conflict", "probe_error", "probe_unknown"].includes(state)
         ? <section className="case-review-panel" aria-labelledby="hypotheses-title">
-          <div className="case-review-panel-heading"><div><span>服务端候选内容</span><h2 id="hypotheses-title">可能卡住的地方</h2></div><span className="case-review-tag">不显示内部评分</span></div>
+          <div className="case-review-panel-heading"><div><span>根据本次作答整理</span><h2 id="hypotheses-title">可能卡住的地方</h2></div><span className="case-review-tag">仅供本次参考</span></div>
           <div className="case-review-candidates">{hypotheses.candidates.map(candidate => <article key={candidate.id}><h3>{candidate.title}</h3><p>{candidate.explanation}</p></article>)}</div>
           <div className="case-review-probe"><h3>确认小题</h3><p>{hypotheses.probe.prompt}</p><fieldset disabled={controlsLocked}><legend>选择一个最符合的选项</legend>{hypotheses.probe.choices.map(choice => <label key={choice.id}><input type="radio" name="case-review-probe" value={choice.id} checked={selectedChoiceId === choice.id} onChange={() => setSelectedChoiceId(choice.id)}/><span>{choice.label}</span></label>)}</fieldset></div>
           <button type="button" className="primary-blue" onClick={() => void submitProbeAnswer()} disabled={!selectedChoiceId || controlsLocked}>{state === "probe_submitting" ? "正在提交" : state === "probe_conflict" ? "确认后重新提交" : "提交确认小题"}</button>
         </section>
         : null}
       {state === "probe_success"
-        ? <section className="case-review-state" data-probe-result><h2>已收到，正在准备下一步</h2><p>本次选择已由服务端接收；页面不会显示通过、答案键或分数。</p>{attempt && reviewSuccessIsInterventionReady(attempt.state) ? <button type="button" className="primary-blue" onClick={() => void acceptIntervention()}>开始准备引导任务</button> : null}</section>
+        ? <section className="case-review-state" data-probe-result><h2>已收到，正在准备下一步</h2><p>本次选择已保存。这里只给出下一步提示，不会显示答案或分数。</p>{attempt && reviewSuccessIsInterventionReady(attempt.state) ? <button type="button" className="primary-blue" onClick={() => void acceptIntervention()}>开始准备引导任务</button> : null}</section>
         : null}
       {state === "intervention_error"
         ? <section className="case-review-state case-review-state-error"><h2>引导任务准备没有完成</h2><p>{message}</p><button type="button" className="primary-blue" onClick={() => void acceptIntervention()}>重新开始准备引导任务</button></section>
         : null}
       {state === "intervention_accepted"
-        ? <section className="case-review-state" data-intervention-accepted><h2>下一步已接受</h2><p>可以返回今日继续任务；Today 会继续读取同一 Case 的权威安排。</p><a className="primary-blue" href="/student/today">返回今日继续任务</a></section>
+        ? <section className="case-review-state" data-intervention-accepted><h2>下一步已准备好</h2><p>返回“今日”，继续完成接下来的任务。</p><a className="primary-blue" href="/student/today">返回今日继续任务</a></section>
         : null}
     </section>
   </AppShell>;

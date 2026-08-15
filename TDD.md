@@ -2,15 +2,15 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.32"
+version: "0.3.33"
 status: "DRAFT_FOR_IMPLEMENTATION"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.39"
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.31"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.40"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.32"
 ---
 
 # 知隙 GapProof 技术设计文档（TDD）
@@ -1608,6 +1608,7 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 9. 用户已为本项目选择 Codex“完全访问”；后续前端、后端、协调/文档治理版本在平台实际授予的权限内直接完成常规核验、项目文件读写、分支/工作树、构建/测试、精确暂存、提交与既定远端推送，不重复请求批准。平台强制拦截时使用同权限范围内等价安全路径并记录；不得借此绕过安全政策、扩大切片或执行未明确要求的破坏性操作。
 10. 临近比赛截止时，以“风险可控范围内最大化验收价值”为默认切片原则：优先端到端、可点击、可复现的纵向结果，允许同一 bounded slice 同步修改前端、后端、contracts、测试与必要文档；完整切片结束后集中跑全门禁，不为追求极小 diff 拆散主流程。
 11. 前后端优先复用 healthy successor；版本变化本身不触发左侧新线程。只有 successor 达到 hard cap、事实漂移、无法可靠恢复，或用户明确需要直接进入该执行对话时，才选择性创建对应左侧线程。协调/文档治理保持唯一左侧控制面并独占四文档、Push Log、main 提交与推送；协调自身达到 hard cap 时显式迁移到下一协调版本。
+12. 可拆成多个互不争用 bounded slice 的任务默认优先并行下发 healthy successor/subagent；派工必须给出依赖、精确文件或服务所有权、禁止项和验收命令。共享写入文件、数据库队列、固定端口、`.next` 锁或不可重入外部资源的步骤串行执行。协调器集中解决冲突并独占四文档、Push Log、`main` 提交推送与远端核验；该规则必须由 recovery audit、轻量交接和后续协调/前后端版本原样继承，不因上下文压缩或换版失效。
 
 | Push ID | 日期 | 分支 | 状态 | 提交摘要 | 主要内容 | 验证 |
 |---|---|---|---|---|---|---|
@@ -1635,8 +1636,15 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-022 | 2026-08-16 | `main` | `pushed` | `docs: record first-use diagnosis acceptance` | 发布真实 API Today 首次使用引导、上传/三题原创合成检查双入口、上传缩略图与五步状态、正确侧栏路由及计划/进步/报告事实空状态。三题检查固定不创建 Case、学习记录或报告；实现提交为 `647bf407abad7bc4ad788535d88b991600536ed9`。真实 OCR、真实个性化、真实学习效果、删除策略和异步报告未提升 | 146 fast、59 PostgreSQL/API/Worker integration、98 apps/web、双 TypeScript、Next production build、migration drift、上传/同一 Case review/Demo/guided/D1/D7/首次使用与三题检查 7 条浏览器主链、普通/真实 API 视觉、隐私扫描、真实栈烟测与暂存范围审计通过；本轮文档提交推送后核对本地 `main`、`origin/main` 与 GitHub refs 一致 |
 | PUSH-023 | 2026-08-16 | `main` | `pushed` | `feat: add safe Alibaba OCR provider spike` | 新增默认关闭、仅内部使用的 Alibaba OCR adapter/HTTPS transport seam；只接受 synthetic/desensitized source，输入与配置 fail closed，稳定映射 Provider 错误并隔离原始响应、凭据、URL 查询、warnings 和精确置信度。未接上传、Case、Worker、API 或 UI，未发起真实调用；同时登记 healthy successor 优先复用规则 | 162 fast、59 PostgreSQL/API/Worker integration、98 apps/web、双 TypeScript、Next production build、migration drift、上传与 onboarding 浏览器 Fixture、`git diff --check`、敏感/隐私与暂存范围审计通过；预览 Worker 与 integration 队列竞争、并行 Next fixture 锁均经隔离串行重跑通过；同轮推送并核对本地/远端 SHA 一致 |
 | PUSH-024 | 2026-08-16 | `main` | `pushed` | `feat: integrate official Alibaba education OCR SDK` | 固定官方 SDK `3.1.3`，实现开发态 `RecognizeEduPaperOcr` transport、string/object `Data` 解析、文字块/坐标/置信度归一化及 ignored `.env` smoke CLI。只接受 synthetic/desensitized HTTPS source；未接上传、Case、Worker、API 或 UI，缺少安全新凭据与原创/脱敏可访问图片，未发起真实调用 | 169 fast、59 PostgreSQL/API/Worker integration、98 apps/web、双 TypeScript、Next production build、migration drift、上传/onboarding 浏览器、`git diff --check`、敏感/隐私与暂存范围审计通过；缺凭据 smoke 为 `not_executed`，同轮推送并核对本地/远端 SHA 一致 |
+| PUSH-025 | 2026-08-16 | `main` | `pushed` | `feat: validate OCR smoke and govern student copy` | 授权脱敏测试材料通过官方 SDK 完成真实教育 OCR 开发态 smoke，二进制上传、鉴权与响应解析成功，结果为 `needs_confirmation`；学生全路径及视觉截图移除工程术语并保留体验内容不形成正式记录的真实性边界。登记可拆分任务默认优先并行下发 successor/subagent；真实 OCR 仍未接上传/Case/API/Worker/UI，未证明识别准确率、真实个性化、学生记录或学习效果 | 170 fast、59 PostgreSQL/API/Worker integration、98 apps/web、双 TypeScript、Next production build、migration drift、OCR focused 24、真实 OCR smoke、真实状态视觉、隐私/凭据与 `git diff --check` 通过；授权测试材料与 `.env` 排除 Git，集成队列和 `.next` 门禁串行执行；本轮推送后核对本地/远端 SHA 一致 |
 
 ## 27. 变更日志
+
+### v0.3.33 — 2026-08-16
+
+- 扩展官方 SDK smoke 为受限本地图片 body 输入，并从根目录 ignored `.env` 读取凭据；授权测试材料的真实调用成功返回 `needs_confirmation`，安全输出不包含路径、文件名、OCR 全文、原始响应、request ID 或凭据。
+- 完成学生全路径产品文案治理，内部契约字段继续只保留在状态与测试层；真实状态截图角标不再显示内部状态键或时区。
+- 固化 bounded slice 并行优先、共享资源串行和协调器独占四文档/Push Log/main 发布的长期规则。170 fast、59 integration、98 web、双 typecheck、Next build、migration drift、OCR focused 24、真实状态视觉与隐私门禁通过；同步 PROJECT_MASTER v0.1.40、PRD v0.1.32、DESIGN v0.2.30 与 PUSH-025。
 
 ### v0.3.32 — 2026-08-16
 

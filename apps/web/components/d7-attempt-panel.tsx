@@ -25,18 +25,18 @@ export function d7AttemptResultCopy(state: D7AttemptResultState) {
   if (state === "repair_verified") {
     return {
       title: "第 7 天新题检查已通过",
-      detail: "修复验证已有证据。",
+      detail: "本次新题作答通过。这个结果只代表本次检查。",
     };
   }
   if (state === "support_required") {
     return {
       title: "需要老师或家长协助",
-      detail: "同一 Case 已达到最多两次自动重排上限，需要老师或家长协助；停止自动重排。",
+      detail: "自动调整已达到上限，请老师或家长一起看看下一步。",
     };
   }
   return {
-    title: "后续调整已按服务端规则记录",
-    detail: "这次第 7 天检查未通过；服务端已按既定规则记录后续调整。",
+    title: "正在调整接下来的计划",
+    detail: "这次 7 天后巩固还需要再练习，新的安排会出现在今日页。",
   };
 }
 
@@ -56,9 +56,9 @@ function toSubmitErrorState(error: unknown): Extract<SubmitState, { kind: "error
 
 function caseErrorCopy(state: Extract<SubmitState, { kind: "case_error" }>) {
   const detail = state.code === "RESOURCE_NOT_FOUND"
-    ? "没有找到这项检查或对应版本；你的选择仍保留，请重新同步任务或返回今日。"
-    : "未能同步任务版本；你的选择仍保留，请重新同步任务后再继续。";
-  return <p className="attempt-feedback error" role="alert">{detail}{state.requestId ? ` 请求编号：${state.requestId}` : ""}</p>;
+    ? "没有找到这项检查；你的选择仍保留，请重新加载或返回今日。"
+    : "暂时无法加载最新内容；你的选择仍保留，请重新加载后再继续。";
+  return <p className="attempt-feedback error" role="alert">{detail}</p>;
 }
 
 function errorCopy(state: Extract<SubmitState, { kind: "error" }>) {
@@ -67,13 +67,13 @@ function errorCopy(state: Extract<SubmitState, { kind: "error" }>) {
     : state.code === "INVALID_TASK_STATE"
       ? "这个检查状态已变化，请返回今日页查看最新安排。"
       : state.code === "IDEMPOTENCY_KEY_REUSED"
-        ? "这次提交标识已被其他内容使用，请重新确认后再提交。"
+        ? "这次操作没有完成，请重新确认后再提交。"
         : state.code === "RESOURCE_NOT_FOUND"
           ? "没有找到这项检查，请返回今日页查看最新安排。"
           : state.retryable || state.code === "NETWORK_UNKNOWN"
-            ? "提交结果未确认；选择和提交已锁定，请刷新今日查看服务端状态。页面不会再次提交。"
-            : "服务端没有完成这次检查；请返回今日页查看最新安排。";
-  return <p className="attempt-feedback error" role="alert">{detail}{state.requestId ? ` 请求编号：${state.requestId}` : ""}</p>;
+            ? "暂时无法确认是否提交成功。为避免重复操作，请返回今日页查看。"
+            : "这次检查暂时没有完成，请返回今日页查看最新安排。";
+  return <p className="attempt-feedback error" role="alert">{detail}</p>;
 }
 
 export function D7AttemptPanel({ task }: { task: D7RetestTaskView }) {
@@ -146,7 +146,7 @@ export function D7AttemptPanel({ task }: { task: D7RetestTaskView }) {
   if (state.kind === "success") {
     const result = d7AttemptResultCopy(state.state);
     return <article className="attempt-result" data-d7-attempt-result={state.state} aria-live="polite">
-      <span className="task-kind">本次检查已由服务端记录</span>
+      <span className="task-kind">本次巩固已完成</span>
       <h3>{result.title}</h3>
       <p>{result.detail}</p>
     </article>;
@@ -156,7 +156,7 @@ export function D7AttemptPanel({ task }: { task: D7RetestTaskView }) {
   const guards = d7AttemptGuards(expectedVersion, selectedChoiceId, resultUnconfirmed);
   const disabled = state.kind === "loading_case" || state.kind === "submitting" || !guards.submitAllowed;
   return <div className="attempt-panel" data-d7-attempt-state={state.kind}>
-    <p className="read-only-note">请选择一个答案；评分和后续状态由服务端返回，页面不会显示答案键。</p>
+    <p className="read-only-note">选择答案并提交后查看本次结果。这里只显示你的作答情况，不显示答案。</p>
     <fieldset disabled={state.kind === "loading_case" || state.kind === "submitting" || !guards.editable}>
       <legend>选择一个答案</legend>
       <div className="attempt-choices">{task.item.choices.map(choice => <label key={choice.id}>
@@ -170,13 +170,13 @@ export function D7AttemptPanel({ task }: { task: D7RetestTaskView }) {
         <span>{choice.label}</span>
       </label>)}</div>
     </fieldset>
-    {state.kind === "conflict" ? <p className="attempt-feedback error" role="alert">内容已更新，已同步最新版本。请确认选择后重新提交。{state.requestId ? ` 请求编号：${state.requestId}` : ""}</p> : null}
+    {state.kind === "conflict" ? <p className="attempt-feedback error" role="alert">内容已更新，请确认选择后重新提交。</p> : null}
     {state.kind === "case_error" ? caseErrorCopy(state) : null}
     {state.kind === "error" ? errorCopy(state) : null}
     {state.kind === "case_error"
-      ? <button type="button" onClick={() => { void refreshCase(); }}>重新同步任务</button>
+      ? <button type="button" onClick={() => { void refreshCase(); }}>重新加载</button>
       : <button type="button" onClick={() => { void submit(); }} disabled={disabled}>
-        {state.kind === "loading_case" ? "正在同步检查" : state.kind === "submitting" ? "正在提交" : resultUnconfirmed ? "请先确认任务状态" : state.kind === "conflict" ? "确认后重新提交" : "提交本次选择"}
+        {state.kind === "loading_case" ? "正在加载最新内容" : state.kind === "submitting" ? "正在提交" : resultUnconfirmed ? "请先确认任务状态" : state.kind === "conflict" ? "确认后重新提交" : "提交本次选择"}
       </button>}
   </div>;
 }

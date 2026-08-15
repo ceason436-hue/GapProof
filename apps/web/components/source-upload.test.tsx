@@ -24,7 +24,7 @@ describe("SourceUpload component", () => {
     expect(html).not.toContain("OCR");
     expect(html).not.toContain("objectKey");
     expect(html).not.toContain("Bearer");
-    expect(html).not.toContain("开始识别并创建案例");
+    expect(html).not.toContain("开始识别并继续");
     expect(html).not.toContain("合成 OCR 演示");
     expect(html).not.toContain("查看并确认识别内容");
   });

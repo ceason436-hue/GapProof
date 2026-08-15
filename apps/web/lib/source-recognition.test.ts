@@ -22,8 +22,8 @@ describe("source recognition start", () => {
   });
 
   it("keeps bounded failure copy free of internal facts", () => {
-    expect(SYNTHETIC_RECOGNITION_SUCCESS).toBe("案例已创建，合成识别已排队");
-    expect(syntheticRecognitionErrorMessage(new Error("network"))).toContain("结果未确认");
+    expect(SYNTHETIC_RECOGNITION_SUCCESS).toBe("体验内容已准备，正在整理识别内容");
+    expect(syntheticRecognitionErrorMessage(new Error("network"))).toContain("暂时无法确认");
     expect(syntheticRecognitionErrorMessage(new Error("network"))).not.toMatch(/asset|case|token|objectKey|OCR/i);
   });
 
@@ -38,7 +38,7 @@ describe("source recognition start", () => {
       requestId: "request",
       traceId: "trace",
     }, 503);
-    expect(syntheticRecognitionErrorMessage(alreadyBound)).toContain("已经绑定");
-    expect(syntheticRecognitionErrorMessage(retryable)).toContain("结果未确认");
+    expect(syntheticRecognitionErrorMessage(alreadyBound)).toContain("已经开始过一次检查");
+    expect(syntheticRecognitionErrorMessage(retryable)).toContain("暂时无法确认");
   });
 });

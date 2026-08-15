@@ -7,16 +7,15 @@ export const dynamic = "force-dynamic";
 
 function ConfigurationError({ error }: { error: WebConfigurationError }) {
   return <AppShell actionDisabled actionLabel="配置不可用">
-    <section className="upload-page" aria-labelledby="upload-config-error">
+    <section className="upload-page" aria-labelledby="upload-config-error" data-config-error={error.code}>
       <div className="title-row"><div>
-        <span className="status-chip error">真实上传不可用</span>
+        <span className="status-chip error">上传暂不可用</span>
         <h1 id="upload-config-error">暂时无法准备上传</h1>
-        <p>服务端没有提供有效的 API 或 Demo 学生配置；页面不会创建学生，也不会回退到 Mock。</p>
+        <p>上传功能暂时没有准备好，请稍后再试。你的学习记录不会因此改变。</p>
       </div></div>
       <article className="state-card"><Icon name="report"/><div>
-        <h2>请先补齐服务端配置</h2>
-        <p>确认 GAPPROOF_API_ORIGIN 与 GAPPROOF_DEMO_STUDENT_ID 有效后再重新加载。</p>
-        <div className="config-detail">{error.code}</div>
+        <h2>这次没有加载成功</h2>
+        <p>请返回今日页，或稍后重新打开上传页面。</p>
       </div></article>
     </section>
   </AppShell>;

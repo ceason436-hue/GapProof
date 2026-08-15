@@ -259,16 +259,16 @@ try {
           throw new Error(`${state} ${width}x${height} regression: ${JSON.stringify(audit)}`);
         }
         await page.locator(".content").evaluate(element => { element.scrollTop = 0; });
-        await page.evaluate(({ stateLabel, timeZone }) => {
+        await page.evaluate(() => {
           const banner = document.createElement("div");
-          banner.textContent = `合成演示 · 受控 API Fixture · ${stateLabel} · ${timeZone}`;
+          banner.textContent = "体验内容 · 不保存为正式学习记录";
           Object.assign(banner.style, {
             position: "fixed", right: "12px", bottom: "10px", zIndex: "99",
             padding: "6px 10px", borderRadius: "999px", background: "#111318",
             color: "white", font: "12px system-ui", boxShadow: "0 2px 8px rgba(0,0,0,.2)",
           });
           document.body.append(banner);
-        }, { stateLabel: state, timeZone: fixture.timeZone });
+        });
         await page.screenshot({ path: resolve(output, `today-api-${state}-${width}x${height}.png`) });
         await page.close();
       }

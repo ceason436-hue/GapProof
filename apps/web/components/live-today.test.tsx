@@ -55,11 +55,12 @@ describe("D+1/D+7 status cards", () => {
     const d7 = renderToStaticMarkup(createElement(RetestCard, {
       retest: retest("d7_retest", "ready"), timeZone: "Asia/Tokyo",
     }));
-    expect(d1).toContain("可以检查");
-    expect(d1).toContain("ready D1 可以作答");
-    expect(d7).toContain("可作答");
-    expect(d7).toContain("ready D7 可以作答");
-    expect(d7).toContain("D+7 可以检查");
+    expect(d1).toContain("可以开始");
+    expect(d1).toContain("现在可以作答");
+    expect(d1).toContain("开始复习");
+    expect(d7).toContain("可以开始");
+    expect(d7).toContain("开始巩固");
+    expect(`${d1}${d7}`).not.toMatch(/D\+1|D\+7|服务端|ready D/);
   });
 });
 
@@ -101,7 +102,7 @@ describe("Today overview projection", () => {
 
   it("keeps a D7 next check read-only and handles no check", () => {
     const d7 = renderToStaticMarkup(createElement(OverviewNextCheck, { nextCheck: overview.nextCheck, timeZone: "Asia/Tokyo" }));
-    expect(d7).toContain("D+7 检查只读");
+    expect(d7).toContain("7 天后巩固");
     expect(d7).toContain("disabled");
     const none = renderToStaticMarkup(createElement(OverviewNextCheck, { nextCheck: null, timeZone: "Asia/Tokyo" }));
     expect(none).toContain("暂无已安排检查");
@@ -131,7 +132,9 @@ describe("FirstUseToday", () => {
     const html = renderToStaticMarkup(createElement(FirstUseToday));
     expect(html).toContain("上传错题或作业");
     expect(html).toContain("没有材料，先做 3 道题");
-    expect(html).toContain("合成 Demo");
+    expect(html).toContain("当前上传流程使用演示识别内容");
+    expect(html).toContain("不保存为正式学习记录");
     expect(html).not.toContain("服务端返回空任务列表");
+    expect(html).not.toMatch(/合成 Demo|真实 API|Mock|Case/);
   });
 });

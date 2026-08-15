@@ -28,10 +28,11 @@ describe("GuidedTaskCompletion", () => {
     expect(html).toContain('type="checkbox"');
     expect(html).toContain("看一个例子");
     expect(html).toContain("完成本次引导任务");
-    expect(html).toContain("逐项完成后提交");
+    expect(html).toContain("逐项完成后再提交");
     expect(html).not.toContain("引导任务只读");
     expect(html).not.toContain("已掌握");
     expect(html).not.toContain("/api/v1/tasks/");
+    expect(html).not.toContain("请求编号");
   });
 
   it("keeps Case sync failures separate from an unknown submitted result", () => {

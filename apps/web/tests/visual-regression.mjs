@@ -33,7 +33,7 @@ try {
   for (const [width, height] of [[1440, 900], [1366, 768]]) {
     const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
     await page.goto(`${origin}/student/today?source=mock`, { waitUntil: "networkidle" });
-    if (await page.getByText("合成演示：用一个短任务", { exact: false }).count() !== 1) {
+    if (await page.getByText("这是体验内容，用一个短任务", { exact: false }).count() !== 1) {
       throw new Error("Explicit Mock fixture did not render the synthetic Today view.");
     }
 

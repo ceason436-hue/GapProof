@@ -61,12 +61,12 @@ type UploadIntent = {
 
 type StartRecognitionStatus = "idle" | "starting" | "success" | "error" | "network_unknown";
 
-const uploadJourneyLabels = ["选择图片", "安全上传", "基础检查", "创建案例", "确认识别"] as const;
+const uploadJourneyLabels = ["选择图片", "安全上传", "基础检查", "准备内容", "确认题目"] as const;
 
 function formatUploadError(error: unknown): string {
   if (error instanceof ApiClientError) return "上传或图片检查没有完成，请稍后重试。";
   if (error instanceof Error && error.message === "UPLOAD_RESPONSE_MISMATCH") {
-    return "服务端返回的文件信息与本次上传不一致，请重新选择图片。";
+    return "文件信息与本次上传不一致，请重新选择图片。";
   }
   if (error instanceof Error && error.message === "SOURCE_INSPECTION_ASSET_MISMATCH") {
     return "图片检查结果与本次上传不一致，请重新选择图片。";
@@ -153,7 +153,7 @@ export function SourceUpload({ studentId }: { studentId: string }) {
       setSafeState("error", validation.message);
       return;
     }
-    setSafeState("idle", "已选择 1 张图片；点击“开始上传”后才会创建上传意图。");
+    setSafeState("idle", "已选择 1 张图片；点击“开始上传”后才会上传。");
   };
 
   const showInspectionView = (view: SourceAssetProcessingView) => {
@@ -190,7 +190,7 @@ export function SourceUpload({ studentId }: { studentId: string }) {
     const intent = createSyntheticRecognitionIntent();
     startIntentRef.current = intent;
     setStartRecognitionStatus("starting");
-    setStartRecognitionMessage("正在请求创建合成识别案例；上传图片不会用于识别。");
+    setStartRecognitionMessage("正在准备体验识别内容。本次不会读取上传图片中的文字。");
     try {
       const response = await startSyntheticRecognition(assetId, intent);
       if (response.data.assetId !== assetId) throw new Error("START_RECOGNITION_ASSET_MISMATCH");
@@ -223,7 +223,7 @@ export function SourceUpload({ studentId }: { studentId: string }) {
     try {
       let target = intent.target;
       if (!target) {
-        setSafeState("creating", "正在创建本次上传意图；不会创建学生或学习 Case。");
+        setSafeState("creating", "正在准备上传……");
         const initiated = await apiPost(
           "/api/v1/source-assets/uploads",
           InitiatedSourceAssetUploadViewSchema,
@@ -348,7 +348,7 @@ export function SourceUpload({ studentId }: { studentId: string }) {
     }
     if (!intent || intent.file !== file) {
       try {
-        setSafeState("hashing", "正在计算图片校验值；文件内容不会经过页面外的文本处理。");
+        setSafeState("hashing", "正在检查图片，请稍候……");
         const sha256 = await sha256Hex(file);
         intent = {
           file,
@@ -427,7 +427,7 @@ export function SourceUpload({ studentId }: { studentId: string }) {
               onChange={event => chooseFile(event.currentTarget.files?.[0] ?? null)}
               aria-describedby="source-upload-help"
             />
-            <p id="source-upload-help" className="upload-help">文件会直接上传到短期授权的对象地址；页面不会展示服务端文件名、对象键或内部编号。</p>
+            <p id="source-upload-help" className="upload-help">上传前请先遮盖姓名、学校、班级等不必要的个人信息。</p>
           </div>
           {file && currentValidation.ok ? <div className="selected-upload-preview" data-selected-upload>
             {previewUrl ? <img src={previewUrl} alt="你刚刚选择的学习材料预览"/> : <div className="selected-upload-placeholder" aria-hidden="true"/>}
@@ -451,7 +451,7 @@ export function SourceUpload({ studentId }: { studentId: string }) {
             : null}
           {status === "succeeded" && qualityPassed
             ? <section className="recognition-start-card" data-recognition-start aria-labelledby="recognition-start-title">
-              <h2 id="recognition-start-title">合成识别演示</h2>
+              <h2 id="recognition-start-title">继续体验识别</h2>
               <p>{SYNTHETIC_RECOGNITION_NOTICE}</p>
               <label className="recognition-guardian-confirmation">
                 <input
@@ -467,7 +467,7 @@ export function SourceUpload({ studentId }: { studentId: string }) {
                 type="button"
                 onClick={() => void startRecognition()}
                 disabled={!guardianConfirmed || startRecognitionStatus === "starting" || startRecognitionStatus === "success" || startRecognitionStatus === "network_unknown"}
-              >开始识别并创建案例</button>
+              >开始识别并继续</button>
               {startRecognitionMessage
                 ? <p
                   className={`recognition-start-message ${startRecognitionStatus === "error" || startRecognitionStatus === "network_unknown" ? "error" : startRecognitionStatus === "success" ? "success" : ""}`}
@@ -493,7 +493,7 @@ export function SourceUpload({ studentId }: { studentId: string }) {
           <ul>
             <li>尽量让题目和批改痕迹都在图片里。</li>
             <li>先遮盖姓名、学校和班级等不必要信息。</li>
-            <li>上传只保存本次文件元数据，不会自动创建 Case。</li>
+            <li>上传后仍需由你确认，才会继续下一步。</li>
           </ul>
           <p>后续识别、确认和诊断会在明确的下一步中进行。</p>
         </aside>

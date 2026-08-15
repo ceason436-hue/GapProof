@@ -124,7 +124,7 @@ const visitReview = async page => {
   await page.getByRole("button", { name: "开始上传" }).click();
   await page.locator('[data-upload-status="succeeded"]').waitFor({ timeout: 40_000 });
   await page.getByRole("checkbox", { name: /监护人确认/ }).check();
-  await page.getByRole("button", { name: "开始识别并创建案例", exact: true }).click();
+  await page.getByRole("button", { name: "开始识别并继续", exact: true }).click();
   await page.locator('[data-recognition-start-status="success"]').waitFor({ timeout: 10_000 });
   assert(new URL(page.url()).pathname === "/materials/new", "Synthetic start success auto-navigated instead of waiting for the explicit CTA.");
   await page.getByRole("button", { name: "查看并确认识别内容", exact: true }).click();
@@ -201,7 +201,7 @@ try {
       await page.locator('[data-review-state="confirmed"]').waitFor();
       await page.getByRole("button", { name: "开始找原因", exact: true }).click();
       await page.locator('[data-review-state="hypotheses"]').waitFor({ timeout: 40_000 });
-      const overflow = await page.evaluate(() => ({ horizontal: document.documentElement.scrollWidth > document.documentElement.clientWidth, marker: document.body.innerText.includes("非真实学生识别") }));
+      const overflow = await page.evaluate(() => ({ horizontal: document.documentElement.scrollWidth > document.documentElement.clientWidth, marker: document.body.innerText.includes("不会保存为正式学习记录") }));
       assert(!overflow.horizontal && overflow.marker, `screenshot ${width}x${height}: overflow or boundary marker missing.`);
       await page.screenshot({ path: resolve(screenshots, `same-case-review-hypotheses-${width}x${height}.png`) });
       await page.close();

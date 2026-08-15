@@ -3,6 +3,7 @@ import AlibabaOcrClient, {
 } from "@alicloud/ocr-api20210707";
 import { $OpenApiUtil } from "@alicloud/openapi-core";
 import * as $dara from "@darabonba/typescript";
+import type { Readable } from "node:stream";
 
 import type { ParsePaperOutput } from "@gapproof/contracts";
 
@@ -222,24 +223,53 @@ export class AlibabaEduPaperSdkTransport implements AlibabaOcrTransport {
   async execute(
     request: AlibabaOcrTransportRequest,
   ): Promise<AlibabaOcrTransportResponse> {
-    if (request.signal.aborted) {
+    return this.executeRequest(
+      new RecognizeEduPaperOcrRequest({
+        url: request.sourceUrl,
+        imageType: this.imageType,
+        subject: this.subject,
+        outputOricoord: false,
+      }),
+      request.timeoutMs,
+      request.signal,
+    );
+  }
+
+  async executeBody(options: {
+    readonly body: Readable;
+    readonly timeoutMs: number;
+    readonly signal: AbortSignal;
+  }): Promise<AlibabaOcrTransportResponse> {
+    return this.executeRequest(
+      new RecognizeEduPaperOcrRequest({
+        body: options.body,
+        imageType: this.imageType,
+        subject: this.subject,
+        outputOricoord: false,
+      }),
+      options.timeoutMs,
+      options.signal,
+    );
+  }
+
+  private async executeRequest(
+    sdkRequest: RecognizeEduPaperOcrRequest,
+    timeoutMs: number,
+    signal: AbortSignal,
+  ): Promise<AlibabaOcrTransportResponse> {
+    if (signal.aborted) {
       throw new AlibabaOcrTransportError("timeout");
     }
     try {
       const response = await this.client.recognizeEduPaperOcrWithOptions(
-        new RecognizeEduPaperOcrRequest({
-          url: request.sourceUrl,
-          imageType: this.imageType,
-          subject: this.subject,
-          outputOricoord: false,
-        }),
+        sdkRequest,
         new $dara.RuntimeOptions({
           autoretry: false,
-          connectTimeout: request.timeoutMs,
-          readTimeout: request.timeoutMs,
+          connectTimeout: timeoutMs,
+          readTimeout: timeoutMs,
         }),
       );
-      if (request.signal.aborted) {
+      if (signal.aborted) {
         throw new AlibabaOcrTransportError("timeout");
       }
       const status = response.statusCode ?? 200;
@@ -271,12 +301,13 @@ export class AlibabaEduPaperSdkTransport implements AlibabaOcrTransport {
 export function createAlibabaEduPaperSdkTransportFromEnv(
   env: Readonly<Record<string, string | undefined>>,
 ): AlibabaEduPaperSdkTransport {
+  const securityToken = env.ALIBABA_CLOUD_SECURITY_TOKEN?.trim();
   return new AlibabaEduPaperSdkTransport({
     accessKeyId: env.ALIBABA_CLOUD_ACCESS_KEY_ID ?? "",
     accessKeySecret: env.ALIBABA_CLOUD_ACCESS_KEY_SECRET ?? "",
-    ...(env.ALIBABA_CLOUD_SECURITY_TOKEN === undefined
+    ...(securityToken === undefined || securityToken.length === 0
       ? {}
-      : { securityToken: env.ALIBABA_CLOUD_SECURITY_TOKEN }),
+      : { securityToken }),
     ...(env.ALIBABA_OCR_ENDPOINT === undefined
       ? {}
       : { endpoint: env.ALIBABA_OCR_ENDPOINT }),

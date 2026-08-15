@@ -37,7 +37,8 @@ describe("same Case recognition review client", () => {
     expect(runNextPath(caseId)).toBe(`/api/v1/cases/${caseId}/commands/run-next`);
     expect(attemptPath(caseId)).toBe(`/api/v1/cases/${caseId}/attempts`);
     const notFound = new ApiClientError({ error: { code: "RESOURCE_NOT_FOUND", message: "not found", retryable: false }, requestId: "request", traceId: "trace" }, 404);
-    expect(reviewErrorMessage(notFound, "fallback")).toContain("不会回退");
+    expect(reviewErrorMessage(notFound, "fallback")).toContain("返回今日页");
     expect(reviewErrorMessage(notFound, "fallback")).not.toMatch(/assetId|caseId|jobId|answer|confidence|objectKey/i);
+    expect(reviewErrorMessage(notFound, "fallback")).not.toMatch(/Case|服务端|请求编号/);
   });
 });

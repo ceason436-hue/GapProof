@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.29"
+version: "0.2.30"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "PUSH-024 已发布：官方 SDK 开发态调用路径完成但未发起真实调用、未接 UI 或生产链路；真实 OCR、真实个性化与报告仍 unresolved/deferred"
+current_design_stage: "PUSH-025 已发布：学生全路径产品文案与视觉截图完成治理；阿里云教育 OCR 真实开发态 smoke 成功但仍需人工确认，且未接学生 UI 或生产链路"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -88,7 +88,7 @@ upstream_documents:
 
 **已完成**：学生端“今日”页桌面视觉结构与 Stitch V1.1 冻结裁切保持不变；默认 API、真实 Today overview、ready guided、D1、D7 安全作答均已通过门禁。服务端 `hasStartedJourney:false` 时显示真实首次使用引导，提供“上传材料”和“三题快速检查”两条入口；上传选择后显示缩略图、类型/大小与五步状态。`/diagnose`、`/diagnose/quick-check` 及 `/student/plan`、`/student/progress`、`/student/report` 已具备正确路由、侧栏选中态和事实空状态，报告明确未开放。`/materials/new` 已完成真实单图选择、上传、基础检查、监护确认与显式创建/绑定同一合成 Case；`/materials/{caseId}/review` 读取、修正和确认同一 Case 的 synthetic extraction，并继续诊断、确认小题、干预与 Today。写入使用权威 Case 版本、共享 contracts、UUIDv7、冲突重新确认和 `NETWORK_UNKNOWN` 锁定；合成 Mock 仅显式启用，独立 `/materials/demo/review` 仍是零网络 Fixture。
 
-**尚未完成**：三题检查仍是无记录的原创合成 Fixture，不是完整 5–8 题诊断、真实个性化或学习效果；默认关闭的阿里云 OCR 安全 Spike 没有 UI、真实调用或生产接线。真实 Provider 页面前仍须冻结服务端 provider mode、处理告知/同意、监护确认、权威状态查询和删除事实；真实模糊度、方向、缺页与恶意文件检查，原图确认后 24h/主动删除、真实图片题目区域展示、学生/家长非空数据页面、Logo 紧裁/SVG/Favicon 与最终品牌规范尚未完成。异步报告本轮 deferred。
+**尚未完成**：三题检查仍是无记录的原创合成体验题，不是完整 5–8 题诊断、真实个性化或学习效果；默认关闭的阿里云 OCR 开发态路径虽已用授权脱敏材料完成一次真实 smoke，但结果仍需人工确认，且没有 UI 或生产接线。真实 Provider 页面前仍须冻结服务端 provider mode、处理告知/同意、监护确认、权威状态查询和删除事实；真实模糊度、方向、缺页与恶意文件检查，原图确认后 24h/主动删除、真实图片题目区域展示、学生/家长非空数据页面、Logo 紧裁/SVG/Favicon 与最终品牌规范尚未完成。异步报告本轮 deferred。
 
 **下一步**：真实 OCR UI 继续保持关闭；先核验 Provider 合同/训练政策并冻结服务端 consent/status/删除契约。只有这些事实可审计后，才新增与 synthetic 分离的阿里云处理告知、处理同意和监护确认界面。任何新字段不得从视觉稿或合成 Fixture 反推业务状态。
 
@@ -1780,6 +1780,12 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 ---
 
 ## 22. 版本记录
+
+### v0.2.30 — 2026-08-16
+
+- 完成学生全路径产品文案治理：Today、找原因、上传、识别确认、guided、明日复习、7 天后巩固、计划、进步、报告、设置与体验页统一采用学生语言；API/Mock/Fixture、内部状态键、版本/写入术语不再默认可见。
+- 视觉截图只显示“体验内容 · 不保存为正式学习记录”，不展示内部状态键或时区；合成体验仍与正式学习记录、真实 OCR、个性化和学习效果明确隔离。
+- 授权脱敏材料的阿里云教育 OCR 真实开发态 smoke 成功但返回 `needs_confirmation`，仅作为调用链证据，未接学生 UI。170 fast、59 integration、98 web、双 typecheck、Next build、migration drift 与真实状态视觉门禁通过；同步 PROJECT_MASTER v0.1.40、PRD v0.1.32、TDD v0.3.33 与 PUSH-025。
 
 ### v0.2.29 — 2026-08-16
 

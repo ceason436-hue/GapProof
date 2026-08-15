@@ -70,7 +70,7 @@ try {
       await screenshotPage.goto(`${webOrigin}/materials/demo/review`, { waitUntil: "networkidle" });
       await screenshotPage.evaluate(() => {
         const banner = document.createElement("div");
-        banner.textContent = "受控 Fixture · 合成页面";
+        banner.textContent = "体验内容 · 不保存为正式学习记录";
         Object.assign(banner.style, {
           position: "fixed", right: "12px", bottom: "10px", zIndex: "99",
           padding: "6px 10px", borderRadius: "999px", background: "#111318",

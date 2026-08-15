@@ -62,7 +62,7 @@ try {
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
     await page.goto(`${webOrigin}/student/today`, { waitUntil: "networkidle" });
-    assert(await page.getByRole("heading", { name: "从第一次检查开始" }).count() === 1, "First-use Today did not render.");
+    assert(await page.getByRole("heading", { name: "从一次小检查开始" }).count() === 1, "First-use Today did not render.");
     assert(await page.getByRole("link", { name: "上传错题或作业" }).count() === 1, "Upload entry missing.");
     await page.getByRole("link", { name: "没有材料，先做 3 道题" }).click();
     await page.locator("fieldset").first().waitFor();
@@ -70,7 +70,7 @@ try {
     await page.getByLabel("written", { exact: true }).check(); await page.getByLabel("went", { exact: true }).check(); await page.getByLabel("was written", { exact: true }).check();
     await page.getByRole("button", { name: "提交 3 道题" }).dblclick();
     await page.locator("[data-quick-check-result]").waitFor();
-    assert(await page.getByText("未创建 Case、未写学习记录、报告未开放。").count() === 1, "Stateless result boundary missing.");
+    assert(await page.getByText("体验结果不会保存为正式学习记录，也不会生成报告。").count() === 1, "Stateless result boundary missing.");
     assert(posts.length === 1, `Double submit sent ${posts.length} POST requests.`);
     assert(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(posts[0]?.key ?? ""), "POST did not use UUIDv7 idempotency key.");
     assert(JSON.stringify(posts[0]?.body) === JSON.stringify({ answers: questions.map((question, index) => ({ itemId: question.itemId, selectedChoiceId: ["choice-written", "choice-went", "choice-was-written"][index] })) }), "POST body did not preserve the exact three choices.");
@@ -101,7 +101,7 @@ try {
     await retryPage.locator("[data-quick-check-result]").waitFor();
     assert(posts.length === 2 && posts[1]?.key !== failedKey, "Explicit retry did not create one fresh intent.");
     await retryPage.close();
-    for (const [name, heading] of [["7 日计划", "先有诊断证据，再安排下一步"], ["我的进步", "进步需要学习证据支持"], ["学习报告", "报告功能尚未开放"]]) { await page.getByRole("link", { name, exact: true }).first().click(); await page.getByRole("heading", { name: heading }).waitFor(); }
+    for (const [name, heading] of [["7 日计划", "完成检查，再安排下一步"], ["我的进步", "每次完成，都会留下新的学习足迹"], ["学习报告", "报告功能暂未开放"]]) { await page.getByRole("link", { name, exact: true }).first().click(); await page.getByRole("heading", { name: heading }).waitFor(); }
   } finally { await browser.close(); }
   console.log("Onboarding and synthetic quick-check browser fixture passed.");
 } finally {

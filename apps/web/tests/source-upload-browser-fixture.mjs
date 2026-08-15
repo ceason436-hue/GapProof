@@ -252,7 +252,7 @@ const visitAndInspect = async (page, expectedStatus, {
   await page.locator("[data-selected-upload]").waitFor({ timeout: 5_000 });
   assert(await page.locator("[data-selected-upload]").count() === 1, "Selected image state was not visible before upload.");
   assert(await page.getByText("已选择 1 张图片", { exact: true }).count() === 1, "Selected image count was not shown.");
-  assert(await page.getByText("选择图片", { exact: true }).count() >= 1 && await page.getByText("确认识别", { exact: true }).count() === 1, "Five-step upload journey was not shown.");
+  assert(await page.getByText("选择图片", { exact: true }).count() >= 1 && await page.getByText("确认题目", { exact: true }).count() === 1, "Five-step upload journey was not shown.");
   assert(!(await page.locator("body").innerText()).includes(fileName), "Local filename leaked into the rendered page.");
   await page.getByRole("button", { name: "开始上传" }).click();
   try {
@@ -277,7 +277,7 @@ const visitAndInspect = async (page, expectedStatus, {
   assert(puts.every(put => Buffer.compare(put.body, puts[0].body) === 0 && Buffer.compare(put.body, bytes) === 0), `${scenario}: PUT retry changed the original bytes.`);
   const visibleText = await page.locator("body").innerText();
   if (expectedStatus !== "succeeded") {
-    assert(await page.getByRole("button", { name: "开始识别并创建案例", exact: true }).count() === 0, `${scenario}: start recognition action appeared before a passed inspection.`);
+    assert(await page.getByRole("button", { name: "开始识别并继续", exact: true }).count() === 0, `${scenario}: start recognition action appeared before a passed inspection.`);
   }
   assert(!visibleText.includes(token) && !visibleText.includes(assetId) && !visibleText.includes(fileName) && !visibleText.includes(sha256) && !visibleText.includes("objectKey"), "Inspection UI leaked upload internals or server facts.");
   assert(!visibleText.includes("置信度") && !visibleText.includes("provider") && !visibleText.includes("答案键"), "Inspection UI exposed unimplemented recognition details.");
@@ -324,7 +324,7 @@ try {
         expectedGets,
       });
       if (currentScenario === "success" || currentScenario === "start-network-unknown" || currentScenario === "already-bound") {
-        const startButton = page.getByRole("button", { name: "开始识别并创建案例", exact: true });
+        const startButton = page.getByRole("button", { name: "开始识别并继续", exact: true });
         const guardian = page.getByRole("checkbox", { name: /监护人确认/ });
         assert(await startButton.count() === 1 && await guardian.count() === 1, `${currentScenario}: passed inspection did not expose the guarded start action.`);
         assert(await startButton.isDisabled(), `${currentScenario}: start action was enabled before guardian confirmation.`);
@@ -339,10 +339,10 @@ try {
         assert(browserPaths.includes(startRecognitionPath), `${currentScenario}: start-recognition request was not same-origin.`);
         const startText = await page.locator("body").innerText();
         assert(!startText.includes(assetId) && !startText.includes(startedRecognition.caseId) && !startText.includes(token) && !startText.includes(fileName) && !startText.includes(sha256) && !startText.includes("objectKey") && !startText.includes("jobId"), `${currentScenario}: start UI leaked internal or upload facts.`);
-        assert(startText.includes("合成识别演示") && startText.includes("上传图片字节不会用于识别"), `${currentScenario}: persistent synthetic recognition notice is missing.`);
+        assert(startText.includes("继续体验识别") && startText.includes("不会读取你上传图片中的文字"), `${currentScenario}: persistent recognition boundary is missing.`);
         if (currentScenario === "success") {
           assert(startPosts.length === 1, "success: expected one start-recognition POST.");
-          assert(startText.includes("案例已创建，合成识别已排队") && startText.includes("上传图片未用于识别"), "success: start success UI was not the neutral sanitized copy.");
+          assert(startText.includes("体验内容已准备，正在整理识别内容") && startText.includes("本次不会读取上传图片中的文字"), "success: start success UI was not the neutral sanitized copy.");
         } else if (currentScenario === "start-network-unknown") {
           assert(startPosts.length === 2, "start-network-unknown: expected exactly one retry after the unknown result.");
           assert(startPosts.every(post => post.idempotencyKey === startPosts[0].idempotencyKey), "start-network-unknown: retry changed the start idempotency key.");
@@ -370,7 +370,7 @@ try {
           await screenshotPage.locator('[data-upload-status="succeeded"]').waitFor({ timeout: 40_000 });
           await screenshotPage.evaluate(() => {
             const banner = document.createElement("div");
-            banner.textContent = "受控 Fixture · 合成演示 · 上传图片未用于识别";
+            banner.textContent = "受控体验 · 本次不会读取上传图片中的文字";
             Object.assign(banner.style, {
               position: "fixed", right: "12px", bottom: "10px", zIndex: "99",
               padding: "6px 10px", borderRadius: "999px", background: "#111318",
@@ -380,11 +380,11 @@ try {
           });
           await screenshotPage.screenshot({ path: resolve(screenshots, `source-inspection-succeeded-${width}x${height}.png`) });
           await screenshotPage.getByRole("checkbox", { name: /监护人确认/ }).check();
-          await screenshotPage.getByRole("button", { name: "开始识别并创建案例", exact: true }).click();
+          await screenshotPage.getByRole("button", { name: "开始识别并继续", exact: true }).click();
           await screenshotPage.locator('[data-recognition-start-status="success"]').waitFor({ timeout: 10_000 });
           const viewportOverflow = await screenshotPage.evaluate(() => ({
             horizontal: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-            marker: document.body.innerText.includes("上传图片未用于识别"),
+            marker: document.body.innerText.includes("本次不会读取上传图片中的文字"),
           }));
           assert(!viewportOverflow.horizontal && viewportOverflow.marker, `success screenshot ${width}x${height}: overflow or persistent synthetic marker detected.`);
           await screenshotPage.screenshot({ path: resolve(screenshots, `source-recognition-start-success-${width}x${height}.png`) });

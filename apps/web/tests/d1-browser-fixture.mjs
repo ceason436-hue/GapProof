@@ -227,8 +227,8 @@ try {
         assert(uuidV7Pattern.test(posts[0].idempotencyKey ?? ""), "Idempotency-Key is not UUIDv7.");
         assert(JSON.stringify(posts[0].body) === JSON.stringify({ expectedVersion: 4, itemId, selectedChoiceId }), "Success POST body did not use the authoritative version/item/choice.");
         const resultText = await page.locator('[data-attempt-result="passed"]').innerText();
-        assert(resultText.includes(selectedChoiceId), "Success UI did not echo the submitted choice.");
-        assert(!resultText.includes(otherChoiceId), "Success UI echoed a choice that was not submitted.");
+        assert(resultText.includes("written"), "Success UI did not echo the submitted choice label.");
+        assert(!resultText.includes(selectedChoiceId) && !resultText.includes(otherChoiceId), "Success UI exposed an internal choice id.");
         assert(!/expectedChoiceId|answerKey|scoringMethod|exact-choice-v1/i.test(resultText), "Success UI leaked answer/scoring data.");
       } else if (currentScenario === "conflict") {
         await page.locator('[data-d1-attempt-state="conflict"]').waitFor();
@@ -243,7 +243,7 @@ try {
         assert(posts[0].idempotencyKey !== posts[1].idempotencyKey, "A newly confirmed intent reused the conflicted intent UUID.");
       } else {
         await page.locator('[data-d1-attempt-state="error"]').waitFor();
-        assert(await page.getByText("结果未确认", { exact: false }).isVisible(), "Unknown result guidance was not shown.");
+        assert(await page.getByText("暂时无法确认是否提交成功", { exact: false }).isVisible(), "Unknown result guidance was not shown.");
         assert(posts.length === 2, `Unknown result made ${posts.length} POST requests instead of two.`);
         assert(posts[0].idempotencyKey === posts[1].idempotencyKey, "Unknown-result retry changed the Idempotency-Key.");
         assert(JSON.stringify(posts[0].body) === JSON.stringify(posts[1].body), "Unknown-result retry changed the request body.");

@@ -1,5 +1,6 @@
 import { Value } from "@sinclair/typebox/value";
 import { describe, expect, it, vi } from "vitest";
+import { Readable } from "node:stream";
 
 import { ParsePaperResultSchema } from "@gapproof/contracts";
 
@@ -104,6 +105,34 @@ describe("AlibabaEduPaperSdkTransport", () => {
     });
   });
 
+  it("sends an authorized local image as body without a URL", async () => {
+    const fake = sdkClient({
+      statusCode: 200,
+      body: { data: JSON.stringify(providerData) },
+    });
+    const transport = new AlibabaEduPaperSdkTransport({
+      accessKeyId: "fixture-id",
+      accessKeySecret: "fixture-secret",
+      clientFactory: () => fake.client,
+    });
+
+    const response = await transport.executeBody({
+      body: Readable.from(Buffer.from("fixture-image")),
+      timeoutMs: 2_000,
+      signal: new AbortController().signal,
+    });
+
+    expect(response.status).toBe(200);
+    const [request] = fake.call.mock.calls[0]!;
+    expect(request.url).toBeUndefined();
+    expect(request.body).toBeDefined();
+    expect(request).toMatchObject({
+      imageType: "scan",
+      subject: "JHighSchool_English",
+      outputOricoord: false,
+    });
+  });
+
   it("feeds normalized output through the existing ToolResult boundary", async () => {
     const fake = sdkClient({
       statusCode: 200,
@@ -171,4 +200,5 @@ describe("AlibabaEduPaperSdkTransport", () => {
         }),
     ).toThrow("bare HTTPS hostname");
   });
+
 });

@@ -11,12 +11,13 @@ describe("CaseRecognitionReview component", () => {
   it("renders the persistent synthetic boundary without exposing the route id", () => {
     const caseId = "0198c111-1111-7000-8000-000000000003";
     const html = renderToStaticMarkup(createElement(CaseRecognitionReview, { caseId }));
-    expect(html).toContain("合成 OCR 演示");
-    expect(html).toContain("上传图片未用于识别");
-    expect(html).toContain("非真实学生识别");
+    expect(html).toContain("体验识别内容");
+    expect(html).toContain("不会读取上传图片中的文字");
+    expect(html).toContain("不会保存为正式学习记录");
     expect(html).not.toContain(caseId);
     expect(html).not.toContain("/materials/demo/review");
     expect(html).not.toContain("answerKey");
+    expect(html).not.toMatch(/OCR Provider|Fake OCR|同一 Case|服务端/);
   });
 
   it("keeps all bounded states neutral and actionable", () => {
