@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.23"
+version: "0.2.24"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "PUSH-018 D7 前端安全作答已通过门禁待发布；显式识别创建 Case 仍待实现"
+current_design_stage: "PUSH-019 显式合成识别启动后端已通过门禁待发布；前端可点击入口仍待接入"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -88,9 +88,9 @@ upstream_documents:
 
 **已完成**：学生端“今日”页的桌面视觉结构、颜色角色、主要卡片层级和关键静态内容已确定；默认 API、真实 Today overview、ready guided、ready D1 与 ready D7 安全作答已完成对应构建和自动化门禁。写入均使用权威 Case 版本、共享 contracts 和 UUIDv7 幂等意图；D7 Fixture 覆盖成功、冲突重新确认与两次未知结果锁定。无参数入口展示服务端 7 日足迹、nullable 周目标、待确认数、脱敏进展与下次检查；合成 Mock 仅显式启用。`/materials/new` 已完成真实单图选择、校验、上传、异步基础检查；`/materials/demo/review` 是持久 Demo 标记的无网络合成识别确认演示。
 
-**尚未完成**：真实模糊度、方向、缺页与恶意文件检查，上传 asset 到 Case 的显式绑定/启动识别、OCR 结果读取与确认写入；其他学生 P0 页面、家长端页面、Logo 紧裁/SVG/Favicon 与最终品牌规范、完整交互原型。异步报告本轮 deferred。
+**尚未完成**：真实模糊度、方向、缺页与恶意文件检查，已实现的合成 start-recognition API 尚未接入上传页显式按钮；OCR 结果读取与确认写入、其他学生 P0 页面、家长端页面、Logo 紧裁/SVG/Favicon 与最终品牌规范、完整交互原型。异步报告本轮 deferred。
 
-**下一步**：冻结并实现“开始识别并创建案例”的独立幂等意图、asset↔Case 绑定、识别结果读取 DTO 与确认写入契约。任何新字段不得从视觉稿或合成 Fixture 反推业务状态。
+**下一步**：在基础检查成功态接入“开始识别并创建案例”独立按钮、监护确认与 synthetic disclosure；成功后只显示 Case 已创建、合成识别已排队，不暗示上传图片已被真实 OCR。任何新字段不得从视觉稿或合成 Fixture 反推业务状态。
 
 ### 0.4 设计底线
 
@@ -1776,6 +1776,13 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 ---
 
 ## 22. 版本记录
+
+### v0.2.24 — 2026-08-15
+
+- 登记显式合成识别启动后端已完成：只接受基础检查通过的 asset 与监护确认，响应明确上传字节未用于识别；当前上传页仍未呈现按钮，不得标为可点击闭环完成。
+- 下一步 UI 在 `succeeded` 后显示独立“开始识别并创建案例”动作，必须同时展示“合成演示、不会读取上传图片内容、真实 OCR 后置”和未成年人监护确认；不得自动触发。
+- 启动成功只显示 Case 已创建/合成识别已排队，不显示 assetId/caseId/jobId、对象键、hash、token 或 OCR 内容；网络未知须用同 key/body 单次重试后锁定。
+- 同步 PROJECT_MASTER v0.1.34、PRD v0.1.26、TDD v0.3.27 与 PUSH-019；确认后 24h 删除、主动删除、真实 OCR、派生留存和报告仍未实现。
 
 ### v0.2.23 — 2026-08-15
 

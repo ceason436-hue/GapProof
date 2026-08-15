@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.33"
+version: "0.1.34"
 status: "ACTIVE"
-current_stage: "项目本身初赛验收冲刺；PUSH-018 D7 前端安全作答已通过门禁待发布；显式识别创建 Case 仍待实现"
+current_stage: "项目本身初赛验收冲刺；PUSH-019 显式合成识别启动后端已通过门禁待发布；前端可点击入口仍待接入"
 last_updated: "2026-08-15"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -144,7 +144,7 @@ next_action:
 
 `[FACT]` GOAI 无界应用赛道参赛手册列出的初赛截止日期为 2026-08-16；具体当天截止时刻、入口、文件大小及后续通知仍须在官网、提交系统或官方群再次核对。
 
-`[DECISION]` 当前处于：**项目本身初赛验收冲刺；学生端“今日”页默认入口已接入真实 API，ready guided、D1 与 D7 均有受控提交；D7 客观复测通过仅显示 `repair_verified` 中性结果，失败最多两次规则化合成重排后进入 `support_required`。当前初赛项目验收允许使用醒目标注的合成 OCR Demo；真实阿里云 OCR 后置。图片基础检查后必须由用户显式执行“开始识别并创建案例”，该真实 Case/OCR 写入契约尚未冻结或实现。异步报告不属于本轮项目验收；`report_ready` 仅保留“报告已生成、有权威引用且当前可读”的严格语义**。
+`[DECISION]` 当前处于：**项目本身初赛验收冲刺；学生端“今日”页默认入口已接入真实 API，ready guided、D1 与 D7 均有受控提交；D7 客观复测通过仅显示 `repair_verified` 中性结果，失败最多两次规则化合成重排后进入 `support_required`。当前初赛项目验收允许使用醒目标注的合成 OCR Demo；真实阿里云 OCR 后置。图片基础检查成功后的显式合成识别启动 API 已能原子创建/绑定 Case 并排队受守卫 Fake OCR，但前端“开始识别并创建案例”按钮仍未接入；上传字节不参与识别。异步报告不属于本轮项目验收；`report_ready` 仅保留“报告已生成、有权威引用且当前可读”的严格语义**。
 
 ### 1.2 已完成
 
@@ -188,7 +188,7 @@ next_action:
 - `[PLANNED]` 尚未建立 30–40 个技能节点及 12 个深度节点的图谱 V0.1。
 - `[PLANNED]` 尚未制作比赛用原创模拟试卷、合成学生轨迹和独立金标集。
 - `[PLANNED]` 尚未确认至少一位英语教育背景人员能否短时抽检核心金标内容。
-- `[PROTOTYPE]` 已建立最小后端 Thin Slice，并完成真实图片字节上传、确定性图片 header/尺寸质量检查、受 Demo 守卫的 Fake OCR、无网络合成识别确认演示、确定性干预生成、guided/D1/D7 前端安全提交、D1/D7 后端评分及两次规则化重排封顶；尚未形成从真实 OCR 识别到修复证明的完整端到端 Demo。显式 Case/OCR 启动、识别读取/确认写入、真实 AI 干预、真实题库、真实个性化内容与通知仍未实现；异步报告本轮 deferred。
+- `[PROTOTYPE]` 已建立最小后端 Thin Slice，并完成真实图片字节上传、确定性图片 header/尺寸质量检查、显式合成识别启动 API、受 Demo 守卫的 Fake OCR、无网络合成识别确认演示、确定性干预生成、guided/D1/D7 前端安全提交、D1/D7 后端评分及两次规则化重排封顶；尚未形成从真实 OCR 识别到修复证明的完整端到端 Demo。显式启动前端按钮、识别结果读取/确认写入、真实 OCR/AI 干预、真实题库、真实个性化内容与通知仍未实现；异步报告本轮 deferred。
 - `[PROTOTYPE]` 学生端“今日”页 F0 Mock、F1b 只读 API、F1c ready D1 客户端作答及真实概览投影已完成对应技术门禁；受控 HTTP 浏览器 Fixture 已证明成功、冲突和网络未知三条交互边界。默认入口现为 API，只有显式 `?source=mock` 使用合成页面；业务主闭环仍未完成，其余学生 P0 页面、家长端页面和评委最小页仍未完成。
 - `[PLANNED]` 尚未完成正式 500 字简介、初赛 PPT、视频、README、数据卡、依赖清单和合规一页纸。
 - `[PLANNED]` 尚未产生可报告的工程评测结果或真实学生学习效果。
@@ -2118,6 +2118,13 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.34 — 2026-08-15
+
+- 新增 `POST /v1/source-assets/{assetId}/commands/start-recognition`：仅接受已通过基础检查、未删除、未绑定的学生上传，且请求必须显式为 `synthetic_demo` 并确认监护同意。
+- 同一 PostgreSQL 事务创建 `simulation && synthetic` Case、绑定 asset、写入幂等记录并排队现有 run-next；并发重复只产生一个 Case/Job，队列失败完整回滚。Job 固定使用 `asset-synthetic-paper-1`，响应明确 `uploadedAssetUsedForRecognition=false`，上传对象键、字节、文件名、hash 与 token 不进入 Fake OCR。
+- source asset 创建时写入自上传起 7 天的 `retentionUntil`，启动识别不得延长；识别确认后 24h 缩短与主动删除入口仍未实现，派生数据留存仍 unresolved。
+- 131 fast、57 PostgreSQL/API/Worker integration、88 apps/web、双 TypeScript、Next production build、migration drift 与隐私审计通过。同步 PRD v0.1.26、TDD v0.3.27、DESIGN v0.2.24 与 PUSH-019；前端显式按钮仍待接入，不证明真实 OCR。
 
 ### v0.1.33 — 2026-08-15
 
