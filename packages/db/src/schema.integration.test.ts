@@ -7,6 +7,7 @@ import {
   demoClocks,
   learningEvidenceEvents,
   sourceAssets,
+  studentProfileRevisions,
   students,
   tasks,
 } from "./schema.ts";
@@ -37,6 +38,7 @@ describeWithDatabase("PostgreSQL evidence ledger", () => {
     await database.db.delete(learningEvidenceEvents);
     await database.db.delete(demoClocks);
     await database.db.delete(cases);
+    await database.db.delete(studentProfileRevisions);
     await database.db.delete(students);
 
     await database.db.insert(students).values({

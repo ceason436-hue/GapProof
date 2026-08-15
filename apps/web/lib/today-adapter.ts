@@ -3,6 +3,7 @@ import type {
   D7RetestTaskView,
   GuidedInterventionTaskView,
   LearningTaskView,
+  StudentProfileView,
   TodayOverview,
   TodayTasksView,
 } from "@gapproof/contracts";
@@ -25,6 +26,7 @@ export type CurrentTaskSelection =
 export type TodayReadModel = {
   studentId: string;
   timeZone: string;
+  profile: StudentProfileView;
   taskCount: number;
   current: CurrentTaskSelection;
   retests: RetestTaskView[];
@@ -46,11 +48,15 @@ function requireUsableTimeZone(timeZone: string): void {
   new Intl.DateTimeFormat("en-US", { timeZone }).format(0);
 }
 
-function selectCurrentTask(view: TodayTasksView): CurrentTaskSelection {
-  if (view.currentTaskId === null) return { kind: "none" };
+function selectCurrentTask(view: TodayTasksView, selectedRetestId?: string): CurrentTaskSelection {
+  const taskId = selectedRetestId ?? view.currentTaskId;
+  if (taskId === null) return { kind: "none" };
 
-  const task = view.tasks.find(candidate => candidate.id === view.currentTaskId);
+  const task = view.tasks.find(candidate => candidate.id === taskId);
   if (!task) return { kind: "contract_error", code: "CURRENT_TASK_NOT_FOUND" };
+  if (selectedRetestId && task.taskType === "guided_intervention") {
+    return { kind: "contract_error", code: "CURRENT_TASK_NOT_FOUND" };
+  }
   if (task.status !== "ready") {
     return {
       kind: "contract_error",
@@ -61,16 +67,18 @@ function selectCurrentTask(view: TodayTasksView): CurrentTaskSelection {
   return { kind: "selected", task };
 }
 
-export function toTodayReadModel(view: TodayTasksView): TodayReadModel {
+export function toTodayReadModel(view: TodayTasksView, selectedRetestId?: string): TodayReadModel {
   requireUsableTimeZone(view.timeZone);
   if (!view.overview) throw new TodayOverviewContractError();
   return {
     studentId: view.studentId,
     timeZone: view.timeZone,
+    profile: view.profile,
     taskCount: view.tasks.length,
-    // Selection is exclusively the server-provided ID. No array, status,
-    // timestamp, or task-type fallback is allowed.
-    current: selectCurrentTask(view),
+    // A later retest may be selected by URL only after it is found in this
+    // response and remains ready. No array, timestamp, or fallback selection
+    // is permitted.
+    current: selectCurrentTask(view, selectedRetestId),
     retests: view.tasks.filter(
       (task): task is RetestTaskView => task.taskType !== "guided_intervention",
     ),

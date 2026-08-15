@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.44"
+version: "0.1.45"
 status: "ACTIVE"
-current_stage: "PUSH-029 已发布：真实 API Today 的学习足迹与今日概览已按 Stitch V1.1 原 HTML/PNG 精确复原；只替换服务端事实，不复制 Mock 学习数据"
+current_stage: "PUSH-030 待推送：学生首次粗分、Today 可达性与复习入口已完成实现和集中门禁；真实 OCR/DeepSeek/错题本仍待后续纵向切片"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -2064,6 +2064,7 @@ review_date:
 | 学生“今日”页视觉基线 | `[PROTOTYPE]` | 已选定 Stitch 桌面稿；默认 API、真实概览及 guided、ready D1、ready D7 安全作答已通过技术门禁，合成 Mock 仅显式启用；冻结书本越界裁切保持不变 | DESIGN v0.2.23 |
 | 其余学生/家长关键页设计 | `[PLANNED]` | 覆盖主闭环并遵循今日页设计准则 | 视觉基线 |
 | 可点击 Thin Slice | `[PROTOTYPE]` | 真实 API 本地栈已覆盖上传/基础检查、显式创建并绑定同一 Case、合成识别读取/修正/确认、诊断、guided 与 D1/D7；全程披露 synthetic/fixture，上传字节未用于识别 | 真实 OCR Provider、删除策略与真实样本基准 |
+| 学生首次粗分与任务可达性 | `[PROTOTYPE]` | 已持久化明确的年级、学科、学期、地区、学习状态，并使用版本/幂等修订记录；未完成时 Today 仅引导设置范围。顶部无效按钮已移除，ready D1/D7 重新读取 API 后可作答 | 多图真实 OCR、真实导师、计划/错题本/报告 |
 | 数据与合规页 | `[PLANNED]` | 类型、来源、授权、脱敏、删除、边界 | 数据选择 |
 | Demo 视频 | `[PLANNED]` | 3–4 分钟、事件回放标识、备用 | 原型稳定 |
 | 一致性审计 | `[PLANNED]` | 简介/PPT/视频/代码状态一致 | 全材料 |

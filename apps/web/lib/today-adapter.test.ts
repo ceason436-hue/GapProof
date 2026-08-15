@@ -69,7 +69,24 @@ function retest(
 }
 
 function today(tasks: LearningTaskView[], currentTaskId: string | null): TodayTasksView {
-  return { studentId, timeZone: "Asia/Tokyo", currentTaskId, tasks, overview };
+  return {
+    studentId,
+    timeZone: "Asia/Tokyo",
+    currentTaskId,
+    tasks,
+    profile: {
+      studentId,
+      grade: null,
+      subject: null,
+      term: null,
+      region: null,
+      learningState: null,
+      timeZone: "Asia/Tokyo",
+      version: 0,
+      completed: false,
+    },
+    overview,
+  };
 }
 
 describe("Today contract adapter", () => {
@@ -77,6 +94,7 @@ describe("Today contract adapter", () => {
     const model = toTodayReadModel(today([guided(), retest("d1_retest")], null));
     expect(model.current).toEqual({ kind: "none" });
     expect(model.taskCount).toBe(2);
+    expect(model.profile.completed).toBe(false);
   });
 
   it.each([
@@ -109,6 +127,29 @@ describe("Today contract adapter", () => {
       kind: "selected",
       task: d7,
     });
+  });
+
+  it("allows a later ready retest only when the API response still contains it", () => {
+    const current = guided();
+    const later = retest("d7_retest");
+    expect(toTodayReadModel(today([current, later], current.id), later.id).current).toEqual({
+      kind: "selected",
+      task: later,
+    });
+  });
+
+  it.each(["scheduled", "completed"] as const)(
+    "does not render a URL-selected %s retest as actionable",
+    status => {
+      const later = retest("d1_retest", status);
+      expect(toTodayReadModel(today([guided(), later], null), later.id).current)
+        .toMatchObject({ kind: "contract_error", code: "CURRENT_TASK_NOT_READY", referencedTask: later });
+    },
+  );
+
+  it("rejects a URL selection that is absent from the API response", () => {
+    expect(toTodayReadModel(today([guided()], null), "66666666-6666-4666-8666-666666666666").current)
+      .toEqual({ kind: "contract_error", code: "CURRENT_TASK_NOT_FOUND" });
   });
 
   it("preserves the shared D1/D7 discriminants in the read-only list", () => {
@@ -145,6 +186,17 @@ describe("Today contract adapter", () => {
       timeZone: "Not/A_TimeZone",
       currentTaskId: null,
       tasks: [],
+      profile: {
+        studentId,
+        grade: null,
+        subject: null,
+        term: null,
+        region: null,
+        learningState: null,
+        timeZone: "Not/A_TimeZone",
+        version: 0,
+        completed: false,
+      },
     })).toThrow(RangeError);
   });
 });

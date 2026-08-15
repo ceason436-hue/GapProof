@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.34"
+version: "0.2.35"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "PUSH-029 已发布：真实 API Today 的足迹与概览已按 Stitch V1.1 原 HTML/PNG 精确复原；OCR 与真实性边界不变"
+current_design_stage: "PUSH-030 待推送：首次粗分与真实任务入口已接入学生路径；OCR 与真实性边界不变"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -421,21 +421,21 @@ Tab 规则：
 
 **目标**：以最少信息完成初始分层和时间预算。
 
-**字段**：
+**当前已实现字段**：
 
 - 年级；
-- 地区；
-- 教材版本；
-- 当前单元；
-- 最近一次成绩区间，可跳过；
-- 每天可投入时间：10 / 15 / 20 分钟或自定义；
-- 近期目标，可多选但最多 2 项。
+- 学科（当前仅英语）；
+- 学期；
+- 学习地区（当前仅上海）；
+- 目前学习状态。
 
 **主操作**：“继续”。
 
 **规则**：
 
-- 分两步完成，不显示长表单。
+- 当前五项均为显式选择；未选择时不得默认补充、保存或打开正式检查入口。
+- 每次保存携带档案版本和 UUIDv7 幂等键；冲突时保留选择并要求刷新后再次确认。
+- 当前单学生原型不提供学生/家长角色切换或学生切换，顶部只显示非交互的学习空间上下文。
 - 解释为什么需要某字段。
 - 不采集学校、班级、身份证明等非必要信息。
 - 不以成绩区间给学生贴等级标签。

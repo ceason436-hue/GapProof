@@ -2,15 +2,15 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.37"
+version: "0.3.38"
 status: "DRAFT_FOR_IMPLEMENTATION"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.44"
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.36"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.45"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.37"
 ---
 
 # 知隙 GapProof 技术设计文档（TDD）
@@ -1614,6 +1614,7 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 
 | Push ID | 日期 | 分支 | 状态 | 提交摘要 | 主要内容 | 验证 |
 |---|---|---|---|---|---|---|
+| PUSH-030 | 2026-08-16 | `main` | `ready_to_push` | `feat: add explicit student setup and actionable retests` | 新增版本化学生粗分档案与 `/setup` 五项明确选择，Today 未完成时只引导设置范围；ready D1/D7 通过重新读取的同一 API 响应安全打开作答，scheduled/completed 不再呈现伪按钮；顶栏移除无行为的案例/角色切换。真实 OCR、DeepSeek、计划、错题本、报告和学习效果未提升 | 196 fast、111 Web、档案 API 幂等/冲突集成、schema 集成、workspace TypeScript、Next production build、`git diff --check`、运行中 Today→/setup 浏览器核验通过 |
 | PUSH-029 | 2026-08-16 | `main` | `pushed` | `fix: match live Today to Stitch details` | 按 `today-final.stitch.html/png` 精确复原真实 API Today 的学习足迹与今日概览：移除额外目标卡并把目标摘要放回页头，恢复单层今日描边/标签、40px 视觉间距、16px 标题间距、160px 双卡和原图标装饰；真实数值仍来自 API，不复制 Mock 学习事实 | 105 apps/web、workspace/web TypeScript、Next production build、`git diff --check`、6 状态 × 4 视口真实 API 精确 DOM Token/几何/横向溢出/截图门禁及实时页面核验通过；`.env` 与授权 `reference/test-materials/` 未纳入暂存；同轮推送并核对本地、`origin/main` 与 GitHub refs 一致 |
 | PUSH-028 | 2026-08-16 | `main` | `pushed` | `fix: reunify live Today with frozen dashboard` | 修复真实 API Today 与已确认 Mock 视觉骨架分叉：active、无当前任务和已完成统一使用深色 Hero、事实概览，以及无整列外框的学习足迹/稍后继续/下次检查右栏；当前 D1/D7 不在“稍后继续”重复展示；guided、D1、D7 仅在服务端确认成功后刷新权威 Today。Fixture 均为 synthetic，不形成真实学生记录；不提升 OCR、个性化或学习效果状态 | 105 apps/web、workspace/web TypeScript、Next production build、`git diff --check`、6 状态 × 4 视口真实 API DOM 几何/横向溢出/截图门禁及桌面/移动人工复核通过；`.env` 与授权 `reference/test-materials/` 未纳入暂存；同轮推送后核对本地、`origin/main` 与 GitHub refs 一致 |
 | PUSH-027 | 2026-08-16 | `main` | `pushed` | `feat: add bounded DeepSeek provider seam and refine student entry states` | 收口首次使用、上传选择后替换图片、事实空状态与学生可见文案；新增默认关闭的 DeepSeek structured adapter、环境配置和显式 smoke CLI。输入仅限 synthetic/desensitized，结果本地校验，未接 API/Worker/UI，未执行真实模型调用；未纳入授权 `reference/test-materials/`；实现批次为 `1cdc7b7` | 190 fast、55 tools focused、59 PostgreSQL/API/Worker integration、98 apps/web、双 TypeScript、Next production build、migration drift、真实栈 smoke、四张更新截图、`git diff --check` 与敏感信息/暂存范围审计通过；上传/onboarding Playwright 因当前 Desktop 浏览器启动握手超时 blocked，页面未执行；实现批次已推送并核对 `origin/main` |

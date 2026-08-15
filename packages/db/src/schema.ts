@@ -86,8 +86,12 @@ export const students = appSchema.table(
     tenantId: uuid("tenant_id").notNull(),
     anonymousKey: text("anonymous_key").notNull(),
     grade: text("grade"),
+    subject: text("subject"),
+    term: text("term"),
     region: text("region"),
+    learningState: text("learning_state"),
     curriculumVersion: text("curriculum_version"),
+    profileVersion: integer("profile_version").notNull().default(0),
     timezone: text("timezone").notNull().default("Asia/Shanghai"),
     status: studentStatus("status").notNull().default("active"),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -101,6 +105,29 @@ export const students = appSchema.table(
   (table) => [
     uniqueIndex("students_anonymous_key_uidx").on(table.anonymousKey),
     index("students_tenant_status_idx").on(table.tenantId, table.status),
+  ],
+);
+
+export const studentProfileRevisions = appSchema.table(
+  "student_profile_revisions",
+  {
+    id: uuid("id").primaryKey(),
+    studentId: uuid("student_id").notNull().references(() => students.id),
+    version: integer("version").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    requestHash: char("request_hash", { length: 64 }).notNull(),
+    grade: text("grade").notNull(),
+    subject: text("subject").notNull(),
+    term: text("term").notNull(),
+    region: text("region").notNull(),
+    learningState: text("learning_state").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("student_profile_revisions_student_key_uidx").on(table.studentId, table.idempotencyKey),
+    uniqueIndex("student_profile_revisions_student_version_uidx").on(table.studentId, table.version),
+    check("student_profile_revisions_version_positive", sql`${table.version} > 0`),
+    check("student_profile_revisions_hash_lower_hex", sql`${table.requestHash} ~ '^[0-9a-f]{64}$'`),
   ],
 );
 
@@ -315,6 +342,7 @@ export const demoClocks = appSchema.table(
 
 export type StudentRow = typeof students.$inferSelect;
 export type NewStudentRow = typeof students.$inferInsert;
+export type StudentProfileRevisionRow = typeof studentProfileRevisions.$inferSelect;
 export type CaseRow = typeof cases.$inferSelect;
 export type NewCaseRow = typeof cases.$inferInsert;
 export type SourceAssetRow = typeof sourceAssets.$inferSelect;

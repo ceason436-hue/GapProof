@@ -18,6 +18,7 @@ import type {
   LearningTaskView,
   SourceAssetProcessingView,
   StartSyntheticRecognitionView,
+  StudentProfileView,
   SyntheticQuickCheckResult,
   SyntheticQuickCheckView,
   TaskCompletionView,
@@ -36,6 +37,7 @@ import {
   persistD1RetestEvaluation,
   runMigrations,
   sourceAssets,
+  studentProfileRevisions,
   students,
   startSyntheticRecognitionIdempotent,
   tasks,
@@ -282,6 +284,7 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     await database.db.delete(demoClocks);
     await database.db.delete(apiIdempotencyRecords);
     await database.db.delete(cases);
+    await database.db.delete(studentProfileRevisions);
     await database.db.delete(students);
 
     await queue.start();
@@ -332,6 +335,39 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     expect(body.error.code).toBe("INVALID_INPUT");
     expect(body.requestId).toBeTruthy();
     expect(body.traceId).toBeTruthy();
+  });
+
+  it("saves an explicit first-use profile, replays safely, and rejects stale or changed saves", async () => {
+    const created = await api.inject({
+      method: "POST", url: "/v1/cases", headers: { "idempotency-key": "profile-fixture-case" }, payload: { entry: "synthetic_demo" },
+    });
+    const studentId = created.json<ApiResponse<CaseView>>().data.studentId;
+    const before = await api.inject({ method: "GET", url: `/v1/students/${studentId}/profile` });
+    expect(before.json<ApiResponse<StudentProfileView>>().data).toMatchObject({ completed: false, version: 0, grade: null, subject: null });
+
+    const request = {
+      method: "PUT" as const,
+      url: `/v1/students/${studentId}/profile`,
+      headers: { "idempotency-key": "0198b111-1111-7000-8000-0000000000f1" },
+      payload: { expectedVersion: 0, grade: "8", subject: "english", term: "first_term", region: "shanghai", learningState: "catching_up" },
+    };
+    const saved = await api.inject(request);
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json<ApiResponse<StudentProfileView>>().data).toMatchObject({ completed: true, version: 1, learningState: "catching_up" });
+    const replay = await api.inject(request);
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json<ApiResponse<StudentProfileView>>().data.version).toBe(1);
+
+    const changedReplay = await api.inject({ ...request, payload: { ...request.payload, learningState: "steady" } });
+    expect(changedReplay.statusCode).toBe(409);
+    expect(changedReplay.json<ApiErrorResponse>().error.code).toBe("IDEMPOTENCY_KEY_REUSED");
+    const stale = await api.inject({ ...request, headers: { "idempotency-key": "0198b111-1111-7000-8000-0000000000f2" } });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json<ApiErrorResponse>().error.code).toBe("VERSION_CONFLICT");
+
+    const today = await api.inject({ method: "GET", url: `/v1/students/${studentId}/today` });
+    expect(today.json<ApiResponse<TodayTasksView>>().data.profile).toMatchObject({ completed: true, version: 1 });
+    expect(await database.db.select().from(studentProfileRevisions).where(eq(studentProfileRevisions.studentId, studentId))).toHaveLength(1);
   });
 
   it("serves and scores the three-question synthetic quick check without private answers or records", async () => {

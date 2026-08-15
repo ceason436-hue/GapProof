@@ -10,5 +10,6 @@ export * from "./source-asset-repository.ts";
 export * from "./source-asset-inspection.ts";
 export * from "./local-demo-seed.ts";
 export * from "./task-repository.ts";
+export * from "./student-profile-repository.ts";
 export * from "./today-overview-repository.ts";
 export { and, eq, sql } from "drizzle-orm";

@@ -391,6 +391,50 @@ export const StudentIdParamsSchema = Type.Object({
 
 export type StudentIdParams = Static<typeof StudentIdParamsSchema>;
 
+/** The currently supported first-use choices. Values are intentionally closed
+ * until the corresponding curriculum coverage is available. */
+export const StudentProfileGradeSchema = Type.Union([
+  Type.Literal("7"),
+  Type.Literal("8"),
+  Type.Literal("9"),
+]);
+export const StudentProfileSubjectSchema = Type.Literal("english");
+export const StudentProfileTermSchema = Type.Union([
+  Type.Literal("first_term"),
+  Type.Literal("second_term"),
+]);
+export const StudentProfileRegionSchema = Type.Literal("shanghai");
+export const StudentProfileLearningStateSchema = Type.Union([
+  Type.Literal("starting"),
+  Type.Literal("catching_up"),
+  Type.Literal("steady"),
+]);
+
+export const StudentProfileViewSchema = Type.Object({
+  studentId: Type.String({ format: "uuid" }),
+  grade: Type.Union([StudentProfileGradeSchema, Type.Null()]),
+  subject: Type.Union([StudentProfileSubjectSchema, Type.Null()]),
+  term: Type.Union([StudentProfileTermSchema, Type.Null()]),
+  region: Type.Union([StudentProfileRegionSchema, Type.Null()]),
+  learningState: Type.Union([StudentProfileLearningStateSchema, Type.Null()]),
+  timeZone: Type.String({ minLength: 1 }),
+  version: Type.Integer({ minimum: 0 }),
+  completed: Type.Boolean(),
+}, { additionalProperties: false });
+
+export type StudentProfileView = Static<typeof StudentProfileViewSchema>;
+
+export const UpdateStudentProfileRequestSchema = Type.Object({
+  expectedVersion: Type.Integer({ minimum: 0 }),
+  grade: StudentProfileGradeSchema,
+  subject: StudentProfileSubjectSchema,
+  term: StudentProfileTermSchema,
+  region: StudentProfileRegionSchema,
+  learningState: StudentProfileLearningStateSchema,
+}, { additionalProperties: false });
+
+export type UpdateStudentProfileRequest = Static<typeof UpdateStudentProfileRequestSchema>;
+
 export const TaskIdParamsSchema = Type.Object({
   taskId: Type.String({ format: "uuid" }),
 });
@@ -538,6 +582,8 @@ export const TodayTasksViewSchema = Type.Object({
     Type.Null(),
   ]),
   tasks: Type.Array(LearningTaskViewSchema),
+  /** First-use profile state, without inferring any unstated student details. */
+  profile: StudentProfileViewSchema,
   /** Optional only during the contract-first rollout; the API implementation must populate it. */
   overview: Type.Optional(TodayOverviewSchema),
 });

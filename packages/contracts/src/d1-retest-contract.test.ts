@@ -123,6 +123,17 @@ describe("D1 retest HTTP contracts", () => {
     expect(Value.Check(TodayTasksViewSchema, {
       studentId: baseTask.studentId,
       timeZone: "Asia/Shanghai",
+      profile: {
+        studentId: baseTask.studentId,
+        grade: null,
+        subject: null,
+        term: null,
+        region: null,
+        learningState: null,
+        timeZone: "Asia/Shanghai",
+        version: 0,
+        completed: false,
+      },
       currentTaskId: baseTask.id,
       tasks: [d1Task],
     })).toBe(true);

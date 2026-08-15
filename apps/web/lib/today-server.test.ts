@@ -23,6 +23,17 @@ describe("server-side Today fetch", () => {
       data: {
         studentId,
         timeZone: "Asia/Tokyo",
+        profile: {
+          studentId,
+          grade: null,
+          subject: null,
+          term: null,
+          region: null,
+          learningState: null,
+          timeZone: "Asia/Tokyo",
+          version: 0,
+          completed: false,
+        },
         currentTaskId: null,
         tasks: [],
         overview: {

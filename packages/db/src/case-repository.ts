@@ -202,9 +202,10 @@ export async function createSyntheticCaseIdempotent(
       id: input.studentId,
       tenantId: input.tenantId,
       anonymousKey: `synthetic:${input.caseId}`,
-      grade: "8",
-      region: "Shanghai",
-      curriculumVersion: "unverified-demo-v1",
+      // Synthetic cases do not establish a real student's learning range.
+      grade: null,
+      region: null,
+      curriculumVersion: null,
     });
 
     const [createdCase] = await transaction

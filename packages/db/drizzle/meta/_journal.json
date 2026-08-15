@@ -71,6 +71,13 @@
       "when": 1786743000000,
       "tag": "0009_replan_count_cap",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786800000000,
+      "tag": "0010_student_profile",
+      "breakpoints": true
     }
   ]
 }

@@ -92,6 +92,13 @@ export function FirstUseToday() {
   </section></AppShell>;
 }
 
+function ProfileSetupRequired() {
+  return <AppShell actionHref="/setup" actionLabel="设置学习范围"><section className="today-page" data-profile-setup-required>
+    <div className="title-row"><div><h1>先选一下学习范围</h1><p>完成这些选择后，再开始上传材料或进行学习检查。</p></div></div>
+    <article className="state-card"><Icon name="today"/><div><h2>让接下来的内容更贴合你的学习范围</h2><p>请确认年级、学科、学期、学习地区和目前的学习状态。它们不会被默认补全。</p><Link className="primary-blue" href="/setup">设置学习范围</Link></div></article>
+  </section></AppShell>;
+}
+
 export function OverviewNextCheck({ nextCheck, timeZone }: { nextCheck: TodayOverview["nextCheck"]; timeZone: string }) {
   if (!nextCheck) return <section className="next-check" data-next-check="none"><header><span>下次检查</span><strong>尚未安排</strong></header><p>暂无已安排检查。</p></section>;
   const cycle = nextCheck.taskType === "d7_retest" ? "7 天后巩固" : "明日复习";
@@ -121,11 +128,7 @@ export function RetestCard({
     : retest.status === "completed"
       ? "这次复习已经完成。"
       : "现在可以作答，完成后会保存本次结果。";
-  const button = retest.status === "scheduled"
-    ? "尚未到期"
-    : retest.status === "completed"
-      ? "已完成（只读）"
-      : retest.taskType === "d7_retest" ? "开始巩固" : "开始复习";
+  const actionLabel = retest.taskType === "d7_retest" ? "开始巩固" : "开始复习";
 
   return <article className="retest-card" data-task-status={retest.status} data-task-type={retest.taskType}>
     <header>
@@ -134,7 +137,9 @@ export function RetestCard({
     </header>
     <TaskDates scheduledFor={retest.scheduledFor} dueAt={retest.dueAt} timeZone={timeZone}/>
     <p>{note} 预计约 {retest.estimatedMinutes} 分钟。</p>
-    <button type="button" disabled aria-disabled="true">{button}</button>
+    {retest.status === "ready"
+      ? <Link className="retest-action" href={`/student/today?source=api&task=${encodeURIComponent(retest.id)}`}>{actionLabel}</Link>
+      : null}
   </article>;
 }
 
@@ -304,10 +309,11 @@ function LiveError({ error }: { error: unknown }) {
   </AppShell>;
 }
 
-export async function LiveToday() {
+export async function LiveToday({ selectedRetestId }: { selectedRetestId?: string } = {}) {
   try {
     const response = await fetchDemoStudentToday();
-    const model = toTodayReadModel(response.data);
+    const model = toTodayReadModel(response.data, selectedRetestId);
+    if (!model.profile.completed) return <ProfileSetupRequired/>;
     if (!model.overview.hasStartedJourney) return <FirstUseToday/>;
     const completed = model.taskCount === 0 && model.current.kind === "none";
     if (completed) return <AppShell actionHref="/diagnose" actionLabel="开始新的检查"><TodayDashboard

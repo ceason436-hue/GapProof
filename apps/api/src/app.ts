@@ -51,6 +51,10 @@ import {
   type SubmitRetestAttemptRequest,
   StudentIdParamsSchema,
   type StudentIdParams,
+  StudentProfileViewSchema,
+  type StudentProfileView,
+  UpdateStudentProfileRequestSchema,
+  type UpdateStudentProfileRequest,
   SourceAssetIdParamsSchema,
   type SourceAssetIdParams,
   PrepareSourceAssetRequestSchema,
@@ -88,6 +92,10 @@ import {
   findLatestCaseEvidenceEventByType,
   readSyntheticExtractionItems,
   findStudentById,
+  findStudentProfile,
+  updateStudentProfileIdempotent,
+  StudentProfileIdempotencyKeyReusedError,
+  StudentProfileVersionConflictError,
   findSourceAssetById,
   startSyntheticRecognitionIdempotent,
   findUploadStudentAndCase,
@@ -303,6 +311,41 @@ function requireValidStudentTimeZone(timeZone: string): string {
     }
     throw error;
   }
+}
+
+function studentProfileView(student: Awaited<ReturnType<typeof findStudentProfile>>): StudentProfileView {
+  if (student === undefined) throw new Error("Student profile requires a student.");
+  const grade = ["7", "8", "9"].includes(student.grade ?? "") ? student.grade as StudentProfileView["grade"] : null;
+  const subject = student.subject === "english" ? student.subject : null;
+  const term = ["first_term", "second_term"].includes(student.term ?? "") ? student.term as StudentProfileView["term"] : null;
+  const region = student.region === "shanghai" ? student.region : null;
+  const learningState = ["starting", "catching_up", "steady"].includes(student.learningState ?? "")
+    ? student.learningState as StudentProfileView["learningState"]
+    : null;
+  const fields = [grade, subject, term, region, learningState];
+  const completed = fields.every((field) => field !== null);
+  return {
+    studentId: student.id,
+    grade,
+    subject,
+    term,
+    region,
+    learningState,
+    timeZone: requireValidStudentTimeZone(student.timezone),
+    version: student.profileVersion,
+    completed,
+  };
+}
+
+function profileRequestHash(body: UpdateStudentProfileRequest): string {
+  return createHash("sha256").update(JSON.stringify({
+    expectedVersion: body.expectedVersion,
+    grade: body.grade,
+    subject: body.subject,
+    term: body.term,
+    region: body.region,
+    learningState: body.learningState,
+  })).digest("hex");
 }
 
 function d1AttemptRequestPayload(
@@ -1626,6 +1669,53 @@ export async function buildApi(options: BuildApiOptions) {
   );
 
   api.get<{ Params: StudentIdParams }>(
+    "/v1/students/:studentId/profile",
+    {
+      schema: {
+        params: StudentIdParamsSchema,
+        response: { 200: apiResponseSchema(StudentProfileViewSchema), "4xx": ApiErrorResponseSchema, 500: ApiErrorResponseSchema },
+      },
+    },
+    async (request) => {
+      const student = await findStudentProfile(options.database, request.params.studentId);
+      if (student === undefined) throw new ResourceNotFoundError("Student", request.params.studentId);
+      return success(request, studentProfileView(student));
+    },
+  );
+
+  api.put<{ Params: StudentIdParams; Body: UpdateStudentProfileRequest }>(
+    "/v1/students/:studentId/profile",
+    {
+      schema: {
+        params: StudentIdParamsSchema,
+        body: UpdateStudentProfileRequestSchema,
+        response: { 200: apiResponseSchema(StudentProfileViewSchema), "4xx": ApiErrorResponseSchema, 500: ApiErrorResponseSchema },
+      },
+    },
+    async (request) => {
+      const idempotencyKey = getIdempotencyKey(request);
+      try {
+        const result = await updateStudentProfileIdempotent(options.database, {
+          studentId: request.params.studentId,
+          idempotencyKey,
+          requestHash: profileRequestHash(request.body),
+          ...request.body,
+        });
+        if (result.kind === "missing") throw new ResourceNotFoundError("Student", request.params.studentId);
+        return success(request, studentProfileView(result.student));
+      } catch (error) {
+        if (error instanceof StudentProfileVersionConflictError) {
+          throw new ApiHttpError(409, "VERSION_CONFLICT", "Your learning range was changed elsewhere. Refresh and save again.");
+        }
+        if (error instanceof StudentProfileIdempotencyKeyReusedError) {
+          throw new ApiHttpError(409, "IDEMPOTENCY_KEY_REUSED", "This save key belongs to a different profile update.");
+        }
+        throw error;
+      }
+    },
+  );
+
+  api.get<{ Params: StudentIdParams }>(
     "/v1/students/:studentId/today",
     {
       schema: {
@@ -1660,6 +1750,7 @@ export async function buildApi(options: BuildApiOptions) {
       return success(request, {
         studentId: student.id,
         timeZone,
+        profile: studentProfileView(student),
         currentTaskId,
         tasks: taskRows.map(toLearningTaskView),
         overview: await findTodayOverview(options.database, {

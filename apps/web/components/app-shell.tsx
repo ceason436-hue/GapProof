@@ -23,8 +23,8 @@ export function AppShell({ children, actionHref = "/diagnose", actionLabel = "�
   return <div className="app-shell">
     <header className="topbar">
       <div className="brand-crop"><Image src={logo} alt="知隙 GapProof" priority className="brand-source" /></div>
-      <nav className="top-tabs" aria-label="案例导航"><button type="button" className="top-tab active">当前案例</button><button type="button" className="top-tab">学生切换</button></nav>
-      <div className="top-actions"><button type="button" className="role-label">学生 / 家长</button><button className="role-button" type="button">角色切换</button><span className="avatar" aria-label="当前用户">知</span></div>
+      <div className="top-tabs" aria-label="当前学习空间"><span className="top-tab active">学生学习空间</span></div>
+      <div className="top-actions"><span className="role-label">学生</span><span className="avatar" aria-label="当前用户">知</span></div>
     </header>
     <aside className="sidebar" aria-label="学生主导航">
       <nav>{items.map(([icon, label, href]) => { const active = isActive(pathname, href); return <Link key={label} href={href} className={`nav-item ${active ? "active" : ""}`} aria-current={active ? "page" : undefined}><Icon name={icon}/><span>{label}</span></Link>; })}</nav>

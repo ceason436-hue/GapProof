@@ -36,19 +36,22 @@ describe("D+1/D+7 status cards", () => {
   it.each([
     ["d1_retest", "scheduled"], ["d1_retest", "ready"], ["d1_retest", "completed"],
     ["d7_retest", "scheduled"], ["d7_retest", "ready"], ["d7_retest", "completed"],
-  ] as const)("has no submission entry for %s %s", (taskType, status) => {
+  ] as const)("keeps only ready %s %s actionable", (taskType, status) => {
     const html = renderToStaticMarkup(createElement(RetestCard, {
       retest: retest(taskType, status),
       timeZone: "Asia/Tokyo",
     }));
-    expect(html).toContain("disabled");
+    if (status === "ready") {
+      expect(html).toContain('href="/student/today?source=api&amp;task=55555555-5555-4555-8555-555555555555"');
+    } else {
+      expect(html).not.toContain("href=");
+    }
     expect(html).toContain("21:00");
     expect(html).not.toContain("<form");
     expect(html).not.toContain("/attempts");
-    expect(html).not.toContain("href=");
   });
 
-  it("labels ready D1 and D7 as available in the current task area", () => {
+  it("links ready D1 and D7 to an API-backed task selection", () => {
     const d1 = renderToStaticMarkup(createElement(RetestCard, {
       retest: retest("d1_retest", "ready"), timeZone: "Asia/Tokyo",
     }));
@@ -60,6 +63,8 @@ describe("D+1/D+7 status cards", () => {
     expect(d1).toContain("开始复习");
     expect(d7).toContain("可以开始");
     expect(d7).toContain("开始巩固");
+    expect(`${d1}${d7}`).toContain('source=api&amp;task=55555555-5555-4555-8555-555555555555');
+    expect(`${d1}${d7}`).not.toContain("disabled");
     expect(`${d1}${d7}`).not.toMatch(/D\+1|D\+7|服务端|ready D/);
   });
 
