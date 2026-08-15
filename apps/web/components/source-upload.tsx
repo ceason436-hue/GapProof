@@ -22,6 +22,15 @@ import {
   pollSourceAssetInspection,
   sourceInspectionMessage,
 } from "@/lib/source-inspection";
+import {
+  SYNTHETIC_RECOGNITION_NOTICE,
+  SYNTHETIC_RECOGNITION_SUCCESS,
+  SYNTHETIC_RECOGNITION_SUCCESS_DETAIL,
+  createSyntheticRecognitionIntent,
+  isSyntheticRecognitionRetryUnknown,
+  startSyntheticRecognition,
+  syntheticRecognitionErrorMessage,
+} from "@/lib/source-recognition";
 import { beginSourceUploadLifecycle } from "@/lib/source-upload-lifecycle";
 import { AppShell } from "./app-shell";
 
@@ -47,6 +56,8 @@ type UploadIntent = {
   target?: InitiatedSourceAssetUploadView["upload"];
   assetId?: string;
 };
+
+type StartRecognitionStatus = "idle" | "starting" | "success" | "error" | "network_unknown";
 
 function formatUploadError(error: unknown): string {
   if (error instanceof ApiClientError) return "上传或图片检查没有完成，请稍后重试。";
@@ -78,6 +89,11 @@ export function SourceUpload({ studentId }: { studentId: string }) {
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<UploadStatus>("idle");
   const [message, setMessage] = useState("请选择一张图片，再开始上传。支持 JPG、PNG 或 WebP，大小 1B–10MiB。");
+  const [qualityPassed, setQualityPassed] = useState(false);
+  const [guardianConfirmed, setGuardianConfirmed] = useState(false);
+  const [startRecognitionStatus, setStartRecognitionStatus] = useState<StartRecognitionStatus>("idle");
+  const [startRecognitionMessage, setStartRecognitionMessage] = useState("");
+  const startIntentRef = useRef<ReturnType<typeof createSyntheticRecognitionIntent> | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -106,7 +122,12 @@ export function SourceUpload({ studentId }: { studentId: string }) {
 
   const chooseFile = (nextFile: File | null) => {
     intentRef.current = null;
+    startIntentRef.current = null;
     activeAbortRef.current?.abort("NEW_FILE");
+    setQualityPassed(false);
+    setGuardianConfirmed(false);
+    setStartRecognitionStatus("idle");
+    setStartRecognitionMessage("");
     setFile(nextFile);
     if (!nextFile) {
       setSafeState("idle", "请选择一张图片，再开始上传。支持 JPG、PNG 或 WebP，大小 1B–10MiB。");
@@ -121,6 +142,7 @@ export function SourceUpload({ studentId }: { studentId: string }) {
   };
 
   const showInspectionView = (view: SourceAssetProcessingView) => {
+    setQualityPassed(view.processingStatus === "succeeded" && view.quality?.status === "passed");
     switch (view.processingStatus) {
       case "uploaded":
         setSafeState("preparing", sourceInspectionMessage(view));
@@ -143,6 +165,31 @@ export function SourceUpload({ studentId }: { studentId: string }) {
       case "failed":
         setSafeState("failed", sourceInspectionMessage(view));
         break;
+    }
+  };
+
+  const startRecognition = async () => {
+    const assetId = intentRef.current?.assetId;
+    if (!assetId || !qualityPassed || !guardianConfirmed || startRecognitionStatus === "starting" || startRecognitionStatus === "success" || startRecognitionStatus === "network_unknown") return;
+
+    const intent = createSyntheticRecognitionIntent();
+    startIntentRef.current = intent;
+    setStartRecognitionStatus("starting");
+    setStartRecognitionMessage("正在请求创建合成识别案例；上传图片不会用于识别。");
+    try {
+      const response = await startSyntheticRecognition(assetId, intent);
+      if (response.data.assetId !== assetId) throw new Error("START_RECOGNITION_ASSET_MISMATCH");
+      setStartRecognitionStatus("success");
+      setStartRecognitionMessage(SYNTHETIC_RECOGNITION_SUCCESS);
+    } catch (error) {
+      if (!mountedRef.current) return;
+      if (isSyntheticRecognitionRetryUnknown(error)) {
+        setStartRecognitionStatus("network_unknown");
+        setStartRecognitionMessage(syntheticRecognitionErrorMessage(error));
+        return;
+      }
+      setStartRecognitionStatus("error");
+      setStartRecognitionMessage(syntheticRecognitionErrorMessage(error));
     }
   };
 
@@ -303,7 +350,12 @@ export function SourceUpload({ studentId }: { studentId: string }) {
 
   const reset = () => {
     intentRef.current = null;
+    startIntentRef.current = null;
     activeAbortRef.current?.abort("RESET");
+    setQualityPassed(false);
+    setGuardianConfirmed(false);
+    setStartRecognitionStatus("idle");
+    setStartRecognitionMessage("");
     setFile(null);
     setSafeState("idle", "请选择一张图片，再开始上传。支持 JPG、PNG 或 WebP，大小 1B–10MiB。");
     if (inputRef.current) inputRef.current.value = "";
@@ -371,6 +423,41 @@ export function SourceUpload({ studentId }: { studentId: string }) {
           </div>
           {status === "succeeded"
             ? <div className="upload-success" data-upload-success><strong>图片基础检查通过</strong><span>识别尚未开始；不会自动生成学习结论。</span></div>
+            : null}
+          {status === "succeeded" && qualityPassed
+            ? <section className="recognition-start-card" data-recognition-start aria-labelledby="recognition-start-title">
+              <h2 id="recognition-start-title">合成识别演示</h2>
+              <p>{SYNTHETIC_RECOGNITION_NOTICE}</p>
+              <label className="recognition-guardian-confirmation">
+                <input
+                  type="checkbox"
+                  checked={guardianConfirmed}
+                  disabled={startRecognitionStatus === "starting" || startRecognitionStatus === "success" || startRecognitionStatus === "network_unknown"}
+                  onChange={event => setGuardianConfirmed(event.currentTarget.checked)}
+                />
+                <span>我已获得监护人确认（未满18岁必需）</span>
+              </label>
+              <button
+                className="primary-blue"
+                type="button"
+                onClick={() => void startRecognition()}
+                disabled={!guardianConfirmed || startRecognitionStatus === "starting" || startRecognitionStatus === "success" || startRecognitionStatus === "network_unknown"}
+              >开始识别并创建案例</button>
+              {startRecognitionMessage
+                ? <p
+                  className={`recognition-start-message ${startRecognitionStatus === "error" || startRecognitionStatus === "network_unknown" ? "error" : startRecognitionStatus === "success" ? "success" : ""}`}
+                  aria-live={startRecognitionStatus === "error" || startRecognitionStatus === "network_unknown" ? "assertive" : "polite"}
+                  role={startRecognitionStatus === "error" || startRecognitionStatus === "network_unknown" ? "alert" : undefined}
+                  data-recognition-start-status={startRecognitionStatus}
+                >{startRecognitionMessage}</p>
+                : null}
+              {startRecognitionStatus === "success"
+                ? <p className="recognition-start-detail">{SYNTHETIC_RECOGNITION_SUCCESS_DETAIL}</p>
+                : null}
+              {startRecognitionStatus !== "success"
+                ? <a className="secondary-button recognition-return-link" href="/student/today">返回今日</a>
+                : null}
+            </section>
             : null}
         </article>
         <aside className="upload-guidance">

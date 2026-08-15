@@ -27,6 +27,8 @@ const uploadPath = `/api/v1/source-assets/${assetId}/content`;
 const backendUploadPath = `/v1/source-assets/${assetId}/content`;
 const preparePath = `/api/v1/source-assets/${assetId}/commands/prepare`;
 const backendPreparePath = `/v1/source-assets/${assetId}/commands/prepare`;
+const startRecognitionPath = `/api/v1/source-assets/${assetId}/commands/start-recognition`;
+const backendStartRecognitionPath = `/v1/source-assets/${assetId}/commands/start-recognition`;
 const inspectionPath = `/api/v1/source-assets/${assetId}`;
 const backendInspectionPath = `/v1/source-assets/${assetId}`;
 
@@ -66,6 +68,16 @@ const passedQuality = {
   reasons: [],
   checkerVersion: "image-header-v1",
 };
+const startedRecognition = {
+  assetId,
+  caseId: "0198c111-1111-7000-8000-000000000003",
+  state: "awaiting_evidence",
+  stateVersion: 0,
+  recognitionMode: "synthetic_demo",
+  recognitionSource: "synthetic_fixture",
+  uploadedAssetUsedForRecognition: false,
+  processingStatus: "queued",
+};
 const inspectionView = processingStatus => ({
   assetId,
   stage: "image_quality_check",
@@ -93,6 +105,7 @@ let scenario = "success";
 let inspectionReads = 0;
 const posts = [];
 const preparePosts = [];
+const startPosts = [];
 const puts = [];
 const gets = [];
 const readBody = request => new Promise((resolveBody, rejectBody) => {
@@ -145,6 +158,24 @@ const fixtureServer = createServer(async (request, response) => {
         ? inspectionView("succeeded")
         : { assetId, stage: "image_quality_check", processingStatus: "queued" };
     json(response, 200, envelope(prepareResponse));
+    return;
+  }
+  if (request.method === "POST" && request.url === backendStartRecognitionPath) {
+    const body = await readBody(request);
+    startPosts.push({ body: JSON.parse(body.toString("utf8")), idempotencyKey: request.headers["idempotency-key"] });
+    if (scenario === "start-network-unknown") {
+      request.socket.destroy();
+      return;
+    }
+    if (scenario === "already-bound") {
+      json(response, 409, {
+        error: { code: "SOURCE_ASSET_ALREADY_BOUND", message: "Fixture asset is already bound.", retryable: false },
+        requestId: `fixture-${scenario}-error`,
+        traceId: `fixture-${scenario}-error-trace`,
+      });
+      return;
+    }
+    json(response, 200, envelope(startedRecognition));
     return;
   }
   if (request.method === "GET" && request.url === backendInspectionPath) {
@@ -204,6 +235,7 @@ const resetFixtureState = currentScenario => {
   inspectionReads = 0;
   posts.length = 0;
   preparePosts.length = 0;
+  startPosts.length = 0;
   puts.length = 0;
   gets.length = 0;
 };
@@ -234,13 +266,16 @@ const visitAndInspect = async (page, expectedStatus, {
   assert(posts.every(post => JSON.stringify(post.body) === JSON.stringify(posts[0].body)), `${scenario}: upload POST retry changed the JSON body.`);
   assert(preparePosts.every(post => post.idempotencyKey === posts[0].idempotencyKey), `${scenario}: prepare changed the upload intent idempotency key.`);
   assert(preparePosts.every(post => JSON.stringify(post.body) === "{}"), `${scenario}: prepare body was not the exact empty shared DTO.`);
-  assert(browserPaths.every(path => path === "/api/v1/source-assets/uploads" || path === uploadPath || path === preparePath || path === inspectionPath), `${scenario}: browser did not use same-origin API paths.`);
+  assert(browserPaths.every(path => path === "/api/v1/source-assets/uploads" || path === uploadPath || path === preparePath || path === inspectionPath || path === startRecognitionPath), `${scenario}: browser did not use same-origin API paths.`);
   assert(puts.every(put => put.uploadToken === token), `${scenario}: PUT retry changed the short-lived upload token.`);
   assert(puts.every(put => put.contentType === puts[0].contentType && put.contentType === "image/png"), `${scenario}: PUT retry changed the original Content-Type.`);
   assert(puts.every(put => Buffer.compare(put.body, puts[0].body) === 0 && Buffer.compare(put.body, bytes) === 0), `${scenario}: PUT retry changed the original bytes.`);
   const visibleText = await page.locator("body").innerText();
+  if (expectedStatus !== "succeeded") {
+    assert(await page.getByRole("button", { name: "开始识别并创建案例", exact: true }).count() === 0, `${scenario}: start recognition action appeared before a passed inspection.`);
+  }
   assert(!visibleText.includes(token) && !visibleText.includes(assetId) && !visibleText.includes(fileName) && !visibleText.includes(sha256) && !visibleText.includes("objectKey"), "Inspection UI leaked upload internals or server facts.");
-  assert(!visibleText.includes("OCR") && !visibleText.includes("置信度"), "Inspection UI exposed unimplemented OCR details.");
+  assert(!visibleText.includes("置信度") && !visibleText.includes("provider") && !visibleText.includes("答案键"), "Inspection UI exposed unimplemented recognition details.");
   return visibleText;
 };
 
@@ -267,6 +302,8 @@ try {
       ["get-network-unknown", "succeeded", 1, 1, 1, 1],
       ["post-network-unknown", "succeeded", 1, 1, 2, 1],
       ["put-network-unknown", "succeeded", 1, 1, 1, 2],
+      ["start-network-unknown", "succeeded", 1, 1, 1, 1],
+      ["already-bound", "succeeded", 1, 1, 1, 1],
     ]) {
       resetFixtureState(currentScenario);
       browserPaths = [];
@@ -281,6 +318,41 @@ try {
         expectedPreparePosts,
         expectedGets,
       });
+      if (currentScenario === "success" || currentScenario === "start-network-unknown" || currentScenario === "already-bound") {
+        const startButton = page.getByRole("button", { name: "开始识别并创建案例", exact: true });
+        const guardian = page.getByRole("checkbox", { name: /监护人确认/ });
+        assert(await startButton.count() === 1 && await guardian.count() === 1, `${currentScenario}: passed inspection did not expose the guarded start action.`);
+        assert(await startButton.isDisabled(), `${currentScenario}: start action was enabled before guardian confirmation.`);
+        await guardian.check();
+        assert(await startButton.isEnabled(), `${currentScenario}: guardian confirmation did not enable start action.`);
+        await startButton.click();
+        await page.locator('[data-recognition-start-status="success"], [data-recognition-start-status="error"], [data-recognition-start-status="network_unknown"]').waitFor({ timeout: 10_000 });
+        assert(startPosts.length >= 1, `${currentScenario}: no start-recognition POST was observed.`);
+        assert(uuidV7Pattern.test(startPosts[0].idempotencyKey ?? ""), `${currentScenario}: start intent did not use UUIDv7.`);
+        assert(startPosts[0].idempotencyKey !== posts[0].idempotencyKey, `${currentScenario}: start intent reused the upload intent key.`);
+        assert(JSON.stringify(startPosts[0].body) === JSON.stringify({ mode: "synthetic_demo", guardianConfirmed: true }), `${currentScenario}: start body was not the exact shared DTO.`);
+        assert(browserPaths.includes(startRecognitionPath), `${currentScenario}: start-recognition request was not same-origin.`);
+        const startText = await page.locator("body").innerText();
+        assert(!startText.includes(assetId) && !startText.includes(startedRecognition.caseId) && !startText.includes(token) && !startText.includes(fileName) && !startText.includes(sha256) && !startText.includes("objectKey") && !startText.includes("jobId"), `${currentScenario}: start UI leaked internal or upload facts.`);
+        assert(startText.includes("合成识别演示") && startText.includes("上传图片字节不会用于识别"), `${currentScenario}: persistent synthetic recognition notice is missing.`);
+        if (currentScenario === "success") {
+          assert(startPosts.length === 1, "success: expected one start-recognition POST.");
+          assert(startText.includes("案例已创建，合成识别已排队") && startText.includes("上传图片未用于识别"), "success: start success UI was not the neutral sanitized copy.");
+        } else if (currentScenario === "start-network-unknown") {
+          assert(startPosts.length === 2, "start-network-unknown: expected exactly one retry after the unknown result.");
+          assert(startPosts.every(post => post.idempotencyKey === startPosts[0].idempotencyKey), "start-network-unknown: retry changed the start idempotency key.");
+          assert(startPosts.every(post => JSON.stringify(post.body) === JSON.stringify(startPosts[0].body)), "start-network-unknown: retry changed the start JSON body.");
+          assert(await guardian.isDisabled() && await startButton.isDisabled(), "start-network-unknown: confirmation controls were not locked.");
+          await new Promise(resolveWait => setTimeout(resolveWait, 1_000));
+          assert(startPosts.length === 2, "start-network-unknown: a third start POST was sent after the unknown result.");
+        } else {
+          assert(startPosts.length === 1, "already-bound: non-retryable failure unexpectedly retried.");
+          assert(await guardian.isEnabled() && await startButton.isEnabled(), "already-bound: explicit retry controls were not preserved.");
+          await startButton.click();
+          await page.locator('[data-recognition-start-status="error"]').waitFor({ timeout: 10_000 });
+          assert(startPosts.length === 2 && startPosts[1].idempotencyKey !== startPosts[0].idempotencyKey, "already-bound: explicit retry did not create a fresh start intent.");
+        }
+      }
       if (currentScenario === "success") {
         assert(visibleText.includes("图片基础检查通过，识别尚未开始"), "Success UI did not show the neutral inspection result.");
         await mkdir(screenshots, { recursive: true });
@@ -293,7 +365,7 @@ try {
           await screenshotPage.locator('[data-upload-status="succeeded"]').waitFor({ timeout: 40_000 });
           await screenshotPage.evaluate(() => {
             const banner = document.createElement("div");
-            banner.textContent = "受控 Fixture · 合成 bytes";
+            banner.textContent = "受控 Fixture · 合成演示 · 上传图片未用于识别";
             Object.assign(banner.style, {
               position: "fixed", right: "12px", bottom: "10px", zIndex: "99",
               padding: "6px 10px", borderRadius: "999px", background: "#111318",
@@ -302,6 +374,15 @@ try {
             document.body.append(banner);
           });
           await screenshotPage.screenshot({ path: resolve(screenshots, `source-inspection-succeeded-${width}x${height}.png`) });
+          await screenshotPage.getByRole("checkbox", { name: /监护人确认/ }).check();
+          await screenshotPage.getByRole("button", { name: "开始识别并创建案例", exact: true }).click();
+          await screenshotPage.locator('[data-recognition-start-status="success"]').waitFor({ timeout: 10_000 });
+          const viewportOverflow = await screenshotPage.evaluate(() => ({
+            horizontal: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+            marker: document.body.innerText.includes("上传图片未用于识别"),
+          }));
+          assert(!viewportOverflow.horizontal && viewportOverflow.marker, `success screenshot ${width}x${height}: overflow or persistent synthetic marker detected.`);
+          await screenshotPage.screenshot({ path: resolve(screenshots, `source-recognition-start-success-${width}x${height}.png`) });
           await screenshotPage.close();
         }
       }
