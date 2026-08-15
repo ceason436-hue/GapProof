@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type D1RetestAttemptView,
   type D1RetestTaskView,
 } from "@gapproof/contracts";
 import { useEffect, useState } from "react";
@@ -8,13 +9,27 @@ import { ApiClientError } from "@/lib/api-client";
 import { createD1AttemptIntent, d1AttemptGuards, getCaseForD1Attempt, submitD1Attempt } from "@/lib/d1-attempt";
 import { formatTaskDateTime } from "@/lib/today-adapter";
 
+type D1AttemptResultState = D1RetestAttemptView["state"] | "support_required";
+
 type SubmitState =
   | { kind: "loading_case" }
   | { kind: "idle" }
   | { kind: "submitting" }
   | { kind: "conflict"; requestId: string }
   | { kind: "error"; code: string; requestId?: string }
-  | { kind: "success"; passed: boolean; state: "d7_scheduled" | "replan_required"; stateVersion: number; selectedChoiceId: string; scheduledFor: string | null };
+  | { kind: "success"; passed: boolean; state: D1AttemptResultState; stateVersion: number; selectedChoiceId: string; scheduledFor: string | null };
+
+export function d1AttemptResultCopy(state: D1AttemptResultState, passed: boolean) {
+  if (state === "support_required") {
+    return {
+      title: "需要老师或家长协助",
+      detail: "同一 Case 已达到最多两次自动重排上限，需要老师或家长协助；停止自动重排。",
+    };
+  }
+  return passed
+    ? { title: "D+7 已安排", detail: null }
+    : { title: "正在调整接下来的计划", detail: "服务端正在等待异步任务处理；当前不会宣称已形成真实个性化调整。" };
+}
 
 function errorState(error: unknown): Extract<SubmitState, { kind: "error" }> {
   if (error instanceof ApiClientError) {
@@ -92,11 +107,14 @@ export function D1AttemptPanel({ task, timeZone }: { task: D1RetestTaskView; tim
   };
 
   if (state.kind === "success") {
-    return <article className="attempt-result" data-attempt-result={state.passed ? "passed" : "replan_required"}>
+    const resultCopy = d1AttemptResultCopy(state.state, state.passed);
+    return <article className="attempt-result" data-attempt-result={state.state === "support_required" ? "support_required" : state.passed ? "passed" : "replan_required"}>
       <span className="task-kind">本次提交已由服务端记录</span>
-      <h3>{state.passed ? "D+7 已安排" : "正在调整接下来的计划"}</h3>
+      <h3>{resultCopy.title}</h3>
       <p>你本次选择：{state.selectedChoiceId}</p>
-      {state.passed && state.scheduledFor
+      {resultCopy.detail
+        ? <p>{resultCopy.detail}</p>
+        : state.passed && state.scheduledFor
         ? <p>下一次延迟检查：{formatTaskDateTime(state.scheduledFor, timeZone)}。这只增加一条后续检查安排，不代表已经掌握。</p>
         : <p>服务端正在等待异步任务处理；当前不会宣称已形成真实个性化调整。</p>}
       <div className="config-detail">{state.state} · v{state.stateVersion}</div>
