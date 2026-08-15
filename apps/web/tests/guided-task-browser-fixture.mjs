@@ -199,7 +199,7 @@ try {
         assert(posts[1].idempotencyKey === posts[0].idempotencyKey, "network-unknown: retry changed the key.");
         assert(JSON.stringify(posts[1].body) === JSON.stringify(posts[0].body), "network-unknown: retry changed the body.");
         assert(await page.getByRole("link", { name: "请刷新今日" }).count() === 1, "network-unknown: submit was not locked behind a refresh link.");
-        assert(await page.locator('input[type="checkbox"]').evaluateAll(inputs => inputs.every(input => input.disabled)), "network-unknown: selections were not locked.");
+        assert(await page.locator('input[type="checkbox"]').evaluateAll(inputs => inputs.every(input => input.matches(":disabled"))), "network-unknown: selections were not locked.");
         assert(await page.locator('button.guided-task-submit').count() === 0, "network-unknown: a submit button remained available.");
         const uuidCallsAfterRetry = await page.evaluate(() => window.__guidedUuidCalls);
         await page.waitForTimeout(1_000);
