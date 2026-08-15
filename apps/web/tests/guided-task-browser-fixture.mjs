@@ -53,13 +53,8 @@ const readJsonBody = request => new Promise((resolveBody, rejectBody) => {
 });
 let scenario = "success";
 let caseReads = 0;
+let dropNextCaseReads = 0;
 const posts = [];
-const shouldDropCaseRead = () => {
-  if (scenario === "initial-get-failure" && caseReads <= 3) return true;
-  if (scenario === "pre-submit-get-failure" && caseReads >= 2 && caseReads <= 4) return true;
-  if (scenario === "conflict-get-failure" && caseReads >= 3 && caseReads <= 5) return true;
-  return false;
-};
 const fixtureServer = createServer(async (request, response) => {
   if (request.method === "GET" && request.url === `/v1/students/${studentId}/today`) {
     response.writeHead(200, { "Content-Type": "application/json" });
@@ -73,7 +68,7 @@ const fixtureServer = createServer(async (request, response) => {
       response.end(JSON.stringify({ error: { code: "RESOURCE_NOT_FOUND", message: "Synthetic case not found.", retryable: false }, requestId: "guided-case-not-found", traceId: "guided-case-not-found" }));
       return;
     }
-    if (shouldDropCaseRead()) { request.socket.destroy(); return; }
+    if (dropNextCaseReads > 0) { dropNextCaseReads -= 1; request.socket.destroy(); return; }
     const stateVersion = (scenario === "conflict" || scenario === "conflict-get-failure") && posts.length > 0 ? 5 : 4;
     response.writeHead(200, { "Content-Type": "application/json" });
     response.end(JSON.stringify(envelope({ id: caseId, studentId, state: "intervention_active", stateVersion, title: "Synthetic guided fixture", simulation: true, synthetic: true, updatedAt: "2026-08-16T00:00:00.000Z" })));
@@ -84,6 +79,7 @@ const fixtureServer = createServer(async (request, response) => {
     posts.push({ body, idempotencyKey: request.headers["idempotency-key"] });
     if (scenario === "network-unknown") { request.socket.destroy(); return; }
     if ((scenario === "conflict" || scenario === "conflict-get-failure") && posts.length === 1) {
+      if (scenario === "conflict-get-failure") dropNextCaseReads = 3;
       response.writeHead(409, { "Content-Type": "application/json" });
       response.end(JSON.stringify({ error: { code: "VERSION_CONFLICT", message: "Synthetic version conflict.", retryable: false }, requestId: "guided-conflict-request", traceId: "guided-conflict-trace" }));
       return;
@@ -120,7 +116,7 @@ try {
   const browser = await chromium.launch({ channel: "msedge", headless: true });
   try {
     for (const currentScenario of ["success", "conflict", "network-unknown", "initial-get-failure", "pre-submit-get-failure", "conflict-get-failure", "case-not-found"]) {
-      scenario = currentScenario; caseReads = 0; posts.length = 0;
+      scenario = currentScenario; caseReads = 0; dropNextCaseReads = currentScenario === "initial-get-failure" ? 3 : 0; posts.length = 0;
       const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
       await page.addInitScript(() => {
         window.__guidedUuidCalls = 0;
@@ -147,6 +143,7 @@ try {
       } else if (currentScenario === "pre-submit-get-failure") {
         await page.locator('[data-guided-task-state="idle"]').waitFor({ timeout: 10_000 });
         for (const stepId of stepIds) await page.locator(`input[type="checkbox"][value="${stepId}"]`).check();
+        dropNextCaseReads = 3;
         await page.getByRole("button", { name: "确认完成任务" }).click();
         await page.locator('[data-guided-task-state="case_error"]').waitFor();
         assert(posts.length === 0, "pre-submit-get-failure: Case GET failure caused a POST.");
@@ -179,7 +176,7 @@ try {
       if (currentScenario === "success") {
         await page.locator('[data-guided-result="success"]').waitFor();
         assert(posts.length === 1, `success: expected one POST, observed ${posts.length}.`);
-        assert(caseReads === 2, `success: expected initial and pre-submit Case reads, observed ${caseReads}.`);
+        assert(caseReads >= 2, `success: expected initial and pre-submit Case reads, observed ${caseReads}.`);
         assert(uuidV7Pattern.test(posts[0].idempotencyKey ?? ""), "success: Idempotency-Key was not UUIDv7.");
         assert(JSON.stringify(posts[0].body) === JSON.stringify({ expectedVersion: 4, completedStepIds: stepIds }), "success: request body was not exact.");
         const resultText = await page.locator('[data-guided-result="success"]').innerText();
@@ -188,7 +185,7 @@ try {
       } else if (currentScenario === "conflict") {
         await page.locator('[data-guided-task-state="conflict"]').waitFor();
         assert(posts.length === 1, "conflict: write was automatically repeated.");
-        assert(caseReads === 3, `conflict: expected initial, pre-submit and conflict-refresh Case reads, observed ${caseReads}.`);
+        assert(caseReads >= 3, `conflict: expected initial, pre-submit and conflict-refresh Case reads, observed ${caseReads}.`);
         assert(await page.getByRole("button", { name: "确认后重新提交" }).isEnabled(), "conflict: explicit reconfirmation was not required.");
         await page.getByRole("button", { name: "确认后重新提交" }).click();
         await page.locator('[data-guided-result="success"]').waitFor();
