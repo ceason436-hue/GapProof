@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.66"
+version: "0.2.67"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "PUSH-061 已发布：Today、三题检查与上传页固定动作接入真实后续；完整浏览器/移动端/真实学生验收仍 deferred"
+current_design_stage: "PUSH-062 已发布：多图替换未知结果核对新旧资源身份；完整浏览器/移动端/真实学生验收仍 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -1782,6 +1782,12 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 ---
 
 ## 22. 版本记录
+
+### v0.2.67 — 2026-08-16
+
+- 替换图片响应未知时，只有读取到新图片身份后才显示替换已生效；仍是旧图片时提示学生明确重试，不把页面仍存在误当作替换成功。
+- 材料批次创建结果未返回时，页面说明再次点击会继续刚才的操作且不会新建另一份材料。
+- 完整浏览器、移动端、视觉和真实学生验收继续 deferred。
 
 ### v0.2.66 — 2026-08-16
 

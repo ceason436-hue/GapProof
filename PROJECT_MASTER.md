@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.76"
+version: "0.1.77"
 status: "ACTIVE"
-current_stage: "PUSH-061 已发布：Today、三题检查与上传页固定动作接入真实后续；比赛落地优先，完整集中门禁与真实学生验收 deferred"
+current_stage: "PUSH-062 已发布：多图替换未知结果核对新旧资源身份；比赛落地优先，完整集中门禁与真实学生验收 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -2122,6 +2122,12 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.77 — 2026-08-16
+
+- 多图替换响应未知时保存替换前资源身份，只在权威批次显示资源身份已变化后继续；仍指向旧图片时明确判定未替换成功，允许学生用同一意图确认重试。
+- OCR 批次创建响应未知时明确再次点击会沿用同一幂等意图，不会新建另一份材料，消除提示与可用动作之间的矛盾。
+- 本批仅执行 Web TypeScript 与 diff 检查；不证明真实 OCR 准确率、真实个性化或学习效果。
 
 ### v0.1.76 — 2026-08-16
 
