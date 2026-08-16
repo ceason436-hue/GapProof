@@ -1,6 +1,7 @@
 "use client";
 
 import type { D7RetestAttemptView, D7RetestTaskView } from "@gapproof/contracts";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ApiClientError } from "@/lib/api-client";
@@ -172,6 +173,10 @@ export function D7AttemptPanel({ task }: { task: D7RetestTaskView }) {
       <span className="task-kind">本次巩固已完成</span>
       <h3>{result.title}</h3>
       <p>{result.detail}</p>
+      <div className="guided-task-result-actions">
+        <Link className="primary-blue" href="/student/today?source=api">返回今日查看安排</Link>
+        <Link className="secondary-button" href="/student/progress">查看我的进步</Link>
+      </div>
     </article>;
   }
 

@@ -4,6 +4,7 @@ import {
   type D1RetestAttemptView,
   type D1RetestTaskView,
 } from "@gapproof/contracts";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ApiClientError } from "@/lib/api-client";
@@ -141,6 +142,10 @@ export function D1AttemptPanel({ task, timeZone }: { task: D1RetestTaskView; tim
         : state.passed && state.scheduledFor
         ? <p>7 天后巩固：{formatTaskDateTime(state.scheduledFor, timeZone)}。这只是后续复习安排，不代表已经掌握。</p>
         : <p>新的安排还在准备中，请稍后回到今日页查看。</p>}
+      <div className="guided-task-result-actions">
+        <Link className="primary-blue" href="/student/today?source=api">返回今日查看安排</Link>
+        <Link className="secondary-button" href="/student/plan">查看 7 日计划</Link>
+      </div>
     </article>;
   }
 
