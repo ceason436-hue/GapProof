@@ -144,7 +144,9 @@ export function D1AttemptPanel({ task, timeZone }: { task: D1RetestTaskView; tim
         : <p>新的安排还在准备中，请稍后回到今日页查看。</p>}
       <div className="guided-task-result-actions">
         <Link className="primary-blue" href="/student/today?source=api">返回今日查看安排</Link>
-        <Link className="secondary-button" href="/student/plan">查看 7 日计划</Link>
+        {state.state === "support_required"
+          ? <Link className="secondary-button" href="/student/report">查看学习报告</Link>
+          : <Link className="secondary-button" href="/student/plan">查看 7 日计划</Link>}
       </div>
     </article>;
   }
