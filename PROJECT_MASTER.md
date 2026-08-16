@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.56"
+version: "0.1.57"
 status: "ACTIVE"
-current_stage: "PUSH-041 已发布：学习报告改为学生可理解的学习记录与下一步入口；示例内容继续明确披露，学生真实闭环继续推进，完整集中门禁与真实学生验收仍 deferred"
+current_stage: "PUSH-042 已发布：上传页改用学生可理解的图片准备与识别文案；学生真实闭环继续推进，完整集中门禁与真实学生验收仍 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -2122,6 +2122,10 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.57 — 2026-08-16
+
+- 上传页将“真实识别”“基础检查”等工程式表述改为“图片识别”“检查图片是否清晰”，保留多图上传、人工确认和真实性披露边界。
 
 ### v0.1.56 — 2026-08-16
 
