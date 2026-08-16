@@ -1,5 +1,6 @@
 import { createDatabase } from "@gapproof/db";
 import { createJobQueue } from "@gapproof/jobs";
+import path from "node:path";
 import {
   createRealBuildInterventionAdapterFromEnv,
   createRealFormHypothesesAdapterFromEnv,
@@ -18,7 +19,13 @@ const databaseUrl =
   process.env.DATABASE_URL ??
   "postgres://gapproof:gapproof_local@127.0.0.1:55432/gapproof";
 
-const sourceAssetStorage = createSourceAssetStorageFromEnvironment();
+const production = process.env.NODE_ENV === "production";
+const sourceAssetStorage = createSourceAssetStorageFromEnvironment({
+  ...process.env,
+  ...(production || process.env.GAPPROOF_UPLOAD_DIR !== undefined
+    ? {}
+    : { GAPPROOF_UPLOAD_DIR: path.resolve(".local", "gapproof", "uploads") }),
+});
 if (sourceAssetStorage === undefined) {
   throw new Error("Source asset storage must be configured before the worker can start.");
 }

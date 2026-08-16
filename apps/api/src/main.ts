@@ -1,5 +1,6 @@
 import { createDatabase } from "@gapproof/db";
 import { createJobQueue } from "@gapproof/jobs";
+import path from "node:path";
 
 import { buildApi } from "./app.ts";
 import { createDeviceSessionService } from "./device-session-module.ts";
@@ -9,15 +10,21 @@ const databaseUrl =
   process.env.DATABASE_URL ??
   "postgres://gapproof:gapproof_local@127.0.0.1:55432/gapproof";
 const port = Number(process.env.API_PORT ?? "4000");
-const uploadSigningSecret = process.env.GAPPROOF_UPLOAD_SIGNING_SECRET;
-const deviceSessionSecret = process.env.GAPPROOF_DEVICE_SESSION_SECRET;
+const production = process.env.NODE_ENV === "production";
+const uploadSigningSecret = process.env.GAPPROOF_UPLOAD_SIGNING_SECRET ?? (production ? undefined : "local-dev-upload-signing-secret-32-bytes");
+const deviceSessionSecret = process.env.GAPPROOF_DEVICE_SESSION_SECRET ?? (production ? undefined : "local-dev-device-session-secret-32-bytes");
 if (deviceSessionSecret === undefined || deviceSessionSecret.length < 32) {
   throw new Error("GAPPROOF_DEVICE_SESSION_SECRET must contain at least 32 characters.");
 }
-if (process.env.NODE_ENV === "production" && (uploadSigningSecret === undefined || uploadSigningSecret.length < 32)) {
+if (production && (uploadSigningSecret === undefined || uploadSigningSecret.length < 32)) {
   throw new Error("GAPPROOF_UPLOAD_SIGNING_SECRET must contain at least 32 characters in production.");
 }
-const uploadStorage = createSourceAssetStorageFromEnvironment();
+const uploadStorage = createSourceAssetStorageFromEnvironment({
+  ...process.env,
+  ...(production || process.env.GAPPROOF_UPLOAD_DIR !== undefined
+    ? {}
+    : { GAPPROOF_UPLOAD_DIR: path.resolve(".local", "gapproof", "uploads") }),
+});
 
 const database = createDatabase(databaseUrl);
 const queue = createJobQueue(databaseUrl);

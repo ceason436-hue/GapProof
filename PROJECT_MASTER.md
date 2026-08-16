@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.54"
+version: "0.1.55"
 status: "ACTIVE"
-current_stage: "PUSH-039 准备发布：已确认真实题目可主动创建内容绑定的错题重做任务，API/Worker 共用 S3 兼容对象存储适配；比赛落地优先，完整集中门禁、真实对象存储 smoke 与真实学生验收仍 deferred"
+current_stage: "PUSH-040 准备发布：开发环境缺少上传/设备密钥时自动使用本地隔离默认值，生产环境仍强制显式配置；学生真实闭环继续推进，完整集中门禁与真实学生验收仍 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -2122,6 +2122,11 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.55 — 2026-08-16
+
+- 开发环境 API/Worker 在未提供本地上传目录、上传签名密钥和设备会话密钥时使用 `.local/gapproof/uploads` 与仅本地的固定默认值，避免比赛预览因空 `.env` 无法启动；`NODE_ENV=production` 仍 fail closed。
+- 该默认值只用于本地开发，不代表生产密钥、生产对象存储或真实学生身份能力。
 
 ### v0.1.54 — 2026-08-16
 
