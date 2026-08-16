@@ -60,11 +60,14 @@ export function TodayFootprint({ overview }: { overview: TodayOverview }) {
   </section>;
 }
 
-function OverviewPending({ overview }: { overview: TodayOverview }) {
+function OverviewPending({ overview, recoverableBatches }: { overview: TodayOverview; recoverableBatches: readonly RecoverableOcrBatchView[] }) {
   const count = overview.pendingConfirmationCount;
+  const reviewBatch = recoverableBatches.find(batch => batch.resumeKind === "review" || batch.resumeKind === "wait");
+  const reviewHref = reviewBatch === undefined ? undefined : `/materials/${reviewBatch.caseId}/review`;
   return <article className="lime-card overview-fact-card" data-pending-confirmations={count}>
     <div className="lime-content"><div className="lime-heading"><Icon name="alert"/><h3>等你确认</h3></div>
       <p>{count > 0 ? `有 ${count} 项内容等你确认。` : "当前没有待确认事项。"}</p>
+      {reviewHref !== undefined ? <Link className="dark-button" href={reviewHref}>去核对题目</Link> : null}
     </div>
     <Icon name="check" className="card-art"/>
   </article>;
@@ -81,10 +84,10 @@ function OverviewProgress({ overview }: { overview: TodayOverview }) {
   </article>;
 }
 
-export function TodayOverviewPanel({ overview }: { overview: TodayOverview }) {
+export function TodayOverviewPanel({ overview, recoverableBatches = [] }: { overview: TodayOverview; recoverableBatches?: readonly RecoverableOcrBatchView[] }) {
   return <section className="overview overview-panel" data-today-overview>
     <h2>今日概览</h2>
-    <div className="overview-grid overview-facts"><OverviewPending overview={overview}/><OverviewProgress overview={overview}/></div>
+    <div className="overview-grid overview-facts"><OverviewPending overview={overview} recoverableBatches={recoverableBatches}/><OverviewProgress overview={overview}/></div>
   </section>;
 }
 
@@ -302,7 +305,7 @@ export function TodayDashboard({
     <div className="today-grid">
       <div className="main-column">
         <CurrentPanel current={current} timeZone={timeZone} completed={completed}/>
-        <TodayOverviewPanel overview={overview}/>
+        <TodayOverviewPanel overview={overview} recoverableBatches={recoverableBatches}/>
       </div>
       <aside className="right-column">
         <TodayFootprint overview={overview}/>
