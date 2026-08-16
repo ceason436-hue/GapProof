@@ -1,6 +1,8 @@
 import { type Static, Type } from "@sinclair/typebox";
 
 export const MAX_REAL_OCR_BATCH_PAGES = 50;
+export const REAL_OCR_PROCESSING_NOTICE_VERSION = "real-ocr-processing-v1";
+export const MAX_REAL_OCR_BATCHES_PER_24H = 10;
 
 export const DeviceSessionViewSchema = Type.Object({
   authenticated: Type.Literal(true),

@@ -1,5 +1,5 @@
-import { and, asc, eq, gt, sql } from "drizzle-orm";
-import { MAX_REAL_OCR_BATCH_PAGES } from "@gapproof/contracts";
+import { and, asc, count, eq, gt, gte, sql } from "drizzle-orm";
+import { MAX_REAL_OCR_BATCHES_PER_24H, MAX_REAL_OCR_BATCH_PAGES, REAL_OCR_PROCESSING_NOTICE_VERSION } from "@gapproof/contracts";
 import { randomUUID } from "node:crypto";
 import type { Database } from "./client.ts";
 import { ResourceNotFoundError, isPostgresUniqueViolation } from "./case-repository.ts";
@@ -50,8 +50,10 @@ export async function createRealOcrBatch(database: Database, input: { idempotenc
         if (result === undefined || result.batch.studentId !== input.studentId) throw new OcrBatchIdempotencyError();
         return { batch: result.batch, replayed: true };
       }
-      const [student] = await tx.select().from(students).where(eq(students.id, input.studentId)).limit(1);
+      const [student] = await tx.select().from(students).where(eq(students.id, input.studentId)).for("update").limit(1);
       if (student === undefined || student.deletedAt !== null || student.status !== "active") throw new ResourceNotFoundError("Student", input.studentId);
+      const [recentBatches] = await tx.select({ value: count() }).from(ocrBatches).where(and(eq(ocrBatches.studentId, input.studentId), gte(ocrBatches.createdAt, new Date(Date.now() - 24 * 60 * 60 * 1_000))));
+      if ((recentBatches?.value ?? 0) >= MAX_REAL_OCR_BATCHES_PER_24H) throw new OcrBatchIntentError(`A student can start at most ${MAX_REAL_OCR_BATCHES_PER_24H} OCR batches in 24 hours.`);
       const [caseRow] = await tx.insert(cases).values({ id: input.caseId, tenantId: student.tenantId, studentId: student.id, title: "待确认的试卷识别", simulation: false, synthetic: false }).returning();
       if (caseRow === undefined) throw new Error("The OCR Case was not created.");
       const [batch] = await tx.insert(ocrBatches).values({ id: input.batchId, tenantId: student.tenantId, studentId: student.id, caseId: caseRow.id }).returning();
@@ -153,7 +155,8 @@ export async function startRealOcrBatch(database: Database, input: { batchId: st
     const pageRows = await tx.select({ page: ocrBatchPages, asset: sourceAssets }).from(ocrBatchPages).innerJoin(sourceAssets, eq(ocrBatchPages.assetId, sourceAssets.id)).where(eq(ocrBatchPages.batchId, batch.id));
     if (pageRows.length === 0 || pageRows.some(({ asset }) => asset.processingStatus !== "succeeded" || !qualityPassed(asset))) throw new OcrBatchIntentError("Every page must pass the image quality check before recognition.");
     const jobId = await input.enqueue(tx);
-    const [updated] = await tx.update(ocrBatches).set({ status: "processing", guardianConfirmed: true, version: batch.version + 1, updatedAt: new Date() }).where(and(eq(ocrBatches.id, batch.id), eq(ocrBatches.version, batch.version))).returning();
+    const acceptedAt = new Date();
+    const [updated] = await tx.update(ocrBatches).set({ status: "processing", guardianConfirmed: true, processingNoticeVersion: REAL_OCR_PROCESSING_NOTICE_VERSION, processingNoticeAcceptedAt: acceptedAt, version: batch.version + 1, updatedAt: acceptedAt }).where(and(eq(ocrBatches.id, batch.id), eq(ocrBatches.version, batch.version))).returning();
     if (updated === undefined) throw new OcrBatchIntentError("The OCR batch changed before it could start.");
     await tx.insert(apiIdempotencyRecords).values({ id: randomUUID(), scope: START_SCOPE, idempotencyKey: input.idempotencyKey, resourceId: batch.id, jobId });
     return { batch: updated, jobId, replayed: false };

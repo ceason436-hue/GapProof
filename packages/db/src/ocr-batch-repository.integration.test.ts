@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { createDatabase } from "./client.ts";
-import { attachOcrBatchPage, createRealOcrBatch, findOcrBatch, OcrBatchIntentError, removeOcrBatchPage, replaceOcrBatchPage } from "./ocr-batch-repository.ts";
+import { attachOcrBatchPage, createRealOcrBatch, findOcrBatch, OcrBatchIntentError, removeOcrBatchPage, replaceOcrBatchPage, startRealOcrBatch } from "./ocr-batch-repository.ts";
 import { randomUUID } from "node:crypto";
 import { apiIdempotencyRecords, cases, ocrBatchPages, ocrBatches, sourceAssets, students } from "./schema.ts";
 
@@ -72,5 +72,37 @@ withDatabase("real OCR batch repository", () => {
     }).returning())[0]!;
     await expect(attachOcrBatchPage(database.db, { batchId: ids.batch, pageId: randomUUID(), asset: extra, idempotencyKey: "ocr-page-cap" }))
       .rejects.toBeInstanceOf(OcrBatchIntentError);
+  });
+  it("persists the processing notice version and acceptance time in the start transaction", async () => {
+    await database.db.update(sourceAssets).set({ processingStatus: "succeeded", quality: { status: "passed" } }).where(eq(sourceAssets.studentId, ids.student));
+    const started = await startRealOcrBatch(database.db, {
+      batchId: ids.batch,
+      idempotencyKey: "ocr-start-processing-notice",
+      guardianConfirmed: true,
+      enqueue: async () => "0198d111-1111-7000-8000-000000000090",
+    });
+    expect(started.batch).toMatchObject({
+      status: "processing",
+      guardianConfirmed: true,
+      processingNoticeVersion: "real-ocr-processing-v1",
+    });
+    expect(started.batch.processingNoticeAcceptedAt).toBeInstanceOf(Date);
+  });
+  it("rejects a new OCR batch after the rolling 24-hour student cap", async () => {
+    const dummyCases = Array.from({ length: 9 }, () => randomUUID());
+    const dummyBatches = dummyCases.map((caseId) => randomUUID());
+    await database.db.insert(cases).values(dummyCases.map((id) => ({ id, tenantId: ids.tenant, studentId: ids.student, title: "限额测试", simulation: false, synthetic: false })));
+    await database.db.insert(ocrBatches).values(dummyBatches.map((id, index) => ({ id, tenantId: ids.tenant, studentId: ids.student, caseId: dummyCases[index]!, status: "collecting" as const })));
+    try {
+      await expect(createRealOcrBatch(database.db, { idempotencyKey: "ocr-cap-create", batchId: randomUUID(), caseId: randomUUID(), studentId: ids.student }))
+        .rejects.toBeInstanceOf(OcrBatchIntentError);
+    } finally {
+      await database.db.delete(ocrBatchPages).where(inArray(ocrBatchPages.batchId, [ids.batch, ...dummyBatches]));
+      await database.db.delete(sourceAssets).where(eq(sourceAssets.studentId, ids.student));
+      await database.db.delete(ocrBatches).where(eq(ocrBatches.studentId, ids.student));
+      await database.db.delete(cases).where(eq(cases.studentId, ids.student));
+      await database.db.insert(cases).values({ id: ids.case, tenantId: ids.tenant, studentId: ids.student, title: "待确认的试卷识别", simulation: false, synthetic: false });
+      await database.db.insert(ocrBatches).values({ id: ids.batch, tenantId: ids.tenant, studentId: ids.student, caseId: ids.case, status: "collecting" });
+    }
   });
 });

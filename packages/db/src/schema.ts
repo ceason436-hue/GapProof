@@ -269,6 +269,8 @@ export const ocrBatches = appSchema.table(
     caseId: uuid("case_id").notNull().references(() => cases.id),
     status: ocrBatchStatus("status").notNull().default("collecting"),
     guardianConfirmed: boolean("guardian_confirmed").notNull().default(false),
+    processingNoticeVersion: text("processing_notice_version"),
+    processingNoticeAcceptedAt: timestamp("processing_notice_accepted_at", { withTimezone: true }),
     version: integer("version").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.42"
+version: "0.2.43"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "PUSH-037：真实 Case 教学脊柱接通内容绑定干预与同知识目标 D1/D7；首次学习范围品牌化五步引导、失败 OCR 恢复与 50 页限制已接入，处理说明持久化与生产验收仍 deferred"
+current_design_stage: "PUSH-038：真实 OCR 处理说明版本与接受时间已在启动事务持久化，学生 24 小时 OCR 批次限额已接入；学生主路由可达性已核验，生产 OSS 与完整真实学生验收仍 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -1782,6 +1782,13 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 ---
 
 ## 22. 版本记录
+
+### v0.2.43 — 2026-08-16
+
+- 识别开始前继续显示学生可理解的图片处理说明和监护确认；成功启动后系统保存说明版本与接受时间，但不向学生展示内部审计字段。
+- 一份材料最多 50 张图片；同一学生 24 小时最多创建 10 个真实 OCR 批次。达到上限时使用可理解的失败提示，不显示数据库或 Provider 内部细节。
+- 学生主路由均保持真实可达；上述设计不代表 OCR 准确率、真实个性化或学习效果。生产 OSS、Provider 全局配额与完整真实学生验收仍不在本轮。
+- 同步 PROJECT_MASTER v0.1.53、PRD v0.1.45、TDD v0.3.46 与 PUSH-038。
 
 ### v0.2.42 — 2026-08-16
 

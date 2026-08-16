@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.52"
+version: "0.1.53"
 status: "ACTIVE"
-current_stage: "PUSH-037：真实 Case 教学脊柱接通 DeepSeek 内容绑定干预与同知识目标 D1/D7；首次学习范围完成品牌化内嵌，失败 OCR 可恢复，PII 脱敏与 50 页上限已加固；处理说明持久化、生产 OSS 与完整生产验收仍 deferred"
+current_stage: "PUSH-038：真实 OCR 处理说明版本与接受时间在启动事务中持久化，学生 24 小时 OCR 批次限额生效；学生全路由可达性已核验，生产 OSS、Provider 配额与完整真实学生验收仍 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -2153,6 +2153,11 @@ review_date:
 
 - 将真实多图上传、逐页质量检查、移除/替换/重试、阿里云教育 OCR、同一 Case 逐页核对和强制人工确认登记为已实现的产品路径；Provider 原始响应、凭据、对象键、hash、精确置信度和内部 ID 不进入学生响应。
 - 明确 OCR 文本仍是待核对证据；后续诊断仍含合成 Fixture，不能表述为真实诊断、个性化或学习效果。下一阶段按身份/恢复、真实材料诊断、DeepSeek 苏格拉底导师、错题本、计划/进步/报告和全路径验收推进；同步 PRD v0.1.38、TDD v0.3.39、DESIGN v0.2.36 与 PUSH-031。
+
+### v0.1.53 — 2026-08-16
+
+- 真实 OCR 批次启动事务现在持久化固定处理说明版本 `real-ocr-processing-v1` 与接受时间，保留监护确认事实；同一学生 24 小时最多创建 10 个真实 OCR 批次，并用学生行锁防止并发绕过。
+- 7 个学生主路由返回 200，浏览器首屏继续保持品牌化学习范围引导；迁移、契约、限额和处理说明测试通过。该切片不证明 Provider 准确率、真实个性化或学习效果；生产 OSS、DeepSeek/OCR 全局配额和完整真实学生验收仍 deferred。同步 PRD v0.1.45、TDD v0.3.46、DESIGN v0.2.43 与 PUSH-038。
 
 ### v0.1.52 — 2026-08-16
 
