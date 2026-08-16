@@ -77,6 +77,40 @@ export function TutorConversationHistory({
   </div>;
 }
 
+export function ReadOnlyTutorHistory({ taskId }: { taskId: string }) {
+  const [session, setSession] = useState<TutorSessionView | null>(null);
+  const [state, setState] = useState<"loading" | "ready" | "empty" | "error">("loading");
+  const [visibleHintTurnIds, setVisibleHintTurnIds] = useState<ReadonlySet<string>>(() => new Set());
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void getTutorSession(taskId).then(response => {
+      if (controller.signal.aborted) return;
+      setSession(response.data);
+      setState("ready");
+    }).catch(error => {
+      if (controller.signal.aborted) return;
+      setState(error instanceof ApiClientError && error.response.error.code === "RESOURCE_NOT_FOUND" ? "empty" : "error");
+    });
+    return () => controller.abort();
+  }, [taskId]);
+
+  if (state === "empty") return <p className="mistake-truth-note">这项任务没有保存的导师对话。</p>;
+  if (state === "loading") return <p className="socratic-tutor-status" role="status">正在读取当时的导师对话。</p>;
+  if (state === "error" || session === null) return <p className="guided-task-feedback error" role="alert">暂时没能读取导师对话，任务完成记录不会受到影响。</p>;
+  return <section className="socratic-tutor read-only-tutor-history" aria-label="已完成任务的导师对话">
+    <div className="socratic-tutor-heading"><div><span className="task-kind">导师回顾</span><h3>当时的引导对话</h3></div><span className="socratic-tutor-count">只读记录</span></div>
+    <p className="socratic-tutor-note">这里只回顾当时保存的对话，不会继续提问或改变任务状态。</p>
+    <TutorConversationHistory
+      turns={session.turns}
+      activeTurnId={null}
+      visibleHintTurnIds={visibleHintTurnIds}
+      onRevealHint={turnId => setVisibleHintTurnIds(current => new Set([...current, turnId]))}
+      onContinue={() => undefined}
+    />
+  </section>;
+}
+
 export function SocraticTutorPanel({ task, expectedVersion }: { task: GuidedInterventionTaskView; expectedVersion: number | null }) {
   const firstStep = task.steps[0];
   const [stepId, setStepId] = useState(firstStep?.id ?? "");

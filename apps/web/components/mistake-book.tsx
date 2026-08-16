@@ -16,6 +16,7 @@ import { MistakeReviewTask } from "./mistake-review-task";
 import { MistakeBookBrowser } from "./mistake-book-browser";
 import { Icon } from "./icons";
 import { StudentSessionBootstrap } from "./student-session-bootstrap";
+import { ReadOnlyTutorHistory } from "./socratic-tutor-panel";
 
 function statusCopy(status: QuestionArchiveTaskFact["status"] | LearningTaskView["status"]) {
   if (status === "ready") return "可以继续";
@@ -78,7 +79,7 @@ function TaskContent({ task, timeZone }: { task: LearningTaskView; timeZone: str
     return <D7AttemptPanel task={task}/>;
   }
   if (task.taskType === "mistake_review") return <MistakeReviewTask task={task}/>;
-  if (task.taskType === "guided_intervention") return <ol className="mistake-review-steps">{task.steps.map(step => <li key={step.id}><strong>{step.title}</strong><span>{step.content}</span></li>)}</ol>;
+  if (task.taskType === "guided_intervention") return <><ol className="mistake-review-steps">{task.steps.map(step => <li key={step.id}><strong>{step.title}</strong><span>{step.content}</span></li>)}</ol><ReadOnlyTutorHistory taskId={task.id}/></>;
   const resultCopy = task.attemptSummary?.result === "passed"
     ? "这次新题检查已通过"
     : task.attemptSummary?.result === "support_required"
