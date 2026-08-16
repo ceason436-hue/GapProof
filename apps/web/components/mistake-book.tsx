@@ -1,8 +1,8 @@
 import type { LearningTaskView, QuestionArchiveItem, QuestionArchiveTaskFact } from "@gapproof/contracts";
 import Link from "next/link";
 import { ApiClientError } from "@/lib/api-client";
-import { archiveTaskAction, findArchiveItem, selectArchiveTask, taskKindLabel } from "@/lib/mistake-book";
-import { fetchCurrentStudentQuestionArchive } from "@/lib/question-archive-server";
+import { archiveTaskAction, selectArchiveTask, taskKindLabel } from "@/lib/mistake-book";
+import { fetchCurrentStudentQuestionArchive, fetchCurrentStudentQuestionArchiveItem } from "@/lib/question-archive-server";
 import { fetchCurrentStudentTask } from "@/lib/student-task-server";
 import { StudentSessionRequiredError } from "@/lib/student-session-server";
 import { getCurrentStudentSession } from "@/lib/student-session-server";
@@ -59,9 +59,8 @@ function ArchiveTaskFacts({ item, timeZone }: { item: QuestionArchiveItem; timeZ
 
 export async function QuestionArchiveDetail({ entryRef }: { entryRef: string }) {
   try {
-    const response = await fetchCurrentStudentQuestionArchive();
-    const item = findArchiveItem(response.data.items, entryRef);
-    if (item === null) return <ErrorState missing/>;
+    const response = await fetchCurrentStudentQuestionArchiveItem(entryRef);
+    const item = response.data.item;
     const { session } = await getCurrentStudentSession();
     return <AppShell actionHref="/student/mistakes" actionLabel="返回错题本"><section className="mistake-task-page archive-detail" data-question-archive-detail><Link className="back-link" href="/student/mistakes">← 返回错题本</Link><header><span className="task-kind">你已确认 · {item.sourceTitle}</span><h1>{item.prompt}</h1><p>确认于 {formatTaskDateTime(item.confirmedAt, response.data.timeZone)}</p></header><article className="mistake-task-panel"><h2>题目记录</h2><div className="archive-question"><strong>题干</strong><p>{item.prompt}</p></div><div className="archive-question"><strong>当时的作答</strong><p>{item.studentAnswer ?? "确认时没有填写作答"}</p></div><p className="mistake-truth-note">这里只展示你确认后的题目文字与已有任务事实，不展示答案键或系统内部判断。</p>{item.reviewReady ? <MistakeReviewStart studentId={session.studentId} entryRef={item.entryRef}/> : <p className="mistake-truth-note">完成这份材料的诊断后，就可以从这里重新做这道题。</p>}</article><ArchiveTaskFacts item={item} timeZone={response.data.timeZone}/></section></AppShell>;
   } catch (error) {

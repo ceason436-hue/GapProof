@@ -123,6 +123,9 @@ import {
   StudentProgressViewSchema,
   StudentFactReportsViewSchema,
   QuestionArchiveViewSchema,
+  QuestionArchiveEntryParamsSchema,
+  type QuestionArchiveEntryParams,
+  QuestionArchiveDetailViewSchema,
 } from "@gapproof/contracts";
 import {
   advanceDemoClock,
@@ -183,6 +186,7 @@ import {
   markSourceAssetDeleted,
   findStudentProgressAndReports,
   findStudentQuestionArchive,
+  findStudentQuestionArchiveItem,
   findMistakeReviewSource,
   createMistakeReviewTask,
   completeMistakeReviewTask,
@@ -2311,6 +2315,30 @@ export async function buildApi(options: BuildApiOptions) {
           studentId: student.id,
           tenantId: student.tenantId,
         }),
+      });
+    },
+  );
+
+  api.get<{ Params: QuestionArchiveEntryParams }>(
+    "/v1/students/:studentId/question-archive/:entryRef",
+    {
+      schema: {
+        params: QuestionArchiveEntryParamsSchema,
+        response: { 200: apiResponseSchema(QuestionArchiveDetailViewSchema), "4xx": ApiErrorResponseSchema, 500: ApiErrorResponseSchema },
+      },
+    },
+    async (request) => {
+      const student = await findStudentById(options.database, request.params.studentId);
+      if (student === undefined) throw new ResourceNotFoundError("Student", request.params.studentId);
+      const item = await findStudentQuestionArchiveItem(options.database, {
+        studentId: student.id,
+        tenantId: student.tenantId,
+        entryRef: request.params.entryRef,
+      });
+      if (item === undefined) throw new ResourceNotFoundError("Question", request.params.entryRef);
+      return success(request, {
+        timeZone: requireValidStudentTimeZone(student.timezone),
+        item,
       });
     },
   );

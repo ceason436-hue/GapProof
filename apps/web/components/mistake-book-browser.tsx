@@ -8,6 +8,7 @@ import { formatTaskDateTime } from "@/lib/today-adapter";
 import { Icon } from "./icons";
 
 type ArchiveFilter = "all" | "active" | "completed";
+const PAGE_SIZE = 20;
 
 function statusCopy(status: QuestionArchiveTaskFact["status"]) {
   if (status === "ready") return "可以继续";
@@ -44,6 +45,7 @@ export function MistakeBookBrowser({
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<ArchiveFilter>("all");
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const filteredItems = useMemo(() => items.filter(item => {
     const matchesQuery = normalizedQuery.length === 0
@@ -51,10 +53,23 @@ export function MistakeBookBrowser({
       || item.sourceTitle.toLocaleLowerCase().includes(normalizedQuery);
     return matchesQuery && matchesFilter(item, filter);
   }), [filter, items, normalizedQuery]);
+  const displayedItems = filteredItems.slice(0, visibleCount);
+  const remainingCount = filteredItems.length - displayedItems.length;
 
   function clearFilters() {
     setQuery("");
     setFilter("all");
+    setVisibleCount(PAGE_SIZE);
+  }
+
+  function updateQuery(value: string) {
+    setQuery(value);
+    setVisibleCount(PAGE_SIZE);
+  }
+
+  function updateFilter(value: ArchiveFilter) {
+    setFilter(value);
+    setVisibleCount(PAGE_SIZE);
   }
 
   return <div className="mistake-book-browser">
@@ -62,19 +77,19 @@ export function MistakeBookBrowser({
       <label className="mistake-book-search">
         <Icon name="search"/>
         <span className="visually-hidden">搜索错题</span>
-        <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="搜索题干或来源" aria-label="搜索题干或来源"/>
+        <input type="search" value={query} onChange={event => updateQuery(event.target.value)} placeholder="搜索题干或来源" aria-label="搜索题干或来源"/>
       </label>
       <div className="mistake-book-filters" role="group" aria-label="筛选错题">
         {(["all", "active", "completed"] as const).map(value => {
           const labels: Record<ArchiveFilter, string> = { all: "全部", active: "可继续/待复习", completed: "已完成" };
-          return <button key={value} type="button" className={filter === value ? "selected" : ""} aria-pressed={filter === value} onClick={() => setFilter(value)}>{labels[value]}</button>;
+          return <button key={value} type="button" className={filter === value ? "selected" : ""} aria-pressed={filter === value} onClick={() => updateFilter(value)}>{labels[value]}</button>;
         })}
       </div>
     </div>
-    <p className="mistake-book-result-summary" aria-live="polite">当前显示 {filteredItems.length} 道，共 {items.length} 道已确认题目</p>
-    {filteredItems.length === 0 ? <div className="mistake-book-no-results" role="status"><Icon name="search"/><div><h2>没有找到符合条件的错题</h2><p>可以换个关键词，或清空搜索和筛选后再试。</p><button type="button" className="secondary-button" onClick={clearFilters}>清空搜索和筛选</button></div></div> : <div className="mistake-book-list">{filteredItems.map(item => {
+    <p className="mistake-book-result-summary" aria-live="polite">当前显示 {displayedItems.length} 道，筛选命中 {filteredItems.length} 道，共 {items.length} 道已确认题目</p>
+    {filteredItems.length === 0 ? <div className="mistake-book-no-results" role="status"><Icon name="search"/><div><h2>没有找到符合条件的错题</h2><p>可以换个关键词，或清空搜索和筛选后再试。</p><button type="button" className="secondary-button" onClick={clearFilters}>清空搜索和筛选</button></div></div> : <><div className="mistake-book-list">{displayedItems.map(item => {
       const task = selectArchiveTask(item.tasks);
       return <article className="mistake-entry" key={item.entryRef}><div className="mistake-entry-main"><span className="task-kind">来自 {item.sourceTitle}</span><h2>{item.prompt}</h2><Answer value={item.studentAnswer}/><span className="mistake-date">确认于 {formatTaskDateTime(item.confirmedAt, timeZone)}</span></div><div className="mistake-entry-action">{task ? <TaskSummary task={task} timeZone={timeZone}/> : <span className="status-chip scheduled">尚无后续任务</span>}<Link href={`/student/mistakes/questions/${encodeURIComponent(item.entryRef)}`}>查看题目<Icon name="arrow"/></Link></div></article>;
-    })}</div>}
+    })}</div><div className="mistake-book-load-more"><button type="button" className="secondary-button" onClick={() => setVisibleCount(current => Math.min(current + PAGE_SIZE, filteredItems.length))} disabled={remainingCount <= 0} aria-disabled={remainingCount <= 0} aria-label={remainingCount > 0 ? `继续显示 ${Math.min(PAGE_SIZE, remainingCount)} 道错题` : "已全部显示所有错题"}>{remainingCount > 0 ? `继续显示 ${Math.min(PAGE_SIZE, remainingCount)} 道` : "已全部显示"}</button><span>{remainingCount > 0 ? `还剩 ${remainingCount} 道` : "已全部显示"}</span></div></>}
   </div>;
 }

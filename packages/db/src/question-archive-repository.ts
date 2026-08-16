@@ -408,3 +408,11 @@ export async function findStudentQuestionArchive(
   }
   return archive.sort((a, b) => Date.parse(b.confirmedAt) - Date.parse(a.confirmedAt));
 }
+
+export async function findStudentQuestionArchiveItem(
+  database: ArchiveDatabase,
+  input: { readonly studentId: string; readonly tenantId: string; readonly entryRef: string },
+): Promise<QuestionArchiveItem | undefined> {
+  const archive = await findStudentQuestionArchive(database, input);
+  return archive.find(item => item.entryRef === input.entryRef);
+}

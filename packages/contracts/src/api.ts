@@ -735,9 +735,21 @@ export const QuestionArchiveViewSchema = Type.Object({
   items: Type.Array(QuestionArchiveItemSchema),
 }, { additionalProperties: false });
 
+export const QuestionArchiveEntryParamsSchema = Type.Object({
+  studentId: Type.String({ format: "uuid" }),
+  entryRef: Type.String({ minLength: 1, maxLength: 160 }),
+}, { additionalProperties: false });
+
+export const QuestionArchiveDetailViewSchema = Type.Object({
+  timeZone: Type.String({ minLength: 1 }),
+  item: QuestionArchiveItemSchema,
+}, { additionalProperties: false });
+
 export type QuestionArchiveTaskFact = Static<typeof QuestionArchiveTaskFactSchema>;
 export type QuestionArchiveItem = Static<typeof QuestionArchiveItemSchema>;
 export type QuestionArchiveView = Static<typeof QuestionArchiveViewSchema>;
+export type QuestionArchiveEntryParams = Static<typeof QuestionArchiveEntryParamsSchema>;
+export type QuestionArchiveDetailView = Static<typeof QuestionArchiveDetailViewSchema>;
 
 export const CreateMistakeReviewRequestSchema = Type.Object({
   entryRef: Type.String({ minLength: 1, maxLength: 160 }),
