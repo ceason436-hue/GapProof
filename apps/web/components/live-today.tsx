@@ -21,6 +21,7 @@ import { OcrBatchRecovery } from "./ocr-batch-recovery";
 import { fetchRecoverableOcrBatches } from "@/lib/ocr-recovery-server";
 import { StudentProfileSetup } from "./student-profile-setup";
 import { MistakeReviewTask } from "./mistake-review-task";
+import { SyntheticQuickCheckStatus } from "./synthetic-quick-check-status";
 
 function TaskDates({
   scheduledFor,
@@ -274,6 +275,7 @@ function ContinueTasks({ retests, timeZone, currentTaskId }: { retests: RetestTa
 }
 
 export function TodayDashboard({
+  studentId,
   current,
   overview,
   retests,
@@ -281,6 +283,7 @@ export function TodayDashboard({
   completed,
   recoverableBatches = [],
 }: {
+  studentId: string;
   current: CurrentTaskSelection;
   overview: TodayOverview;
   retests: RetestTaskView[];
@@ -302,6 +305,7 @@ export function TodayDashboard({
 
   return <section className="today-page" data-live-today-dashboard>
     <div className="title-row"><div><h1>{heading}</h1><p>{summary}</p></div><TodayDateSummary overview={overview}/></div>
+    <SyntheticQuickCheckStatus studentId={studentId}/>
     <OcrBatchRecovery batches={recoverableBatches}/>
     <div className="today-grid">
       <div className="main-column">
@@ -347,6 +351,7 @@ export async function LiveToday({ selectedRetestId }: { selectedRetestId?: strin
     const completedToday = model.overview.activityDays.at(-1)?.completedTaskCount ?? 0;
     const completed = model.current.kind === "none" && completedToday > 0;
     if (completed) return <AppShell actionHref="/diagnose" actionLabel="开始新的检查"><TodayDashboard
+      studentId={model.studentId}
       current={model.current}
       overview={model.overview}
       retests={model.retests}
@@ -364,7 +369,7 @@ export async function LiveToday({ selectedRetestId }: { selectedRetestId?: strin
         ? "/student/today?source=api"
         : "/diagnose";
     return <AppShell actionHref={actionHref} actionLabel={actionLabel}>
-      <TodayDashboard current={model.current} overview={model.overview} retests={model.retests} timeZone={model.timeZone} completed={false} recoverableBatches={recoverableBatches}/>
+      <TodayDashboard studentId={model.studentId} current={model.current} overview={model.overview} retests={model.retests} timeZone={model.timeZone} completed={false} recoverableBatches={recoverableBatches}/>
     </AppShell>;
   } catch (error) {
     if (error instanceof StudentSessionRequiredError) return <StudentSessionBootstrap/>;

@@ -5,12 +5,13 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { apiGet, apiPost } from "@/lib/api-client";
 import { createBrowserUuidV7 } from "@/lib/browser-uuidv7";
+import { saveSyntheticQuickCheckResult } from "@/lib/synthetic-quick-check-storage";
 
 const findingLabels: Record<SyntheticQuickCheckResult["finding"], string> = {
   irregular_participle: "不规则过去分词", past_tense: "一般过去时", passive_voice: "被动语态", mixed_review: "混合复习",
 };
 
-export function SyntheticQuickCheck() {
+export function SyntheticQuickCheck({ studentId = "" }: { studentId?: string } = {}) {
   const submittingRef = useRef(false);
   const [view, setView] = useState<SyntheticQuickCheckView | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -39,7 +40,7 @@ export function SyntheticQuickCheck() {
     setState("submitting"); setMessage("正在检查本次作答……");
     try {
       const response = await apiPost("/api/v1/quick-checks/synthetic/attempts", SyntheticQuickCheckResultSchema, body, idempotencyKey);
-      setResult(response.data); setState("success"); setMessage("本次作答已检查完成。体验结果不会写入学习记录，也不会生成报告。");
+      setResult(response.data); if (studentId) saveSyntheticQuickCheckResult(studentId, response.data); setState("success"); setMessage("本次作答已检查完成。体验结果不会写入学习记录，也不会生成报告。");
     } catch (error) {
       if (error instanceof TypeError) { setState("network_unknown"); setMessage("暂时无法确认本次体验是否提交成功。体验结果不会写入正式学习记录；请不要把这次结果视为已完成，可以重新开始一次体验。"); }
       else { submittingRef.current = false; setState("error"); setMessage("这次检查没有完成，你可以确认答案后重新提交。"); }
