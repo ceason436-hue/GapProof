@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.71"
+version: "0.1.72"
 status: "ACTIVE"
-current_stage: "PUSH-056 已发布：D1 需要协助终态进入事实报告，其余结果进入计划；学生真实闭环继续推进，完整集中门禁与真实学生验收仍 deferred"
+current_stage: "PUSH-057 已发布：学习范围保存网络未知时停止重放并从 Today 恢复；学生真实闭环继续推进，完整集中门禁与真实学生验收仍 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -2122,6 +2122,10 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.72 — 2026-08-16
+
+- 首次或后续学习范围保存结果网络未知时隐藏再次保存按钮，改为重新打开 Today 读取最新权威设置，避免用新幂等键重复写入。
 
 ### v0.1.71 — 2026-08-16
 
