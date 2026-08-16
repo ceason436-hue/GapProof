@@ -1,6 +1,6 @@
 "use client";
 
-import { AddedRealOcrBatchPageViewSchema, MAX_REAL_OCR_BATCH_PAGES, RealOcrBatchViewSchema, SourceAssetPrepareViewSchema, SourceAssetProcessingViewSchema, StartRealOcrBatchViewSchema, UploadedSourceAssetViewSchema, type RecoverableOcrBatchView, type SourceAssetProcessingView } from "@gapproof/contracts";
+import { AddedRealOcrBatchPageViewSchema, MAX_REAL_OCR_BATCH_PAGES, RealOcrBatchViewSchema, SourceAssetPrepareViewSchema, SourceAssetProcessingViewSchema, StartRealOcrBatchViewSchema, UploadedSourceAssetViewSchema, type RealOcrBatchView, type RecoverableOcrBatchView, type SourceAssetProcessingView } from "@gapproof/contracts";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { apiDeleteOnce, apiGet, apiPost, apiPostOnce, apiPutOnce, ApiClientError } from "@/lib/api-client";
@@ -25,7 +25,7 @@ function safeError(error: unknown) {
   return "处理结果暂时未知，请检查网络后再试。";
 }
 
-export function SourceUpload({ studentId, recoverableBatches = [], initialBatch }: { studentId: string; recoverableBatches?: readonly RecoverableOcrBatchView[]; initialBatch?: RecoverableOcrBatchView }) {
+export function SourceUpload({ studentId, recoverableBatches = [], initialBatch, initialBatchView }: { studentId: string; recoverableBatches?: readonly RecoverableOcrBatchView[]; initialBatch?: RecoverableOcrBatchView; initialBatchView?: RealOcrBatchView }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const itemsRef = useRef<QueueItem[]>([]);
@@ -33,6 +33,8 @@ export function SourceUpload({ studentId, recoverableBatches = [], initialBatch 
   const batchCreateKeyRef = useRef<string | undefined>(undefined);
   const mountedRef = useRef(true);
   const [items, setItems] = useState<QueueItem[]>([]);
+  const [existingPages, setExistingPages] = useState<RealOcrBatchView["pages"]>(() => initialBatchView?.pages ?? []);
+  const existingRemoveKeysRef = useRef(new Map<string, string>());
   const [message, setMessage] = useState(initialBatch?.resumeKind === "wait"
     ? "这份材料正在识别。完成后仍需你核对题目内容。"
     : initialBatch?.resumeKind === "review"
@@ -60,7 +62,7 @@ export function SourceUpload({ studentId, recoverableBatches = [], initialBatch 
 
   const addFiles = (files: FileList | null) => {
     if (!files?.length) return;
-    const remaining = Math.max(0, MAX_REAL_OCR_BATCH_PAGES - (initialBatch?.pageCount ?? 0) - itemsRef.current.length);
+    const remaining = Math.max(0, MAX_REAL_OCR_BATCH_PAGES - existingPages.length - itemsRef.current.length);
     if (remaining === 0) {
       setMessage(`一份材料最多 ${MAX_REAL_OCR_BATCH_PAGES} 张图片，请移除已有图片后再添加。`);
       return;
@@ -76,6 +78,54 @@ export function SourceUpload({ studentId, recoverableBatches = [], initialBatch 
       : "图片已加入队列；开始上传后会逐张检查。识别不会自动开始。");
   };
   const openPicker = () => { if (inputRef.current) { inputRef.current.value = ""; inputRef.current.click(); } };
+  const replaceExistingPage = (page: RealOcrBatchView["pages"][number], file: File | undefined) => {
+    if (!file || anyBusy || startStatus !== "idle") return;
+    const valid = validateSourceUploadFile(file);
+    if (!valid.ok) {
+      setMessage(valid.message);
+      return;
+    }
+    const clientId = createBrowserUuidV7();
+    updateItems(current => [...current, {
+      clientId,
+      file,
+      previewUrl: URL.createObjectURL(file),
+      status: "waiting",
+      message: `准备替换第 ${page.order} 张图片。`,
+      pageId: page.pageId,
+      previousAssetId: page.assetId,
+      uploaded: false,
+      replacing: true,
+    }]);
+    setExistingPages(current => current.filter(candidate => candidate.pageId !== page.pageId));
+  };
+  const removeExistingPage = async (page: RealOcrBatchView["pages"][number]) => {
+    const batch = batchRef.current;
+    if (!batch || recoveryBusy || anyBusy || startStatus !== "idle") return;
+    const key = existingRemoveKeysRef.current.get(page.pageId) ?? createBrowserUuidV7();
+    existingRemoveKeysRef.current.set(page.pageId, key);
+    setRecoveryBusy(true);
+    try {
+      const response = await apiDeleteOnce(`/api/v1/ocr-batches/${batch.batchId}/pages/${page.pageId}`, RealOcrBatchViewSchema, key);
+      setExistingPages(response.data.pages);
+      setMessage(`第 ${page.order} 张图片已从这份材料中移除。`);
+    } catch (error) {
+      if (unknownWrite(error)) {
+        try {
+          const current = await apiGet(`/api/v1/ocr-batches/${batch.batchId}`, RealOcrBatchViewSchema);
+          const stillPresent = current.data.pages.some(candidate => candidate.pageId === page.pageId);
+          setExistingPages(current.data.pages);
+          setMessage(stillPresent ? `第 ${page.order} 张图片仍在材料中，可以再次确认移除。` : `已确认第 ${page.order} 张图片已移除。`);
+        } catch {
+          setMessage(`暂时无法确认第 ${page.order} 张图片是否已移除，请返回材料页读取最新状态。`);
+        }
+      } else {
+        setMessage(safeError(error));
+      }
+    } finally {
+      setRecoveryBusy(false);
+    }
+  };
   const removeItem = async (clientId: string) => {
     const item = itemsRef.current.find(candidate => candidate.clientId === clientId);
     if (!item || busy(item.status) || locked(item.status)) return;
@@ -265,7 +315,7 @@ export function SourceUpload({ studentId, recoverableBatches = [], initialBatch 
   const retryPage = async (clientId: string) => { const batch = batchRef.current; if (!batch) return void uploadAll(); const controller = new AbortController(); abortRef.current?.abort(); abortRef.current = controller; await runPage(clientId, batch.batchId, controller.signal); if (abortRef.current === controller) abortRef.current = null; };
   const startRecognition = async () => {
     const batch = batchRef.current;
-    if (!batch || !guardianConfirmed || !noticeAccepted || !itemsRef.current.every(item => passed(item.status))) return;
+    if (!batch || !guardianConfirmed || !noticeAccepted || !itemsRef.current.every(item => passed(item.status)) || !existingPages.every(page => page.status === "succeeded")) return;
     const controller = new AbortController(); abortRef.current = controller; setStartStatus("starting"); setMessage("正在提交识别请求…");
     const command = initialBatch?.resumeKind === "retry" ? "retry-recognition" : "start-recognition";
     try { const response = await apiPost(`/api/v1/ocr-batches/${batch.batchId}/commands/${command}`, StartRealOcrBatchViewSchema, { guardianConfirmed: true, processingNoticeAccepted: true }, createBrowserUuidV7(), controller.signal); setCaseId(response.data.caseId); setStartStatus("success"); setMessage("识别已开始。完成后请核对识别出的题目内容；系统不会自动生成学习结论。"); }
@@ -286,17 +336,17 @@ export function SourceUpload({ studentId, recoverableBatches = [], initialBatch 
     } catch (error) { if (!controller.signal.aborted) setMessage(safeError(error)); }
     finally { if (mountedRef.current) setRecoveryBusy(false); if (abortRef.current === controller) abortRef.current = null; }
   };
-  const allPassed = items.length > 0 && items.every(item => passed(item.status));
-  const recoveredReady = items.length === 0 && (initialBatch?.status === "ready" || initialBatch?.resumeKind === "retry");
+  const allPassed = items.length + existingPages.length > 0 && items.every(item => passed(item.status)) && existingPages.every(page => page.status === "succeeded");
   const anyBusy = items.some(item => busy(item.status));
   const anyLocked = items.some(item => locked(item.status));
   const editable = startStatus === "idle" || startStatus === "error";
   const lockedForRecognition = initialBatch?.resumeKind === "wait" || initialBatch?.resumeKind === "review" || initialBatch?.resumeKind === "retry";
+  const hasExistingPages = existingPages.length > 0;
   return <AppShell actionHref="/student/today?source=api" actionDisabled={anyBusy} actionLabel={anyBusy ? "正在处理" : "返回今日"}><section className="upload-page" aria-labelledby="source-upload-title"><div className="title-row"><div><h1 id="source-upload-title">上传错题、作业或试卷</h1><p>可一次添加多张同一份材料的图片。每张图片通过检查并由你确认后，才会开始图片识别。</p></div></div>{recoverableBatches.length > 0 ? <OcrBatchRecovery batches={recoverableBatches} compact/> : null}<div className="upload-layout"><article className="upload-card">
     <input ref={inputRef} id="source-upload-input" name="source-upload" type="file" multiple disabled={lockedForRecognition} accept={ACCEPTED_SOURCE_UPLOAD_TYPES.join(",")} tabIndex={-1} onChange={event => addFiles(event.currentTarget.files)} aria-describedby={items.length === 0 && !lockedForRecognition ? "source-upload-help" : undefined} />
-    {items.length === 0 && !lockedForRecognition ? <div className="upload-picker-panel" data-upload-picker><button type="button" className="upload-picker" onClick={openPicker}><span className="upload-picker-title">{initialBatch ? "继续添加图片" : "选择图片"}</span><span className="upload-picker-detail">可多选 JPG、PNG、WebP · 每张不超过 10 MB</span></button><p id="source-upload-help" className="upload-help">{initialBatch ? `这份材料已有 ${initialBatch.pageCount} 张图片；这里只显示本次新选的图片。` : "上传前请遮盖姓名、学校、班级等不必要的个人信息。"}</p></div> : items.length > 0 ? <><div className="upload-queue-heading"><strong>已添加 {items.length} 张图片</strong>{editable ? <button type="button" className="secondary-button compact-upload-button" onClick={openPicker}>继续添加</button> : null}</div><ol className="upload-queue" aria-label="图片队列">{items.map((item, index) => <li key={item.clientId} className="upload-queue-item" data-page-status={item.status}><img src={item.previewUrl} alt={`第 ${index + 1} 张学习材料预览`} /><div className="upload-queue-copy"><strong>第 {index + 1} 张</strong><span>{item.message}</span>{locked(item.status) ? <span className="upload-unknown-actions"><button type="button" className="queue-action" disabled={recoveryBusy} onClick={() => void recoverUnknownPage(item.clientId)}>{recoveryBusy ? "正在读取状态" : "读取最新状态"}</button><Link href="/materials/new">返回材料页</Link><Link href="/student/today">返回今日</Link></span> : null}</div>{editable && !busy(item.status) && !locked(item.status) ? <div className="queue-item-actions"><label className="queue-action">替换<input className="visually-hidden" type="file" accept={ACCEPTED_SOURCE_UPLOAD_TYPES.join(",")} onChange={event => replaceItem(item.clientId, event.currentTarget.files?.[0])}/></label><button type="button" className="queue-action" onClick={() => void removeItem(item.clientId)}>移除</button>{item.status === "retryable_error" ? <button type="button" className="queue-action" onClick={() => void retryPage(item.clientId)}>重试</button> : null}</div> : null}</li>)}</ol></> : null}
+    {items.length === 0 && !hasExistingPages && !lockedForRecognition ? <div className="upload-picker-panel" data-upload-picker><button type="button" className="upload-picker" onClick={openPicker}><span className="upload-picker-title">选择图片</span><span className="upload-picker-detail">可多选 JPG、PNG、WebP · 每张不超过 10 MB</span></button><p id="source-upload-help" className="upload-help">上传前请遮盖姓名、学校、班级等不必要的个人信息。</p></div> : items.length > 0 || hasExistingPages ? <><div className="upload-queue-heading"><strong>材料中已有 {existingPages.length + items.length} 张图片</strong>{editable && !lockedForRecognition ? <button type="button" className="secondary-button compact-upload-button" onClick={openPicker}>继续添加</button> : null}</div>{hasExistingPages ? <ol className="upload-queue existing-upload-pages" aria-label="材料中已有的图片">{existingPages.map(page => <li key={page.pageId} className="upload-queue-item" data-page-status={page.status}><span className="existing-page-thumb">第 {page.order} 页</span><div className="upload-queue-copy"><strong>第 {page.order} 张图片</strong><span>{page.status === "pending_upload" ? "上次上传未完成，请替换或移除" : page.status === "retryable_error" ? "处理未完成" : page.status === "failed" ? "处理失败" : "已保存在这份材料中"}</span></div>{editable && !lockedForRecognition ? <div className="queue-item-actions"><label className="queue-action">替换<input className="visually-hidden" type="file" accept={ACCEPTED_SOURCE_UPLOAD_TYPES.join(",")} onChange={event => replaceExistingPage(page, event.currentTarget.files?.[0])}/></label><button type="button" className="queue-action" disabled={recoveryBusy || anyBusy} onClick={() => void removeExistingPage(page)}>移除</button></div> : null}</li>)}</ol> : null}{items.length > 0 ? <ol className="upload-queue" aria-label="本次新选择的图片">{items.map((item, index) => <li key={item.clientId} className="upload-queue-item" data-page-status={item.status}><img src={item.previewUrl} alt={`本次选择的第 ${index + 1} 张学习材料预览`} /><div className="upload-queue-copy"><strong>{item.replacing ? "替换图片" : `新增第 ${index + 1} 张`}</strong><span>{item.message}</span>{locked(item.status) ? <span className="upload-unknown-actions"><button type="button" className="queue-action" disabled={recoveryBusy} onClick={() => void recoverUnknownPage(item.clientId)}>{recoveryBusy ? "正在读取状态" : "读取最新状态"}</button><Link href="/materials/new">返回材料页</Link><Link href="/student/today">返回今日</Link></span> : null}</div>{editable && !busy(item.status) && !locked(item.status) ? <div className="queue-item-actions"><label className="queue-action">重新选择<input className="visually-hidden" type="file" accept={ACCEPTED_SOURCE_UPLOAD_TYPES.join(",")} onChange={event => replaceItem(item.clientId, event.currentTarget.files?.[0])}/></label><button type="button" className="queue-action" onClick={() => void removeItem(item.clientId)}>移除</button>{item.status === "retryable_error" ? <button type="button" className="queue-action" onClick={() => void retryPage(item.clientId)}>重试</button> : null}</div> : null}</li>)}</ol> : null}</> : null}
     <p className="upload-status-message" aria-live="polite" data-recognition-start-status={startStatus === "error" ? "error" : undefined}>{message}</p>{items.length > 0 && editable ? <div className="upload-actions"><button className="primary-blue" type="button" onClick={() => void uploadAll()} disabled={anyBusy || anyLocked || items.every(item => item.status === "passed" || item.status === "failed")}>{anyBusy ? "正在处理" : "上传并检查图片"}</button></div> : null}
-    {(allPassed || recoveredReady) && startStatus !== "success" ? <section className="recognition-start-card" data-real-recognition-start aria-labelledby="recognition-start-title"><h2 id="recognition-start-title">{initialBatch?.resumeKind === "retry" ? "确认后重新识别" : "确认后开始识别"}</h2><p>确认后，图片会被发送给教育场景识别服务处理。识别结果仍需你核对；它不是学习结论或学习效果证明。</p><label className="recognition-guardian-confirmation"><input type="checkbox" checked={noticeAccepted} disabled={startStatus === "starting"} onChange={event => setNoticeAccepted(event.currentTarget.checked)} /><span>我已阅读并同意本次图片处理说明</span></label><label className="recognition-guardian-confirmation"><input type="checkbox" checked={guardianConfirmed} disabled={startStatus === "starting"} onChange={event => setGuardianConfirmed(event.currentTarget.checked)} /><span>我已获得监护人确认（未满 18 岁时必需）</span></label><button className="primary-blue" type="button" onClick={() => void startRecognition()} disabled={!guardianConfirmed || !noticeAccepted || startStatus === "starting"}>{startStatus === "starting" ? "正在提交识别" : initialBatch?.resumeKind === "retry" ? "重新识别" : "开始识别"}</button></section> : null}
+    {allPassed && startStatus !== "success" ? <section className="recognition-start-card" data-real-recognition-start aria-labelledby="recognition-start-title"><h2 id="recognition-start-title">{initialBatch?.resumeKind === "retry" ? "确认后重新识别" : "确认后开始识别"}</h2><p>确认后，图片会被发送给教育场景识别服务处理。识别结果仍需你核对；它不是学习结论或学习效果证明。</p><label className="recognition-guardian-confirmation"><input type="checkbox" checked={noticeAccepted} disabled={startStatus === "starting"} onChange={event => setNoticeAccepted(event.currentTarget.checked)} /><span>我已阅读并同意本次图片处理说明</span></label><label className="recognition-guardian-confirmation"><input type="checkbox" checked={guardianConfirmed} disabled={startStatus === "starting"} onChange={event => setGuardianConfirmed(event.currentTarget.checked)} /><span>我已获得监护人确认（未满 18 岁时必需）</span></label><button className="primary-blue" type="button" onClick={() => void startRecognition()} disabled={!guardianConfirmed || !noticeAccepted || startStatus === "starting"}>{startStatus === "starting" ? "正在提交识别" : initialBatch?.resumeKind === "retry" ? "重新识别" : "开始识别"}</button></section> : null}
     {startStatus === "unknown" ? <div className="upload-success" data-recognition-unknown data-recognition-start-status="network_unknown"><strong>识别状态需要确认</strong><span>先读取最新状态，不会重复提交识别请求。</span><button type="button" className="secondary-button" disabled={recoveryBusy} onClick={() => void recoverRecognitionStart()}>{recoveryBusy ? "正在读取" : "读取最新状态"}</button><a href="/student/today">返回今日</a></div> : null}
     {startStatus === "success" && caseId ? <div className="upload-success" data-recognition-start-status="success"><strong>识别正在处理</strong><span>识别完成后请先确认题目内容。</span><Link className="secondary-button recognition-review-link" href={`/materials/${caseId}/review`}>查看识别进度</Link></div> : null}
   </article><aside className="upload-guidance"><h2>上传前看一眼</h2><ul><li>按试卷或作业的顺序添加图片。</li><li>尽量让题目和批改痕迹完整清晰。</li><li>识别后的题目仍需要你确认。</li></ul><p>图片只用于本次材料识别与后续确认。</p></aside></div></section></AppShell>;
