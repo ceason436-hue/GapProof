@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.82"
+version: "0.1.83"
 status: "ACTIVE"
-current_stage: "PUSH-067 已发布：Today 后续复习三种状态均可进入任务页；比赛功能落地优先，测试与审查统一 deferred"
+current_stage: "PUSH-068 已发布：首次 Today 也显示三题完成后的连续引导；比赛功能落地优先，测试与审查统一 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -2122,6 +2122,12 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.83 — 2026-08-16
+
+- 尚未上传材料、没有 Case 的首次学生完成原创三题后，返回 Today 也能看到本设备结果提示和“上传自己的错题继续”动作。
+- 首次分支与已有学习旅程分支使用同一按学生隔离的设备提示；仍不写正式学习证据、报告、掌握度或 OCR Case。
+- 按比赛功能落地优先要求，本批未运行测试、审查或浏览器验收，全部继续 deferred。
 
 ### v0.1.82 — 2026-08-16
 
