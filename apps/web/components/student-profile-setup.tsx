@@ -2,7 +2,7 @@
 
 import { StudentProfileViewSchema, type StudentProfileView } from "@gapproof/contracts";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { ApiClientError, apiRequest } from "@/lib/api-client";
@@ -27,11 +27,19 @@ export function StudentProfileSetup({ profile, variant = "standalone" }: Student
   const router = useRouter();
   const [form, setForm] = useState<StudentProfileForm>(() => profileSetupInitialValues(profile));
   const [version, setVersion] = useState(profile.version);
-  const [status, setStatus] = useState<"idle" | "saving" | "error" | "unknown">("idle");
+  const [status, setStatus] = useState<"idle" | "saving" | "error" | "conflict" | "unknown">("idle");
   const [message, setMessage] = useState("");
   const remainingCount = useMemo(() => Object.values(form).filter((value) => value === "").length, [form]);
   const completedCount = 5 - remainingCount;
   const isToday = variant === "today";
+
+  useEffect(() => {
+    if (profile.version === version) return;
+    setForm(profileSetupInitialValues(profile));
+    setVersion(profile.version);
+    setStatus("idle");
+    setMessage("已读取最新学习范围，请确认后再保存。");
+  }, [profile, version]);
 
   const change = <K extends keyof StudentProfileForm>(key: K, value: StudentProfileForm[K]) => setForm((current) => ({ ...current, [key]: value }));
   async function save() {
@@ -53,9 +61,10 @@ export function StudentProfileSetup({ profile, variant = "standalone" }: Student
       router.refresh();
     } catch (error) {
       if (error instanceof ApiClientError) {
-        setStatus("error");
-        setMessage(error.response.error.code === "VERSION_CONFLICT"
-          ? "资料刚刚被更新，请刷新页面后再保存。"
+        const conflict = error.response.error.code === "VERSION_CONFLICT";
+        setStatus(conflict ? "conflict" : "error");
+        setMessage(conflict
+          ? "学习范围刚刚有更新。请先读取最新设置，再确认保存。"
           : "暂时没有保存成功。请检查网络后重试。");
       } else {
         setStatus("unknown");
@@ -87,7 +96,7 @@ export function StudentProfileSetup({ profile, variant = "standalone" }: Student
       </div>
       <div className="setup-actions">
         <div>{message ? <p className="form-error" role="alert">{message}</p> : <p className="setup-action-note">{remainingCount === 0 ? "确认后就可以开始第一次学习检查。" : "选完全部内容后即可确认。"}</p>}</div>
-        {status === "unknown" ? <Link className="primary-blue" href="/student/today?source=api">重新打开今日页</Link> : <button className="primary-blue" type="button" onClick={() => void save()} disabled={status === "saving" || remainingCount > 0}>
+        {status === "unknown" ? <Link className="primary-blue" href="/student/today?source=api">重新打开今日页</Link> : status === "conflict" ? <button className="primary-blue" type="button" onClick={() => router.refresh()}>读取最新设置</button> : <button className="primary-blue" type="button" onClick={() => void save()} disabled={status === "saving" || remainingCount > 0}>
           {status === "saving" ? "正在保存" : profile.completed ? "保存修改" : "确认并开始"}{status !== "saving" ? <Icon name="arrow" /> : null}
         </button>}
         {profile.completed ? <Link className="secondary-button" href="/student/today?source=api">取消并返回今日</Link> : null}
