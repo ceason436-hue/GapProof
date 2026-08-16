@@ -62,7 +62,7 @@ export function TutorConversationHistory({
     <ol>{turns.map(turn => <li key={turn.turnId}>
       <div className="socratic-tutor-message student-message"><span>你</span><p>{turn.learnerText}</p></div>
       {turn.response ? <div className="socratic-tutor-message tutor-message">
-        <span>导师</span><strong>{turn.response.question}</strong>
+        <span>导师</span>{turn.status === "fallback" ? <small className="socratic-tutor-source-note">本轮使用备用引导</small> : null}<strong>{turn.response.question}</strong>
         {turn.response.hint ? visibleHintTurnIds.has(turn.turnId)
           ? <div className="socratic-tutor-hint"><span>提示</span><p>{turn.response.hint}</p></div>
           : <button type="button" className="ghost-link" onClick={() => onRevealHint(turn.turnId)}>我需要一点提示</button>
