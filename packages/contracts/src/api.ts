@@ -568,6 +568,16 @@ export const RetestItemViewSchema = Type.Object({
   choices: Type.Array(RetestChoiceViewSchema, { minItems: 2 }),
 }, { additionalProperties: false });
 
+export const RetestAttemptSummarySchema = Type.Object({
+  selectedChoiceLabel: Type.String({ minLength: 1 }),
+  result: Type.Union([
+    Type.Literal("passed"),
+    Type.Literal("needs_follow_up"),
+    Type.Literal("support_required"),
+  ]),
+  evaluatedAt: Type.String({ format: "date-time" }),
+}, { additionalProperties: false });
+
 export const GuidedInterventionTaskViewSchema = Type.Object({
   ...LearningTaskBaseSchema.properties,
   taskType: Type.Literal("guided_intervention"),
@@ -578,12 +588,14 @@ export const D1RetestTaskViewSchema = Type.Object({
   ...LearningTaskBaseSchema.properties,
   taskType: Type.Literal("d1_retest"),
   item: RetestItemViewSchema,
+  attemptSummary: Type.Optional(RetestAttemptSummarySchema),
 }, { additionalProperties: false });
 
 export const D7RetestTaskViewSchema = Type.Object({
   ...LearningTaskBaseSchema.properties,
   taskType: Type.Literal("d7_retest"),
   item: RetestItemViewSchema,
+  attemptSummary: Type.Optional(RetestAttemptSummarySchema),
 }, { additionalProperties: false });
 
 /** A student-started review task. It contains no answer key or scoring data. */

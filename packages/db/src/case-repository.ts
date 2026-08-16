@@ -328,6 +328,29 @@ export async function findLatestCaseEvidenceEventByType(
   return row;
 }
 
+export async function findTaskRetestEvaluationEvent(
+  database: CaseQueryDatabase,
+  taskId: string,
+) {
+  const [row] = await database
+    .select()
+    .from(learningEvidenceEvents)
+    .where(
+      and(
+        eq(learningEvidenceEvents.eventType, "retest_evaluated"),
+        eq(learningEvidenceEvents.sourceRef, taskId),
+      ),
+    )
+    .orderBy(
+      desc(learningEvidenceEvents.occurredAt),
+      desc(learningEvidenceEvents.createdAt),
+      desc(learningEvidenceEvents.id),
+    )
+    .limit(1);
+
+  return row;
+}
+
 export interface SyntheticExtractionItemRecord {
   readonly itemId: string;
   readonly prompt: string;

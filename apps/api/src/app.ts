@@ -130,6 +130,7 @@ import {
   findEvidenceEventByIdempotencyKey,
   findCaseById,
   findLatestCaseEvidenceEventByType,
+  findTaskRetestEvaluationEvent,
   readSyntheticExtractionItems,
   findStudentById,
   findStudentProfile,
@@ -664,6 +665,30 @@ function toLearningTaskView(row: TaskRow): LearningTaskView {
       id: item.id,
       prompt: item.prompt,
       choices: item.choices.map((choice) => ({ ...choice })),
+    },
+  };
+}
+
+function withRetestAttemptSummary(
+  task: LearningTaskView,
+  event: LearningEvidenceEventRow | undefined,
+): LearningTaskView {
+  if ((task.taskType !== "d1_retest" && task.taskType !== "d7_retest") || event === undefined) return task;
+  const result = isRecord(event.payload.result) ? event.payload.result : undefined;
+  const expectedKind = task.taskType === "d1_retest" ? "d1" : "d7";
+  if (event.payload.kind !== expectedKind || result === undefined || typeof result.selectedChoiceId !== "string" || typeof result.passed !== "boolean") return task;
+  const selectedChoice = task.item.choices.find(choice => choice.id === result.selectedChoiceId);
+  if (selectedChoice === undefined) return task;
+  const state = typeof result.state === "string" ? result.state : "";
+  const summaryResult = result.passed
+    ? "passed" as const
+    : state === "support_required" ? "support_required" as const : "needs_follow_up" as const;
+  return {
+    ...task,
+    attemptSummary: {
+      selectedChoiceLabel: selectedChoice.label,
+      result: summaryResult,
+      evaluatedAt: event.occurredAt.toISOString(),
     },
   };
 }
@@ -2370,7 +2395,11 @@ export async function buildApi(options: BuildApiOptions) {
       if (task === undefined) {
         throw new ResourceNotFoundError("Task", request.params.taskId);
       }
-      return success(request, toLearningTaskView(task));
+      const taskView = toLearningTaskView(task);
+      const evaluation = task.status === "completed" && (task.taskType === "d1_retest" || task.taskType === "d7_retest")
+        ? await findTaskRetestEvaluationEvent(options.database, task.id)
+        : undefined;
+      return success(request, withRetestAttemptSummary(taskView, evaluation));
     },
   );
 

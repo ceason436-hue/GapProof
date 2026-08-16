@@ -79,7 +79,12 @@ function TaskContent({ task, timeZone }: { task: LearningTaskView; timeZone: str
   }
   if (task.taskType === "mistake_review") return <MistakeReviewTask task={task}/>;
   if (task.taskType === "guided_intervention") return <ol className="mistake-review-steps">{task.steps.map(step => <li key={step.id}><strong>{step.title}</strong><span>{step.content}</span></li>)}</ol>;
-  return <div className="mistake-review-question"><h2>{task.item.prompt}</h2><ul>{task.item.choices.map(choice => <li key={choice.id}>{choice.label}</li>)}</ul><p>这里只展示已有的复习题目，不补充答案或学习结论。</p></div>;
+  const resultCopy = task.attemptSummary?.result === "passed"
+    ? "这次新题检查已通过"
+    : task.attemptSummary?.result === "support_required"
+      ? "这次检查后需要老师或家长协助"
+      : task.attemptSummary ? "这次检查后还需要继续巩固" : null;
+  return <div className="mistake-review-question"><h2>{task.item.prompt}</h2><ul>{task.item.choices.map(choice => <li key={choice.id}>{choice.label}</li>)}</ul>{task.attemptSummary ? <div className="task-attempt-summary"><p><strong>你当时选择：</strong>{task.attemptSummary.selectedChoiceLabel}</p><p><strong>本次记录：</strong>{resultCopy}</p><p><strong>完成时间：</strong>{formatTaskDateTime(task.attemptSummary.evaluatedAt, timeZone)}</p></div> : <p>当前记录没有可展示的历史作答摘要，不补充答案或学习结论。</p>}</div>;
 }
 
 export async function StudentTask({ taskId }: { taskId: string }) {
