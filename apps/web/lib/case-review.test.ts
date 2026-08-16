@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ApiClientError } from "./api-client";
 import {
   attemptPath,
+  caseOriginalImagesPath,
   confirmExtractionPath,
   createConfirmExtractionIntent,
   createProbeIntent,
@@ -33,6 +34,7 @@ describe("same Case recognition review client", () => {
   it("uses only same-origin same-Case paths and controlled copy", () => {
     expect(extractionPath(caseId)).toBe(`/api/v1/cases/${caseId}/extraction`);
     expect(confirmExtractionPath(caseId)).toBe(`/api/v1/cases/${caseId}/extraction/confirm`);
+    expect(caseOriginalImagesPath(caseId)).toBe(`/api/v1/cases/${caseId}/source-assets`);
     expect(hypothesesPath(caseId)).toBe(`/api/v1/cases/${caseId}/hypotheses`);
     expect(runNextPath(caseId)).toBe(`/api/v1/cases/${caseId}/commands/run-next`);
     expect(attemptPath(caseId)).toBe(`/api/v1/cases/${caseId}/attempts`);

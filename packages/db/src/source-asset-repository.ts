@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq, isNull, lte } from "drizzle-orm";
 import type { SourceAssetQualityCheck } from "@gapproof/contracts";
 import type { Database } from "./client.ts";
 import { isPostgresUniqueViolation } from "./case-repository.ts";
@@ -94,6 +94,78 @@ export async function findSourceAssetById(
     .where(eq(sourceAssets.id, assetId))
     .limit(1);
   return asset;
+}
+
+export const CONFIRMED_SOURCE_ASSET_RETENTION_MS = 24 * 60 * 60 * 1_000;
+
+export async function scheduleCaseSourceAssetRetention(
+  database: Database,
+  caseId: string,
+  confirmedAt: Date,
+) {
+  const retentionUntil = new Date(confirmedAt.getTime() + CONFIRMED_SOURCE_ASSET_RETENTION_MS);
+  return database
+    .update(sourceAssets)
+    .set({ retentionUntil, updatedAt: confirmedAt })
+    .where(and(
+      eq(sourceAssets.caseId, caseId),
+      eq(sourceAssets.assetType, "student_upload"),
+      isNull(sourceAssets.deletedAt),
+    ))
+    .returning();
+}
+
+export async function findActiveCaseSourceAssets(
+  database: Pick<Database, "select">,
+  caseId: string,
+) {
+  return database
+    .select()
+    .from(sourceAssets)
+    .where(and(
+      eq(sourceAssets.caseId, caseId),
+      eq(sourceAssets.assetType, "student_upload"),
+      isNull(sourceAssets.deletedAt),
+    ))
+    .orderBy(asc(sourceAssets.createdAt));
+}
+
+export async function findDueSourceAssets(
+  database: Pick<Database, "select">,
+  now: Date,
+  limit = 100,
+) {
+  return database
+    .select()
+    .from(sourceAssets)
+    .where(and(
+      eq(sourceAssets.assetType, "student_upload"),
+      isNull(sourceAssets.deletedAt),
+      lte(sourceAssets.retentionUntil, now),
+    ))
+    .orderBy(asc(sourceAssets.retentionUntil))
+    .limit(limit);
+}
+
+export async function markSourceAssetDeleted(
+  database: Database,
+  assetId: string,
+  deletedAt: Date,
+) {
+  const [asset] = await database
+    .update(sourceAssets)
+    .set({
+      deletedAt,
+      objectKey: `deleted-source-assets/${assetId}`,
+      sha256: "0".repeat(64),
+      mimeType: "application/octet-stream",
+      byteSize: 1,
+      quality: null,
+      updatedAt: deletedAt,
+    })
+    .where(and(eq(sourceAssets.id, assetId), isNull(sourceAssets.deletedAt)))
+    .returning();
+  return asset ?? (await findSourceAssetById(database, assetId));
 }
 
 export async function initiateSourceAssetUpload(

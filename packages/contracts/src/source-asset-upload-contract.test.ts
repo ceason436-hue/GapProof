@@ -3,6 +3,7 @@ import { Value } from "@sinclair/typebox/value";
 import { describe, expect, it } from "vitest";
 
 import {
+  DeletedCaseSourceAssetsViewSchema,
   InitiatedSourceAssetUploadViewSchema,
   InitiateSourceAssetUploadRequestSchema,
   UploadedSourceAssetViewSchema,
@@ -21,6 +22,15 @@ const assetId = "0198c111-1111-7000-8000-000000000002";
 const sha256 = "a".repeat(64);
 
 describe("source asset upload contract", () => {
+  it("represents original-image deletion without claiming extracted content was removed", () => {
+    expect(Value.Check(DeletedCaseSourceAssetsViewSchema, {
+      caseId: "0198c111-1111-7000-8000-000000000003",
+      deletedCount: 2,
+      originalImagesDeleted: true,
+      extractedContentRetained: true,
+    })).toBe(true);
+  });
+
   it("accepts a bounded image upload intent and same-origin target", () => {
     expect(Value.Check(InitiateSourceAssetUploadRequestSchema, {
       studentId,

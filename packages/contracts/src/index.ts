@@ -4,5 +4,6 @@ export * from "./case.ts";
 export * from "./device-session.ts";
 export * from "./form-hypotheses.ts";
 export * from "./parse-paper.ts";
+export * from "./progress-report.ts";
 export * from "./tool.ts";
 export * from "./tutor.ts";

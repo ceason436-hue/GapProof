@@ -105,6 +105,10 @@ import {
   isUuidV7,
   type CreateTutorTurnRequest,
   type TutorTurnView,
+  DeletedCaseSourceAssetsViewSchema,
+  type DeletedCaseSourceAssetsView,
+  StudentProgressViewSchema,
+  StudentFactReportsViewSchema,
 } from "@gapproof/contracts";
 import {
   advanceDemoClock,
@@ -157,6 +161,9 @@ import {
   findLatestTutorTurn,
   queueTutorTurn,
   TutorTurnRejectedError,
+  scheduleCaseSourceAssetRetention,
+  markSourceAssetDeleted,
+  findStudentProgressAndReports,
 } from "@gapproof/db";
 import {
   type Clock,
@@ -199,6 +206,10 @@ import {
   registerDeviceSessionRoutes,
   type DeviceSessionService,
 } from "./device-session-module.ts";
+import {
+  deleteCaseSourceAssets,
+  SourceAssetDeletionNotReadyError,
+} from "./source-asset-retention-module.ts";
 
 export interface BuildApiOptions {
   readonly database: Database;
@@ -887,6 +898,10 @@ export async function buildApi(options: BuildApiOptions) {
       statusCode = 409;
       code = error.code;
       message = error.message;
+    } else if (error instanceof SourceAssetDeletionNotReadyError) {
+      statusCode = 409;
+      code = error.code;
+      message = error.message;
     } else if (error instanceof SourceAssetIdempotencyKeyReusedError) {
       statusCode = 409;
       code = error.code;
@@ -985,6 +1000,28 @@ export async function buildApi(options: BuildApiOptions) {
   });
 
   const clock = options.clock ?? new SystemClock();
+
+  api.delete<{ Params: CaseIdParams }>(
+    "/v1/cases/:caseId/source-assets",
+    {
+      schema: {
+        params: CaseIdParamsSchema,
+        response: { 200: apiResponseSchema(DeletedCaseSourceAssetsViewSchema), "4xx": ApiErrorResponseSchema, 500: ApiErrorResponseSchema },
+      },
+    },
+    async (request) => {
+      getIdempotencyKey(request);
+      if (options.uploadStorage === undefined) throw new ApiHttpError(503, "UPLOAD_NOT_CONFIGURED", "Source asset storage is not configured.", true);
+      const result = await deleteCaseSourceAssets({ database: options.database, storage: options.uploadStorage, caseId: request.params.caseId });
+      if (result === undefined) throw new ResourceNotFoundError("Case", request.params.caseId);
+      const data: DeletedCaseSourceAssetsView = {
+        ...result,
+        originalImagesDeleted: true,
+        extractedContentRetained: true,
+      };
+      return success(request, data);
+    },
+  );
 
   api.get(
     "/v1/quick-checks/synthetic",
@@ -1479,6 +1516,7 @@ export async function buildApi(options: BuildApiOptions) {
         if (replayedCase === undefined) {
           throw new ResourceNotFoundError("Case", request.params.caseId);
         }
+        await scheduleCaseSourceAssetRetention(options.database, request.params.caseId, existingEvent.occurredAt);
         return success(request, toCaseView(replayedCase));
       }
 
@@ -1589,6 +1627,9 @@ export async function buildApi(options: BuildApiOptions) {
       const confirmedCase = await findCaseById(options.database, caseRow.id);
       if (confirmedCase === undefined) {
         throw new ResourceNotFoundError("Case", caseRow.id);
+      }
+      if (extraction?.view.recognitionSource === "real_alibaba") {
+        await scheduleCaseSourceAssetRetention(options.database, caseRow.id, new Date(event.occurredAt));
       }
       return success(request, toCaseView(confirmedCase));
     },
@@ -1867,10 +1908,16 @@ export async function buildApi(options: BuildApiOptions) {
     "/v1/ocr-batches/:batchId/pages/:pageId",
     { schema: { params: OcrBatchPageParamsSchema, response: { 200: apiResponseSchema(RealOcrBatchViewSchema), "4xx": ApiErrorResponseSchema, 500: ApiErrorResponseSchema } } },
     async (request) => {
+      if (options.uploadStorage === undefined) throw new ApiHttpError(503, "UPLOAD_NOT_CONFIGURED", "Source asset storage is not configured.", true);
+      const key = getIdempotencyKey(request);
+      const existing = await findOcrBatch(options.database, request.params.batchId);
+      const asset = existing?.pages.find(({ page }) => page.id === request.params.pageId)?.asset;
+      if (asset !== undefined) await options.uploadStorage.remove({ assetId: asset.id, objectKey: asset.objectKey });
       await removeOcrBatchPage(options.database, {
         ...request.params,
-        idempotencyKey: getIdempotencyKey(request),
+        idempotencyKey: key,
       });
+      if (asset !== undefined) await markSourceAssetDeleted(options.database, asset.id, new Date());
       const batch = await findOcrBatch(options.database, request.params.batchId);
       if (batch === undefined) throw new ResourceNotFoundError("OCR batch", request.params.batchId);
       return success(request, realOcrBatchView(batch));
@@ -1983,6 +2030,46 @@ export async function buildApi(options: BuildApiOptions) {
           now: clock.now(),
         }),
       });
+    },
+  );
+
+  api.get<{ Params: StudentIdParams }>(
+    "/v1/students/:studentId/progress",
+    {
+      schema: {
+        params: StudentIdParamsSchema,
+        response: { 200: apiResponseSchema(StudentProgressViewSchema), "4xx": ApiErrorResponseSchema, 500: ApiErrorResponseSchema },
+      },
+    },
+    async (request) => {
+      const student = await findStudentById(options.database, request.params.studentId);
+      if (student === undefined) throw new ResourceNotFoundError("Student", request.params.studentId);
+      const projection = await findStudentProgressAndReports(options.database, {
+        studentId: student.id,
+        tenantId: student.tenantId,
+        timeZone: requireValidStudentTimeZone(student.timezone),
+      });
+      return success(request, projection.progress);
+    },
+  );
+
+  api.get<{ Params: StudentIdParams }>(
+    "/v1/students/:studentId/reports",
+    {
+      schema: {
+        params: StudentIdParamsSchema,
+        response: { 200: apiResponseSchema(StudentFactReportsViewSchema), "4xx": ApiErrorResponseSchema, 500: ApiErrorResponseSchema },
+      },
+    },
+    async (request) => {
+      const student = await findStudentById(options.database, request.params.studentId);
+      if (student === undefined) throw new ResourceNotFoundError("Student", request.params.studentId);
+      const projection = await findStudentProgressAndReports(options.database, {
+        studentId: student.id,
+        tenantId: student.tenantId,
+        timeZone: requireValidStudentTimeZone(student.timezone),
+      });
+      return success(request, projection.reports);
     },
   );
 

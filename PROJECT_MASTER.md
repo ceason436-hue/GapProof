@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.48"
+version: "0.1.49"
 status: "ACTIVE"
-current_stage: "PUSH-033：设备会话、OCR 跨刷新恢复、受约束 DeepSeek 苏格拉底导师与任务型错题本已接入；真实计划、进步、事实报告和完整生产验收继续推进"
+current_stage: "PUSH-034：真实任务 7 日计划、事实进步/报告与原图主动/到期删除已接入；完整 OCR 题目档案、生产 OSS、跨设备账号和全学生端生产验收继续推进"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -147,7 +147,7 @@ next_action:
 
 `[FACT]` GOAI 无界应用赛道参赛手册列出的初赛截止日期为 2026-08-16；具体当天截止时刻、入口、文件大小及后续通知仍须在官网、提交系统或官方群再次核对。
 
-`[DECISION]` 当前处于：**真实多图上传、阿里云教育 OCR、人工核对及确认文本驱动的受约束 DeepSeek 错因候选已接学生路径。匿名设备会话提供单设备学生归属和未完成 OCR 批次跨刷新恢复；ready guided task 可调用受约束 DeepSeek 苏格拉底导师，任务型错题本可回顾或继续 ready 任务。导师不会给出答案、评分或改变 Case/任务状态。当前身份不是跨设备账号，错题本不是完整 OCR 原题档案；计划、进步、事实报告、生产 OSS/删除策略和完整可访问性验收仍未完成。OCR、导师与复测工程结果不等于真实个性化或学习效果。**
+`[DECISION]` 当前处于：**真实多图上传、阿里云教育 OCR、人工核对及确认文本驱动的受约束 DeepSeek 错因候选已接学生路径。匿名设备会话提供单设备学生归属和未完成 OCR 批次跨刷新恢复；ready guided task 可调用受约束 DeepSeek 苏格拉底导师，任务型错题本可回顾或继续 ready 任务。7 日计划、进步和学习报告已按权威任务/Case/证据作事实投影；报告只复述 `repair_verified` / `support_required`，不等于永久掌握。确认后 24h/主动原图删除已在本地存储实现。当前身份不是跨设备账号，错题本不是完整 OCR 原题档案；生产 OSS、完整可访问性和真实学生验收仍未完成。OCR、导师与复测工程结果不等于真实个性化或学习效果。**
 
 ### 1.2 已完成
 
@@ -182,7 +182,7 @@ next_action:
 - `[RESULT]` Today contracts 已扩展为服务端学生 `timeZone`、`currentTaskId: uuid | null` 与 guided/D1/D7 判别联合；服务端可选择 ready D1/D7/guided，前端三类任务均已按权威 Case 版本、UUIDv7、冲突重新确认和 `NETWORK_UNKNOWN` 锁定安全提交。
 - `[RESULT]` Today API 现始终返回真实只读 `overview`：学生时区下连续 7 日完成数、明确目标或 `null`、待确认数、最多两条脱敏进展与最早 scheduled D1/D7 检查。显式 API 页面严格消费该投影，缺失时受控报错且不回退 Mock；当前数据库没有权威周目标，因此 API 返回 `weeklyGoal:null`，不得从任务或视觉稿推断。
 - `[RESULT]` Today `overview.hasStartedJourney` 由服务端按学生是否存在未删除 Case 的事实投影。无 Case 时真实 API 页面显示首次使用引导，并提供上传材料与三题原创合成快速检查两条入口；有历史 Case 但无当前任务时显示中性完成状态。`/v1/quick-checks/synthetic` 由真实 API 返回 `synthetic_demo/original_fixture`，服务端私有答案按固定规则评分；结果强制 `learningRecordCreated:false`、`reportReady:false`，不创建 Case、不写学习证据或幂等记录，也不代表真实个性化或学习效果。
-- `[RESULT]` PostgreSQL `app.source_assets` 与 0006/0007 migrations 保存对象键、SHA-256、MIME、大小、所有权/保留期、处理状态、确定性质量结果与更新时间；0011 增加有序真实 OCR 批次和逐页状态。共享 contracts、Fastify API、HMAC 短期授权、受控 `StorageAdapter`、质量 Worker、真实 OCR Worker 与 `/materials/new` 已形成多图上传、检查、真实识别和人工核对路径；公开响应不含对象键、token、内部文件名、hash、Provider 原始响应或精确置信度。当前存储仍是本地 Demo Adapter，非生产 OSS；原图确认后 24h 删除和主动删除尚未实现。
+- `[RESULT]` PostgreSQL `app.source_assets` 与 0006/0007 migrations 保存对象键、SHA-256、MIME、大小、所有权/保留期、处理状态、确定性质量结果与更新时间；0011 增加有序真实 OCR 批次和逐页状态。共享 contracts、Fastify API、HMAC 短期授权、受控 `StorageAdapter`、质量 Worker、真实 OCR Worker 与 `/materials/new` 已形成多图上传、检查、真实识别和人工核对路径；公开响应不含对象键、token、内部文件名、hash、Provider 原始响应或精确置信度。确认后 24h 保留缩短、主动删除和到期 worker 已对本地 Demo Adapter 实现；生产 OSS 删除仍未实现。
 - `[RESULT]` `run-next` Fake OCR 由 API 入队前与 Worker 执行时双重守卫，只允许 `simulation=true && synthetic=true` 的 Demo Case；非 Demo 返回 `DEMO_CASE_REQUIRED`。Worker 将合成 extraction 持久化到同一 Case 证据；`GET /v1/cases/{caseId}/extraction` 与 `/materials/{caseId}/review` 可读取、修正和确认同一 Case，并继续诊断/干预导航。页面持续披露 `synthetic_fixture`、上传字节未用于识别和真实 Provider 后置；独立 `/materials/demo/review` 仍只是零网络 Fixture。
 
 ### 1.3 尚未完成或尚未验证
@@ -2065,7 +2065,7 @@ review_date:
 | 其余学生/家长关键页设计 | `[PLANNED]` | 覆盖主闭环并遵循今日页设计准则 | 视觉基线 |
 | 可点击 Thin Slice | `[PROTOTYPE]` | 真实 API 本地栈已覆盖多图上传/逐页检查、移除/替换/重试、阿里云教育 OCR、同一 Case 逐页核对；真实来源与 synthetic Fixture 分离，真实 OCR 强制人工确认 | 真实材料诊断、身份与刷新恢复、原图 24h/主动删除、30–50 页基准 |
 | 学生首次粗分与任务可达性 | `[PROTOTYPE]` | 明确保存年级、学科、学期、地区和学习状态；匿名 HttpOnly 设备会话绑定服务端学生身份，Today/上传/任务均按当前设备归属读取 | 跨设备账号、会话迁移与撤销 UI |
-| 真实学生端交付计划 | `[IN PROGRESS]` | P0-A 单设备会话/OCR 恢复、P0-B 已确认材料诊断、P0-C DeepSeek 苏格拉底导师、P0-D 任务型错题本已实现；P0-E 真实计划/进步/事实报告与 P0-F 全入口/失败态/键盘/移动端/真实 Provider 集中验收继续推进 | 各阶段拆为互不争用 bounded slice 并行实施，协调器独占集中门禁、四文档、Push Log 与发布 |
+| 真实学生端交付计划 | `[IN PROGRESS]` | P0-A 单设备会话/OCR 恢复、P0-B 已确认材料诊断、P0-C DeepSeek 苏格拉底导师、P0-D 任务型错题本、P0-E 真实任务计划/进步/事实报告及本地原图删除已实现；P0-F 完整 OCR 题目档案、生产 OSS、全入口/失败态/键盘/移动端/真实 Provider 集中验收继续推进 | 各阶段拆为互不争用 bounded slice 并行实施，协调器独占集中门禁、四文档、Push Log 与发布 |
 | 数据与合规页 | `[PLANNED]` | 类型、来源、授权、脱敏、删除、边界 | 数据选择 |
 | Demo 视频 | `[PLANNED]` | 3–4 分钟、事件回放标识、备用 | 原型稳定 |
 | 一致性审计 | `[PLANNED]` | 简介/PPT/视频/代码状态一致 | 全材料 |
@@ -2122,6 +2122,11 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.49 — 2026-08-16
+
+- 学生 7 日计划现从权威任务记录投影未来七天安排，进步页从 Case/任务/证据事件展示事实时间线，学习报告仅为 `repair_verified` / `support_required` 的事实摘要；合成 Case 明示为体验内容，`repair_verified` 不等于永久掌握或真实学习效果。
+- 真实 OCR 内容确认后原图保留期缩短为 24 小时，并提供设备所有权保护的主动删除和本地目录到期清理；仅删除原图，保留已确认文字与学习记录。本轮不宣称生产 OSS 已清理。同步 PRD v0.1.41、TDD v0.3.42、DESIGN v0.2.39 与 PUSH-034。
 
 ### v0.1.48 — 2026-08-16
 

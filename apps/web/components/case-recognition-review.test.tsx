@@ -1,4 +1,5 @@
 import { createElement } from "react";
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { CaseRecognitionReview, classifyUnknownRecovery, reviewBoundaryCopy, reviewStateMessage, type ReviewState } from "./case-recognition-review";
@@ -25,6 +26,13 @@ describe("CaseRecognitionReview component", () => {
     expect(reviewBoundaryCopy("synthetic_fixture")).toMatchObject({ title: "体验识别内容", tag: "体验内容" });
     expect(reviewBoundaryCopy("real_alibaba").detail).toContain("你上传的图片");
     expect(reviewBoundaryCopy("synthetic_fixture").detail).toContain("不会保存为正式学习记录");
+  });
+
+  it("keeps the image-retention statement scoped to original bytes", () => {
+    const source = readFileSync(new URL("./case-recognition-review.tsx", import.meta.url), "utf8");
+    expect(source).toContain("原图将在 24 小时后自动删除");
+    expect(source).toContain("已确认的文字内容会继续保留");
+    expect(source).not.toContain("全部学习记录已删除");
   });
 
   it("keeps all bounded states neutral and actionable", () => {
