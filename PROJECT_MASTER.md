@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.80"
+version: "0.1.81"
 status: "ACTIVE"
-current_stage: "PUSH-065 已发布：原创三题完成状态接回 Today 后续引导；比赛功能落地优先，测试与审查统一 deferred"
+current_stage: "PUSH-066 已发布：正式学习任务统一进入学生任务页；比赛功能落地优先，测试与审查统一 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -2122,6 +2122,12 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.81 — 2026-08-16
+
+- 新增 `/student/tasks/:taskId` 统一承载针对练习、D1、D7 与错题重做；7 日计划和错题本中的任务入口均使用该路由。
+- 旧 `/student/mistakes/:taskId` 保留兼容跳转；普通学习任务返回 Today，错题重做返回错题本，不再把所有正式任务包装成错题详情。
+- 按比赛功能落地优先要求，本批未运行测试、审查或浏览器验收，全部继续 deferred。
 
 ### v0.1.80 — 2026-08-16
 

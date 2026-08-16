@@ -2,15 +2,15 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.73"
+version: "0.3.74"
 status: "DRAFT_FOR_IMPLEMENTATION"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.80"
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.72"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.81"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.73"
 ---
 
 # 知隙 GapProof 技术设计文档（TDD）
@@ -1642,6 +1642,7 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-063 | 2026-08-16 | `main` | `pushed` | `feat: manage recovered upload pages` | 恢复同设备学生已有 OCR 批次时读取受所有权保护的页面视图，支持查看编号/状态、继续添加、逐页替换或移除；不向浏览器返回原图、对象键、哈希或 Provider 内部字段。实现提交 `21b632f` 已推送 | 按比赛功能落地优先要求未运行新增测试、全量门禁、集中审查、Provider smoke、浏览器/视觉回归或真实学生验收，全部 deferred；不证明 OCR 准确率、可靠自动逐题切分、真实个性化或学习效果 |
 | PUSH-064 | 2026-08-16 | `main` | `pushed` | `feat: improve mistake and report review` | 错题本在浏览器端按题干/来源搜索并按复习状态筛选；报告列表进入 `/student/reports/:caseId`，详情从受设备会话保护的报告投影选择记录，只展示既有公开事实字段。实现提交 `d642288` 已推送 | 按比赛功能落地优先要求未运行测试、集中审查、Provider smoke、浏览器/视觉或真实学生验收，全部 deferred；不展示内部引用、答案键、模型字段，不推断永久掌握或真实学习效果 |
 | PUSH-065 | 2026-08-16 | `main` | `pushed` | `feat: continue after quick checks` | 三题完成结果按 `studentId` 隔离保存在当前设备 localStorage，Today 读取后显示完成提示和上传真实错题/重新做三题动作；快速检查页先建立匿名设备会话。实现提交 `e021130` 已推送 | 按比赛功能落地优先要求未运行测试、集中审查、Provider smoke、浏览器/视觉或真实学生验收，全部 deferred；设备提示不进入 PostgreSQL 学习证据、报告、掌握度或 OCR Case，不构成真实诊断、个性化或学习效果 |
+| PUSH-066 | 2026-08-16 | `main` | `pushed` | `feat: add canonical student task pages` | 新增 `/student/tasks/:taskId` 复用权威 Today 任务读取及既有 guided/D1/D7/mistake-review 提交组件；计划、错题本和重做创建入口切换新路由，旧 `/student/mistakes/:taskId` 服务端重定向兼容。实现提交 `10403b6` 已推送 | 按比赛功能落地优先要求未运行测试、集中审查、Provider smoke、浏览器/视觉或真实学生验收，全部 deferred；不改变任务事实、评分、Case 状态或真实性边界 |
 | PUSH-037 | 2026-08-16 | `main` | `pushed` | `feat: connect real case teaching spine` | 真实 Case 禁止 Fake 干预，要求真实 OCR/学生确认/DeepSeek 诊断证据并调用内容绑定 DeepSeek intervention；私有 D1/D7 与知识目标/来源事件绑定，报告拒绝合成或不匹配复测。首次学习范围保持品牌化五步 Today 引导；永久失败 OCR 可恢复并重新上传，真实批次上限 50 页；DeepSeek 输入扩展姓名、学校、班级、住址脱敏。不得将结果表述为 OCR 准确率、真实个性化或学习效果；处理说明持久化与生产 OSS 仍 deferred | 262 fast、76 skipped、152 Web、隔离 PostgreSQL/API/Worker 77、双 TypeScript、品牌化首次范围桌面/390×844 浏览器核验、5 项 OCR/DeepSeek 聚焦 20、OCR 恢复/50 页聚焦 5、`git diff --check` 通过；Drizzle `check` 仍因本地版本兼容阻断；`.env`、授权材料、`next-env.d.ts`、本地 agent 文件和生成缓存不纳入暂存 |
 | PUSH-036 | 2026-08-16 | `main` | `pushed` | `feat: complete OCR review and tutor continuity` | 真实 OCR 页面支持人工拆分最多 50 道题、逐题题干/选填原作答确认和乱码/低质结果恢复；导师公开并恢复最多六轮历史，下一轮携带最多五轮既有上下文，保留未知写入只读恢复与输出守卫；共享中止控制修复 `REPLACED`。首次学习范围改为 Today 内嵌品牌化五步选择，桌面双列、手机固定确认操作。人工拆题不冒充可靠自动逐题 OCR；审计确认真实 Case 后续固定 Fake 干预与固定 D1/D7 仍为下一 P0，不宣称真实个性化或学习效果 | 254 fast / 74 skipped、152 Web、隔离 PostgreSQL/API/Worker 73、双 TypeScript、Next production build、8 条浏览器主链、授权材料阿里云 OCR 单页 smoke 与 DeepSeek 双轮 synthetic smoke、凭据/隐私和 `git diff --check` 通过；共享库首次 2 项失败已确认由预览 Worker 争用队列导致，隔离复验全过且临时数据库已删除；Drizzle `check` 仍因本地版本兼容阻断；`.env`、授权测试材料、`next-env.d.ts`、本地 agent 文件、生成缓存与截图不纳入暂存 |
 | PUSH-035 | 2026-08-16 | `main` | `pushed` | `feat: add confirmed question archive and tutor recovery` | 新增同设备学生已确认真实 OCR item 的只读错题档案、人工修正/选填原作答及题目/任务详情；排除 synthetic/simulation 与未确认项，ready 任务复用权威提交链路。导师新增最新轮次恢复、NETWORK_UNKNOWN 只读恢复、按需提示与 nextAction；修正上传控件语义及三条浏览器 Fixture 漂移。当前 OCR item 可能对应整页，导师公开契约只返回最新一轮，不宣称可靠自动逐题切分、真实个性化或学习效果 | 242 fast、138 Web、72 串行 PostgreSQL/API/Worker（主 API 51 + 其余 21）、双 TypeScript、Next production build、7 条串行浏览器 fixture、DeepSeek structured 与导师全链路真实 synthetic smoke、授权材料阿里云 OCR 单页 smoke、凭据/隐私和 diff 检查通过；生产 OSS、完整导师历史、跨设备账号、正式 30–50 页基准与真实学生验收继续待办；`.env`、授权测试材料、`next-env.d.ts` 与本地 agent 文件不纳入暂存 |
@@ -1681,6 +1682,12 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-026 | 2026-08-16 | `main` | `pushed` | `fix: decouple demo readiness from product copy` | Demo 栈 Web readiness 从已移除的“真实 API 模式”可见文案改为稳定 `today-page` 页面结构信号，防止产品文案治理后 90 秒误判并停止 API/Worker/Web 子进程 | root typecheck、`git diff --check`、Web 200、API Today 200 且含 overview、Demo 父进程持续存活、3000/4000 监听及生成残留精确清理通过；同轮推送后核对本地/远端 SHA 一致 |
 
 ## 27. 变更日志
+
+### v0.3.74 — 2026-08-16
+
+- 新增统一学生任务路由，继续从受设备会话保护的 Today 投影按任务 ID 读取，并复用现有任务型判别联合与提交组件。
+- 旧错题任务路由只负责服务端重定向，不复制业务逻辑；AppShell 在任务路由保持 Today 导航上下文。
+- 按比赛功能落地优先要求，本批测试、审查及完整验收继续 deferred。
 
 ### v0.3.73 — 2026-08-16
 
