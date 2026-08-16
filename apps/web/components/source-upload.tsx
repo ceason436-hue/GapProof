@@ -13,7 +13,7 @@ import { OcrBatchRecovery } from "./ocr-batch-recovery";
 
 type PageStatus = "waiting" | "hashing" | "creating" | "uploading" | "checking" | "passed" | "needs_confirmation" | "retryable_error" | "network_unknown" | "failed";
 type UnknownOperation = "add" | "upload" | "prepare" | "remove";
-type QueueItem = { clientId: string; file: File; previewUrl: string; status: PageStatus; message: string; pageId?: string; assetId?: string | undefined; addKey?: string | undefined; prepareKey?: string | undefined; removeKey?: string | undefined; uploaded?: boolean; replacing?: boolean; expectedOrder?: number; unknownOperation?: UnknownOperation | undefined };
+type QueueItem = { clientId: string; file: File; previewUrl: string; status: PageStatus; message: string; pageId?: string; assetId?: string | undefined; previousAssetId?: string | undefined; addKey?: string | undefined; prepareKey?: string | undefined; removeKey?: string | undefined; uploaded?: boolean; replacing?: boolean; expectedOrder?: number; unknownOperation?: UnknownOperation | undefined };
 const busy = (status: PageStatus) => ["hashing", "creating", "uploading", "checking"].includes(status);
 const passed = (status: PageStatus) => status === "passed";
 const locked = (status: PageStatus) => status === "network_unknown";
@@ -107,6 +107,7 @@ export function SourceUpload({ studentId, recoverableBatches = [], initialBatch 
       previewUrl: URL.createObjectURL(file),
       status: valid.ok ? "waiting" : "failed",
       message: valid.ok ? "新图片尚未上传。" : valid.message,
+      previousAssetId: item.assetId,
       assetId: undefined,
       addKey: undefined,
       prepareKey: undefined,
@@ -207,7 +208,11 @@ export function SourceUpload({ studentId, recoverableBatches = [], initialBatch 
           updateItem(clientId, { message: "还无法确认这张图片是否加入材料。请返回材料页或今日页查看后再继续。" });
           return;
         }
-        updateItem(clientId, { pageId: page.pageId, assetId: page.assetId, uploaded: page.status !== "pending_upload", status: "waiting", unknownOperation: undefined, message: "已确认图片已加入材料，继续处理前请重新点击上传并检查。" });
+        if (item.replacing && item.previousAssetId !== undefined && page.assetId === item.previousAssetId) {
+          updateItem(clientId, { status: "retryable_error", unknownOperation: undefined, message: "最新状态显示仍是替换前的图片。确认后可以重新提交这次替换。" });
+          return;
+        }
+        updateItem(clientId, { pageId: page.pageId, assetId: page.assetId, previousAssetId: undefined, uploaded: page.status !== "pending_upload", replacing: page.status === "pending_upload", status: "waiting", unknownOperation: undefined, message: item.replacing ? "已确认新图片替换成功，正在继续处理。" : "已确认图片已加入材料，继续处理前请重新点击上传并检查。" });
         if (page.status === "pending_upload") {
           updateItem(clientId, { status: "retryable_error", message: "已确认图片已加入，但上传尚未完成。请点击重试上传。" });
         } else {
@@ -253,7 +258,7 @@ export function SourceUpload({ studentId, recoverableBatches = [], initialBatch 
     setMessage("正在逐张上传并检查图片；识别尚未开始。");
     try { const batch = await ensureBatch(controller.signal); for (const item of eligible) await runPage(item.clientId, batch.batchId, controller.signal); setMessage(itemsRef.current.every(item => passed(item.status)) ? "所有图片都准备好了。确认后才会开始图片识别。" : "有图片还没准备好，请按提示处理后再开始。"); }
     catch (error) {
-      if (!controller.signal.aborted) setMessage(unknownWrite(error) ? "上传流程的结果暂时未知。请先读取对应图片状态，不要重复提交；也可以返回材料页或今日页查看。" : safeError(error));
+      if (!controller.signal.aborted) setMessage(unknownWrite(error) ? "材料准备结果暂时没有返回。再次点击“上传并检查图片”会沿用刚才的操作，不会新建另一份材料。" : safeError(error));
     }
     finally { if (abortRef.current === controller) abortRef.current = null; }
   };
