@@ -1,7 +1,10 @@
 import { SourceUpload } from "@/components/source-upload";
 import { AppShell } from "@/components/app-shell";
 import { Icon } from "@/components/icons";
-import { parseApiOrigin, parseDemoStudentId, WebConfigurationError } from "@/lib/runtime-config";
+import { parseApiOrigin, WebConfigurationError } from "@/lib/runtime-config";
+import { getCurrentStudentSession, StudentSessionRequiredError } from "@/lib/student-session-server";
+import { StudentSessionBootstrap } from "@/components/student-session-bootstrap";
+import { fetchRecoverableOcrBatches } from "@/lib/ocr-recovery-server";
 
 export const dynamic = "force-dynamic";
 
@@ -20,11 +23,22 @@ function ConfigurationError({ error }: { error: WebConfigurationError }) {
   </AppShell>;
 }
 
-export default function MaterialsNewPage() {
+type PageProps = { searchParams: Promise<{ batch?: string }> };
+
+export default async function MaterialsNewPage({ searchParams }: PageProps) {
   try {
     parseApiOrigin(process.env.GAPPROOF_API_ORIGIN);
-    return <SourceUpload studentId={parseDemoStudentId(process.env.GAPPROOF_DEMO_STUDENT_ID)}/>;
+    const { session } = await getCurrentStudentSession();
+    const { batch: requestedBatchId } = await searchParams;
+    const recoverable = (await fetchRecoverableOcrBatches()).data.batches;
+    const selectedBatch = recoverable.find(batch => batch.batchId === requestedBatchId);
+    return <SourceUpload
+      studentId={session.studentId}
+      recoverableBatches={recoverable}
+      {...(selectedBatch ? { initialBatch: selectedBatch } : {})}
+    />;
   } catch (error) {
+    if (error instanceof StudentSessionRequiredError) return <StudentSessionBootstrap/>;
     if (error instanceof WebConfigurationError) return <ConfigurationError error={error}/>;
     throw error;
   }

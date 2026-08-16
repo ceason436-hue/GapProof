@@ -19,6 +19,9 @@ const webPort = process.env.SOURCE_UPLOAD_FIXTURE_WEB_PORT ?? "3103";
 const webOrigin = `http://127.0.0.1:${webPort}`;
 const studentId = "0198c111-1111-7000-8000-000000000001";
 const assetId = "0198c111-1111-7000-8000-000000000002";
+const caseId = "0198c111-1111-7000-8000-000000000003";
+const batchId = "0198c111-1111-7000-8000-000000000004";
+const pageId = "0198c111-1111-7000-8000-000000000005";
 const token = "fixture-upload-token-012345678901234567890123";
 const bytes = await readFile(resolve(webRoot, "../../reference/stitch_gapproof_ai/logo.png"));
 const sha256 = createHash("sha256").update(bytes).digest("hex");
@@ -27,14 +30,25 @@ const uploadPath = `/api/v1/source-assets/${assetId}/content`;
 const backendUploadPath = `/v1/source-assets/${assetId}/content`;
 const preparePath = `/api/v1/source-assets/${assetId}/commands/prepare`;
 const backendPreparePath = `/v1/source-assets/${assetId}/commands/prepare`;
-const startRecognitionPath = `/api/v1/source-assets/${assetId}/commands/start-recognition`;
-const backendStartRecognitionPath = `/v1/source-assets/${assetId}/commands/start-recognition`;
+const batchPath = "/api/v1/ocr-batches";
+const backendBatchPath = "/v1/ocr-batches";
+const addPagePath = `/api/v1/ocr-batches/${batchId}/pages/uploads`;
+const backendAddPagePath = `/v1/ocr-batches/${batchId}/pages/uploads`;
+const startRecognitionPath = `/api/v1/ocr-batches/${batchId}/commands/start-recognition`;
+const backendStartRecognitionPath = `/v1/ocr-batches/${batchId}/commands/start-recognition`;
 const inspectionPath = `/api/v1/source-assets/${assetId}`;
 const backendInspectionPath = `/v1/source-assets/${assetId}`;
 
-const initiated = {
-  assetId,
-  processingStatus: "pending_upload",
+const batchView = {
+  batchId,
+  caseId,
+  status: "collecting",
+  guardianConfirmed: false,
+  version: 0,
+  pages: [],
+};
+const addedPage = {
+  page: { pageId, assetId, order: 1, status: "pending_upload", retryable: false, needsReview: false },
   upload: {
     method: "PUT",
     path: uploadPath,
@@ -69,14 +83,10 @@ const passedQuality = {
   checkerVersion: "image-header-v1",
 };
 const startedRecognition = {
-  assetId,
-  caseId: "0198c111-1111-7000-8000-000000000003",
-  state: "awaiting_evidence",
-  stateVersion: 0,
-  recognitionMode: "synthetic_demo",
-  recognitionSource: "synthetic_fixture",
-  uploadedAssetUsedForRecognition: false,
-  processingStatus: "queued",
+  batchId,
+  caseId,
+  status: "processing",
+  processingNoticeAccepted: true,
 };
 const inspectionView = processingStatus => ({
   assetId,
@@ -104,6 +114,7 @@ const statusSequences = {
 let scenario = "success";
 let inspectionReads = 0;
 const posts = [];
+const batchPosts = [];
 const preparePosts = [];
 const startPosts = [];
 const puts = [];
@@ -121,14 +132,33 @@ const json = (response, status, body) => {
 };
 
 const fixtureServer = createServer(async (request, response) => {
-  if (request.method === "POST" && request.url === "/v1/source-assets/uploads") {
+  if (request.method === "POST" && request.url === "/v1/device-session") {
+    response.setHeader("Set-Cookie", "gapproof_device=fixture-device-session; Path=/; HttpOnly; SameSite=Lax");
+    json(response, 200, envelope({ authenticated: true, studentId, expiresAt: "2026-08-17T12:00:00.000Z" }));
+    return;
+  }
+  if (request.method === "GET" && request.url === "/v1/device-session") {
+    json(response, 200, envelope({ authenticated: true, studentId, expiresAt: "2026-08-17T12:00:00.000Z" }));
+    return;
+  }
+  if (request.method === "GET" && request.url === "/v1/device-session/ocr-batches") {
+    json(response, 200, envelope({ batches: [] }));
+    return;
+  }
+  if (request.method === "POST" && request.url === backendBatchPath) {
+    const body = await readBody(request);
+    batchPosts.push({ body: JSON.parse(body.toString("utf8")), idempotencyKey: request.headers["idempotency-key"] });
+    json(response, 200, envelope(batchView));
+    return;
+  }
+  if (request.method === "POST" && request.url === backendAddPagePath) {
     const body = await readBody(request);
     posts.push({ body: JSON.parse(body.toString("utf8")), idempotencyKey: request.headers["idempotency-key"] });
     if (scenario === "post-network-unknown" && posts.length === 1) {
       request.socket.destroy();
       return;
     }
-    json(response, 200, envelope(initiated));
+    json(response, 200, envelope(addedPage));
     return;
   }
   if (request.method === "PUT" && request.url === backendUploadPath) {
@@ -233,6 +263,7 @@ const choose = async page => {
 const resetFixtureState = currentScenario => {
   scenario = currentScenario;
   inspectionReads = 0;
+  batchPosts.length = 0;
   posts.length = 0;
   preparePosts.length = 0;
   startPosts.length = 0;
@@ -246,24 +277,27 @@ const visitAndInspect = async (page, expectedStatus, {
   expectedGets = 1,
 } = {}) => {
   await page.goto(`${webOrigin}/materials/new`, { waitUntil: "networkidle" });
-  assert(await page.getByRole("heading", { name: "上传一张错题或作业图片" }).count() === 1, "Default materials page did not render the upload UI.");
+  assert(await page.getByRole("heading", { name: "上传错题、作业或试卷" }).count() === 1, `Default materials page did not render the upload UI. body=${await page.locator("body").innerText()}`);
   assert(await page.getByText("真实上传会在后续阶段接入", { exact: false }).count() === 0, "Upload route still renders the F0 placeholder.");
   assert(await page.locator("[data-upload-picker]").count() === 1, "Upload picker was missing before a file was selected.");
   await choose(page);
-  await page.locator("[data-selected-upload]").waitFor({ timeout: 5_000 });
-  assert(await page.locator("[data-selected-upload]").count() === 1, "Selected image state was not visible before upload.");
+  await page.locator('[data-page-status="waiting"]').waitFor({ timeout: 5_000 });
+  assert(await page.locator('[data-page-status="waiting"]').count() === 1, "Selected image state was not visible before upload.");
   assert(await page.locator("[data-upload-picker]").count() === 0, "Large upload picker remained visible after selection.");
-  assert(await page.getByText("已选择 1 张图片", { exact: true }).count() === 1, "Selected image count was not shown.");
-  assert(await page.getByRole("button", { name: "更换图片", exact: true }).isEnabled(), "Replace-image action was not available after selection.");
-  assert(await page.getByText("选择图片", { exact: true }).count() >= 1 && await page.getByText("确认题目", { exact: true }).count() === 1, "Five-step upload journey was not shown.");
+  assert(await page.getByText("已添加 1 张图片", { exact: true }).count() === 1, "Selected image count was not shown.");
+  assert(await page.getByRole("button", { name: "继续添加", exact: true }).isEnabled(), "Continue-upload action was not available after selection.");
+  assert(await page.getByText("替换", { exact: true }).count() === 1 && await page.getByRole("button", { name: "移除", exact: true }).count() === 1, "Replace/remove actions were not available after selection.");
   assert(!(await page.locator("body").innerText()).includes(fileName), "Local filename leaked into the rendered page.");
-  await page.getByRole("button", { name: "开始上传" }).click();
+  await page.getByRole("button", { name: "上传并检查图片" }).click();
   try {
-    await page.locator(`[data-upload-status="${expectedStatus}"]`).waitFor({ timeout: 40_000 });
+    await page.locator(`[data-page-status="${expectedStatus}"]`).waitFor({ timeout: 40_000 });
   } catch (error) {
-    const statusText = await page.locator("[data-upload-status]").textContent().catch(() => null);
-    throw new Error(`Inspection UI did not reach ${expectedStatus}. scenario=${scenario}; status=${statusText}; posts=${posts.length}; prepare=${preparePosts.length}; puts=${puts.length}; gets=${gets.length}; server=${serverOutput}`, { cause: error });
+    const statusText = await page.locator("[data-page-status]").getAttribute("data-page-status").catch(() => null);
+    throw new Error(`Inspection UI did not reach ${expectedStatus}. scenario=${scenario}; status=${statusText}; batches=${batchPosts.length}; posts=${posts.length}; prepare=${preparePosts.length}; puts=${puts.length}; gets=${gets.length}; server=${serverOutput}`, { cause: error });
   }
+  assert(batchPosts.length === 1, `${scenario}: expected one batch POST request, observed ${batchPosts.length}.`);
+  assert(JSON.stringify(batchPosts[0].body) === JSON.stringify({ studentId }), `${scenario}: batch POST did not preserve the bound student.`);
+  assert(uuidV7Pattern.test(batchPosts[0].idempotencyKey ?? ""), `${scenario}: batch intent did not use UUIDv7.`);
   assert(posts.length === expectedUploadPosts, `${scenario}: expected ${expectedUploadPosts} upload POST requests, observed ${posts.length}.`);
   assert(preparePosts.length === expectedPreparePosts, `${scenario}: expected ${expectedPreparePosts} prepare POST requests, observed ${preparePosts.length}.`);
   assert(puts.length === expectedUploadPuts, `${scenario}: expected ${expectedUploadPuts} PUT requests, observed ${puts.length}.`);
@@ -272,15 +306,17 @@ const visitAndInspect = async (page, expectedStatus, {
   assert(uuidV7Pattern.test(posts[0].idempotencyKey ?? ""), `${scenario}: upload intent did not use UUIDv7.`);
   assert(posts.every(post => post.idempotencyKey === posts[0].idempotencyKey), `${scenario}: upload POST retry changed the idempotency key.`);
   assert(posts.every(post => JSON.stringify(post.body) === JSON.stringify(posts[0].body)), `${scenario}: upload POST retry changed the JSON body.`);
-  assert(preparePosts.every(post => post.idempotencyKey === posts[0].idempotencyKey), `${scenario}: prepare changed the upload intent idempotency key.`);
+  assert(preparePosts.every(post => uuidV7Pattern.test(post.idempotencyKey ?? "")), `${scenario}: prepare intent did not use UUIDv7.`);
+  assert(preparePosts.every(post => post.idempotencyKey === preparePosts[0].idempotencyKey), `${scenario}: prepare retry changed the idempotency key.`);
+  assert(preparePosts[0]?.idempotencyKey !== posts[0]?.idempotencyKey, `${scenario}: prepare reused the page-add intent key.`);
   assert(preparePosts.every(post => JSON.stringify(post.body) === "{}"), `${scenario}: prepare body was not the exact empty shared DTO.`);
-  assert(browserPaths.every(path => path === "/api/v1/source-assets/uploads" || path === uploadPath || path === preparePath || path === inspectionPath || path === startRecognitionPath), `${scenario}: browser did not use same-origin API paths.`);
+  assert(browserPaths.every(path => path === "/api/v1/device-session" || path === "/api/v1/device-session/ocr-batches" || path === batchPath || path === addPagePath || path === uploadPath || path === preparePath || path === inspectionPath || path === startRecognitionPath), `${scenario}: browser did not use same-origin API paths: ${browserPaths.join(", ")}`);
   assert(puts.every(put => put.uploadToken === token), `${scenario}: PUT retry changed the short-lived upload token.`);
   assert(puts.every(put => put.contentType === puts[0].contentType && put.contentType === "image/png"), `${scenario}: PUT retry changed the original Content-Type.`);
   assert(puts.every(put => Buffer.compare(put.body, puts[0].body) === 0 && Buffer.compare(put.body, bytes) === 0), `${scenario}: PUT retry changed the original bytes.`);
   const visibleText = await page.locator("body").innerText();
-  if (expectedStatus !== "succeeded") {
-    assert(await page.getByRole("button", { name: "开始识别并继续", exact: true }).count() === 0, `${scenario}: start recognition action appeared before a passed inspection.`);
+  if (expectedStatus !== "passed") {
+    assert(await page.getByRole("button", { name: "开始识别", exact: true }).count() === 0, `${scenario}: start recognition action appeared before a passed inspection.`);
   }
   assert(!visibleText.includes(token) && !visibleText.includes(assetId) && !visibleText.includes(fileName) && !visibleText.includes(sha256) && !visibleText.includes("objectKey"), "Inspection UI leaked upload internals or server facts.");
   assert(!visibleText.includes("置信度") && !visibleText.includes("provider") && !visibleText.includes("答案键"), "Inspection UI exposed unimplemented recognition details.");
@@ -300,18 +336,18 @@ try {
   const browser = await chromium.launch({ channel: "msedge", headless: true });
   try {
     for (const [currentScenario, expectedStatus, expectedPreparePosts, expectedGets, expectedUploadPosts, expectedUploadPuts] of [
-      ["success", "succeeded", 1, 1, 1, 1],
+      ["success", "passed", 1, 1, 1, 1],
       ["low-resolution", "needs_confirmation", 1, 1, 1, 1],
       ["failed", "failed", 1, 1, 1, 1],
       ["retryable", "retryable_error", 1, 1, 1, 1],
-      ["prepare-network-unknown", "succeeded", 2, 1, 1, 1],
-      ["prepare-processing", "succeeded", 1, 1, 1, 1],
-      ["prepare-final", "succeeded", 1, 0, 1, 1],
-      ["get-network-unknown", "succeeded", 1, 1, 1, 1],
-      ["post-network-unknown", "succeeded", 1, 1, 2, 1],
-      ["put-network-unknown", "succeeded", 1, 1, 1, 2],
-      ["start-network-unknown", "succeeded", 1, 1, 1, 1],
-      ["already-bound", "succeeded", 1, 1, 1, 1],
+      ["prepare-network-unknown", "passed", 2, 1, 1, 1],
+      ["prepare-processing", "passed", 1, 1, 1, 1],
+      ["prepare-final", "passed", 1, 0, 1, 1],
+      ["get-network-unknown", "passed", 1, 1, 1, 1],
+      ["post-network-unknown", "passed", 1, 1, 2, 1],
+      ["put-network-unknown", "passed", 1, 1, 1, 2],
+      ["start-network-unknown", "passed", 1, 1, 1, 1],
+      ["already-bound", "passed", 1, 1, 1, 1],
     ]) {
       resetFixtureState(currentScenario);
       browserPaths = [];
@@ -327,9 +363,12 @@ try {
         expectedGets,
       });
       if (currentScenario === "success" || currentScenario === "start-network-unknown" || currentScenario === "already-bound") {
-        const startButton = page.getByRole("button", { name: "开始识别并继续", exact: true });
+        const startButton = page.getByRole("button", { name: "开始识别", exact: true });
+        const processingNotice = page.getByRole("checkbox", { name: /图片处理说明/ });
         const guardian = page.getByRole("checkbox", { name: /监护人确认/ });
-        assert(await startButton.count() === 1 && await guardian.count() === 1, `${currentScenario}: passed inspection did not expose the guarded start action.`);
+        assert(await startButton.count() === 1 && await processingNotice.count() === 1 && await guardian.count() === 1, `${currentScenario}: passed inspection did not expose the guarded start action.`);
+        assert(await startButton.isDisabled(), `${currentScenario}: start action was enabled before the required confirmations.`);
+        await processingNotice.check();
         assert(await startButton.isDisabled(), `${currentScenario}: start action was enabled before guardian confirmation.`);
         await guardian.check();
         assert(await startButton.isEnabled(), `${currentScenario}: guardian confirmation did not enable start action.`);
@@ -338,19 +377,24 @@ try {
         assert(startPosts.length >= 1, `${currentScenario}: no start-recognition POST was observed.`);
         assert(uuidV7Pattern.test(startPosts[0].idempotencyKey ?? ""), `${currentScenario}: start intent did not use UUIDv7.`);
         assert(startPosts[0].idempotencyKey !== posts[0].idempotencyKey, `${currentScenario}: start intent reused the upload intent key.`);
-        assert(JSON.stringify(startPosts[0].body) === JSON.stringify({ mode: "synthetic_demo", guardianConfirmed: true }), `${currentScenario}: start body was not the exact shared DTO.`);
+        assert(JSON.stringify(startPosts[0].body) === JSON.stringify({ guardianConfirmed: true, processingNoticeAccepted: true }), `${currentScenario}: start body was not the exact shared DTO.`);
         assert(browserPaths.includes(startRecognitionPath), `${currentScenario}: start-recognition request was not same-origin.`);
         const startText = await page.locator("body").innerText();
         assert(!startText.includes(assetId) && !startText.includes(startedRecognition.caseId) && !startText.includes(token) && !startText.includes(fileName) && !startText.includes(sha256) && !startText.includes("objectKey") && !startText.includes("jobId"), `${currentScenario}: start UI leaked internal or upload facts.`);
-        assert(startText.includes("继续体验识别") && startText.includes("不会读取你上传图片中的文字"), `${currentScenario}: persistent recognition boundary is missing.`);
+        if (currentScenario === "start-network-unknown") {
+          assert(startText.includes("识别状态需要确认") && startText.includes("先读取最新状态"), `${currentScenario}: recovery boundary is missing.`);
+        } else if (currentScenario === "success") {
+          assert(startText.includes("识别正在处理") && startText.includes("识别完成后请先确认题目内容"), `${currentScenario}: persistent recognition boundary is missing.`);
+        }
+        assert(!startText.includes("不会读取你上传图片中的文字") && !startText.includes("synthetic"), `${currentScenario}: real OCR flow was mislabeled as synthetic.`);
         if (currentScenario === "success") {
           assert(startPosts.length === 1, "success: expected one start-recognition POST.");
-          assert(startText.includes("体验内容已准备，正在整理识别内容") && startText.includes("本次不会读取上传图片中的文字"), "success: start success UI was not the neutral sanitized copy.");
+          assert(startText.includes("识别正在处理") && startText.includes("查看识别进度"), "success: start success UI did not expose the truthful continuation action.");
         } else if (currentScenario === "start-network-unknown") {
           assert(startPosts.length === 2, "start-network-unknown: expected exactly one retry after the unknown result.");
           assert(startPosts.every(post => post.idempotencyKey === startPosts[0].idempotencyKey), "start-network-unknown: retry changed the start idempotency key.");
           assert(startPosts.every(post => JSON.stringify(post.body) === JSON.stringify(startPosts[0].body)), "start-network-unknown: retry changed the start JSON body.");
-          assert(await guardian.isDisabled() && await startButton.isDisabled(), "start-network-unknown: confirmation controls were not locked.");
+          assert(await page.locator("[data-recognition-unknown]").count() === 1, "start-network-unknown: recovery guidance was not shown.");
           await new Promise(resolveWait => setTimeout(resolveWait, 1_000));
           assert(startPosts.length === 2, "start-network-unknown: a third start POST was sent after the unknown result.");
         } else {
@@ -362,34 +406,25 @@ try {
         }
       }
       if (currentScenario === "success") {
-        assert(visibleText.includes("图片基础检查通过，识别尚未开始"), "Success UI did not show the neutral inspection result.");
+        assert(visibleText.includes("所有图片均已通过基础检查"), "Success UI did not show the neutral inspection result.");
         await mkdir(screenshots, { recursive: true });
         for (const [width, height] of [[1440, 900], [1366, 768]]) {
           const screenshotPage = await browser.newPage({ viewport: { width, height } });
           resetFixtureState("success");
           await screenshotPage.goto(`${webOrigin}/materials/new`, { waitUntil: "networkidle" });
           await choose(screenshotPage);
-          await screenshotPage.getByRole("button", { name: "开始上传" }).click();
-          await screenshotPage.locator('[data-upload-status="succeeded"]').waitFor({ timeout: 40_000 });
-          await screenshotPage.evaluate(() => {
-            const banner = document.createElement("div");
-            banner.textContent = "受控体验 · 本次不会读取上传图片中的文字";
-            Object.assign(banner.style, {
-              position: "fixed", right: "12px", bottom: "10px", zIndex: "99",
-              padding: "6px 10px", borderRadius: "999px", background: "#111318",
-              color: "white", font: "12px system-ui",
-            });
-            document.body.append(banner);
-          });
+          await screenshotPage.getByRole("button", { name: "上传并检查图片" }).click();
+          await screenshotPage.locator('[data-page-status="passed"]').waitFor({ timeout: 40_000 });
           await screenshotPage.screenshot({ path: resolve(screenshots, `source-inspection-succeeded-${width}x${height}.png`) });
+          await screenshotPage.getByRole("checkbox", { name: /图片处理说明/ }).check();
           await screenshotPage.getByRole("checkbox", { name: /监护人确认/ }).check();
-          await screenshotPage.getByRole("button", { name: "开始识别并继续", exact: true }).click();
-          await screenshotPage.locator('[data-recognition-start-status="success"]').waitFor({ timeout: 10_000 });
+          await screenshotPage.getByRole("button", { name: "开始识别", exact: true }).click();
+          await screenshotPage.getByText("识别正在处理", { exact: true }).waitFor({ timeout: 10_000 });
           const viewportOverflow = await screenshotPage.evaluate(() => ({
             horizontal: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-            marker: document.body.innerText.includes("本次不会读取上传图片中的文字"),
+            marker: document.body.innerText.includes("识别完成后请先确认题目内容"),
           }));
-          assert(!viewportOverflow.horizontal && viewportOverflow.marker, `success screenshot ${width}x${height}: overflow or persistent synthetic marker detected.`);
+          assert(!viewportOverflow.horizontal && viewportOverflow.marker, `success screenshot ${width}x${height}: overflow or real-recognition boundary missing.`);
           await screenshotPage.screenshot({ path: resolve(screenshots, `source-recognition-start-success-${width}x${height}.png`) });
           await screenshotPage.close();
         }
@@ -404,7 +439,7 @@ try {
       const path = new URL(request.url()).pathname;
       if (path.startsWith("/api/v1/")) browserPaths.push(path);
     });
-    await visitAndInspect(timeoutPage, "timeout");
+    await visitAndInspect(timeoutPage, "retryable_error");
     await timeoutPage.close();
 
     resetFixtureState("cancel");
@@ -416,16 +451,12 @@ try {
     });
     await cancelPage.goto(`${webOrigin}/materials/new`, { waitUntil: "networkidle" });
     await choose(cancelPage);
-    await cancelPage.getByRole("button", { name: "开始上传" }).click();
-    await cancelPage.locator('[data-upload-status="queued"], [data-upload-status="processing"]').first().waitFor({ timeout: 10_000 });
+    await cancelPage.getByRole("button", { name: "上传并检查图片" }).click();
+    await cancelPage.locator('[data-page-status="checking"]').first().waitFor({ timeout: 10_000 });
     const getsBeforeHidden = gets.length;
-    await cancelPage.evaluate(() => {
-      Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
-      document.dispatchEvent(new Event("visibilitychange"));
-    });
-    await cancelPage.locator('[data-upload-status="timeout"]').waitFor({ timeout: 5_000 });
+    await cancelPage.goto("about:blank");
     await new Promise(resolveWait => setTimeout(resolveWait, 3_500));
-    assert(gets.length === getsBeforeHidden, `cancel: hidden abort allowed another inspection GET (${getsBeforeHidden} before, ${gets.length} after).`);
+    assert(gets.length === getsBeforeHidden, `cancel: page exit allowed another inspection GET (${getsBeforeHidden} before, ${gets.length} after).`);
     await cancelPage.close();
 
     for (const invalid of [
@@ -439,8 +470,8 @@ try {
       await page.locator('label[for="source-upload-input"]').click();
       const chooser = await chooserPromise;
       await chooser.setFiles(invalid);
-      await page.locator('[data-upload-status="error"]').waitFor();
-      assert(posts.length === 0 && preparePosts.length === 0 && puts.length === 0 && gets.length === 0, "Invalid MIME/size sent a network request.");
+      await page.locator('[data-page-status="failed"]').waitFor();
+      assert(batchPosts.length === 0 && posts.length === 0 && preparePosts.length === 0 && puts.length === 0 && gets.length === 0, "Invalid MIME/size sent a network request.");
       await page.close();
     }
   } finally {

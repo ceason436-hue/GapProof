@@ -5,20 +5,16 @@ vi.mock("server-only", () => ({}));
 
 const studentId = "11111111-1111-4111-8111-111111111111";
 const originalOrigin = process.env.GAPPROOF_API_ORIGIN;
-const originalStudentId = process.env.GAPPROOF_DEMO_STUDENT_ID;
 
 afterEach(() => {
   if (originalOrigin === undefined) delete process.env.GAPPROOF_API_ORIGIN;
   else process.env.GAPPROOF_API_ORIGIN = originalOrigin;
-  if (originalStudentId === undefined) delete process.env.GAPPROOF_DEMO_STUDENT_ID;
-  else process.env.GAPPROOF_DEMO_STUDENT_ID = originalStudentId;
   vi.unstubAllGlobals();
 });
 
 describe("server-side Today fetch", () => {
   it("uses an absolute server URL and preserves the API empty state", async () => {
     process.env.GAPPROOF_API_ORIGIN = "http://127.0.0.1:3001";
-    process.env.GAPPROOF_DEMO_STUDENT_ID = studentId;
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       data: {
         studentId,
@@ -49,44 +45,44 @@ describe("server-side Today fetch", () => {
       traceId: "trace-1",
     }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
-    const { fetchDemoStudentToday } = await import("./today-server");
+    const { fetchStudentToday } = await import("./today-server");
 
-    await expect(fetchDemoStudentToday()).resolves.toMatchObject({
+    await expect(fetchStudentToday(studentId, "gapproof_device=test-token")).resolves.toMatchObject({
       data: { studentId, timeZone: "Asia/Tokyo", currentTaskId: null, tasks: [] },
     });
     expect(fetchMock.mock.calls[0]?.[0])
       .toBe(`http://127.0.0.1:3001/v1/students/${studentId}/today`);
     expect(fetchMock.mock.calls[0]?.[1]?.cache).toBe("no-store");
+    expect(fetchMock.mock.calls[0]?.[1]?.headers).toMatchObject({ Cookie: "gapproof_device=test-token" });
   });
 
   it("surfaces an API error without supplying fallback data", async () => {
     process.env.GAPPROOF_API_ORIGIN = "http://127.0.0.1:3001";
-    process.env.GAPPROOF_DEMO_STUDENT_ID = studentId;
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
       error: { code: "RESOURCE_NOT_FOUND", message: "not found", retryable: false },
       requestId: "request-2",
       traceId: "trace-2",
     }), { status: 404 })));
-    const { fetchDemoStudentToday } = await import("./today-server");
+    const { fetchStudentToday } = await import("./today-server");
 
-    const error = await fetchDemoStudentToday().catch(value => value);
+    const error: unknown = await fetchStudentToday(studentId, "gapproof_device=test-token").catch((value: unknown) => value);
     expect(error).toBeInstanceOf(ApiClientError);
+    if (!(error instanceof ApiClientError)) throw new Error("Expected ApiClientError");
     expect(error.response.error.code).toBe("RESOURCE_NOT_FOUND");
     expect(error).not.toHaveProperty("data");
   });
 
   it("rejects a Today response that omits the shared timeZone contract", async () => {
     process.env.GAPPROOF_API_ORIGIN = "http://127.0.0.1:3001";
-    process.env.GAPPROOF_DEMO_STUDENT_ID = studentId;
     const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({
       data: { studentId, currentTaskId: null, tasks: [] },
       requestId: "request-3",
       traceId: "trace-3",
     }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
-    const { fetchDemoStudentToday } = await import("./today-server");
+    const { fetchStudentToday } = await import("./today-server");
 
-    await expect(fetchDemoStudentToday()).rejects.toThrow("API_RESPONSE_INVALID");
+    await expect(fetchStudentToday(studentId, "gapproof_device=test-token")).rejects.toThrow("API_RESPONSE_INVALID");
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });

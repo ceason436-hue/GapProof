@@ -6,6 +6,7 @@ import { createRunNextWorker } from "./run-next-worker.ts";
 import { createRetestDueWorker } from "./retest-due-worker.ts";
 import { createReplanWorker } from "./replan-worker.ts";
 import { createSourceAssetQualityWorker } from "./source-asset-quality-worker.ts";
+import { createTutorTurnWorker } from "./tutor-turn-worker.ts";
 import { createRealOcrBatchWorker } from "./real-ocr-batch-worker.ts";
 import { LocalDirectorySourceAssetStorage } from "./local-source-asset-storage.ts";
 import { requireUploadDirectory } from "./worker-config.ts";
@@ -37,14 +38,17 @@ const qualityWorker = createSourceAssetQualityWorker({
   queue,
   storage: new LocalDirectorySourceAssetStorage(uploadDirectory),
 });
+const tutorTurnWorker = createTutorTurnWorker({ database: database.db, queue });
 const realOcrWorker = createRealOcrBatchWorker({ database: database.db, queue, storage: new LocalDirectorySourceAssetStorage(uploadDirectory) });
 await worker.start();
 await retestDueWorker.start();
 await replanWorker.start();
 await qualityWorker.start();
+await tutorTurnWorker.start();
 await realOcrWorker.start();
 
 async function shutdown() {
+  await tutorTurnWorker.stop();
   await replanWorker.stop();
   await retestDueWorker.stop();
   await worker.stop();

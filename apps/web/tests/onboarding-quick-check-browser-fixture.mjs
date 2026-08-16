@@ -22,11 +22,27 @@ const questions = [
 const envelope = data => ({ data, requestId: "fixture-request", traceId: "fixture-trace" });
 let postMode = "success";
 const posts = [];
+const sessionPosts = [];
+const sessionView = { authenticated: true, studentId, expiresAt: "2026-08-17T12:00:00.000Z" };
 const readJson = request => new Promise((resolveBody, rejectBody) => { const chunks = []; request.on("data", chunk => chunks.push(chunk)); request.on("end", () => resolveBody(JSON.parse(Buffer.concat(chunks).toString("utf8")))); request.on("error", rejectBody); });
 const server = createServer(async (request, response) => {
   response.setHeader("Content-Type", "application/json");
+  if (request.method === "POST" && request.url === "/v1/device-session") {
+    sessionPosts.push({ key: request.headers["idempotency-key"] });
+    response.setHeader("Set-Cookie", "gapproof_device=fixture-device-session; Path=/; HttpOnly; SameSite=Lax");
+    response.end(JSON.stringify(envelope(sessionView)));
+    return;
+  }
+  if (request.method === "GET" && request.url === "/v1/device-session") {
+    response.end(JSON.stringify(envelope(sessionView)));
+    return;
+  }
+  if (request.method === "GET" && request.url === "/v1/device-session/ocr-batches") {
+    response.end(JSON.stringify(envelope({ batches: [] })));
+    return;
+  }
   if (request.method === "GET" && request.url === `/v1/students/${studentId}/today`) {
-    response.end(JSON.stringify(envelope({ studentId, timeZone: "Asia/Singapore", currentTaskId: null, tasks: [], overview: { hasStartedJourney: false, activityDays: Array.from({ length: 7 }, (_, index) => ({ localDate: `2026-08-${String(9 + index).padStart(2, "0")}`, completedTaskCount: 0 })), weeklyGoal: null, pendingConfirmationCount: 0, recentProgress: [], nextCheck: null } })));
+    response.end(JSON.stringify(envelope({ studentId, timeZone: "Asia/Singapore", currentTaskId: null, tasks: [], profile: { studentId, grade: "8", subject: "english", term: "first_term", region: "shanghai", learningState: "starting", timeZone: "Asia/Singapore", version: 1, completed: true }, overview: { hasStartedJourney: false, activityDays: Array.from({ length: 7 }, (_, index) => ({ localDate: `2026-08-${String(9 + index).padStart(2, "0")}`, completedTaskCount: 0 })), weeklyGoal: null, pendingConfirmationCount: 0, recentProgress: [], nextCheck: null } })));
     return;
   }
   if (request.method === "GET" && request.url === "/v1/quick-checks/synthetic") {
@@ -62,7 +78,9 @@ try {
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
     await page.goto(`${webOrigin}/student/today`, { waitUntil: "networkidle" });
-    assert(await page.getByRole("heading", { name: "从一次小检查开始" }).count() === 1, "First-use Today did not render.");
+    assert(await page.getByRole("heading", { name: "从一次小检查开始" }).count() === 1, `First-use Today did not render. sessions=${sessionPosts.length}; body=${await page.locator("body").innerText()}`);
+    assert(sessionPosts.length >= 1 && sessionPosts.every(post => post.key === sessionPosts[0].key), `Device-session bootstrap did not preserve one intent across ${sessionPosts.length} POST requests.`);
+    assert(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sessionPosts[0]?.key ?? ""), "Device-session bootstrap did not use a UUIDv7 idempotency key.");
     assert(await page.getByRole("link", { name: "上传错题或作业" }).count() === 1, "Upload entry missing.");
     await page.getByRole("link", { name: "没有材料，先做 3 道题" }).click();
     await page.locator("fieldset").first().waitFor();
@@ -103,7 +121,7 @@ try {
     await retryPage.locator("[data-quick-check-result]").waitFor();
     assert(posts.length === 2 && posts[1]?.key !== failedKey, "Explicit retry did not create one fresh intent.");
     await retryPage.close();
-    for (const [name, heading] of [["7 日计划", "完成检查，再安排下一步"], ["我的进步", "每次完成，都会留下新的学习足迹"], ["学习报告", "报告功能暂未开放"]]) { await page.getByRole("link", { name, exact: true }).first().click(); await page.getByRole("heading", { name: heading }).waitFor(); }
+    for (const name of ["7 日计划", "我的进步", "学习报告"]) { await page.getByRole("link", { name, exact: true }).first().click(); await page.getByRole("heading", { name, exact: true }).waitFor(); }
   } finally { await browser.close(); }
   console.log("Onboarding and synthetic quick-check browser fixture passed.");
 } finally {

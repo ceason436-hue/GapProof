@@ -11,6 +11,7 @@ import {
   guidedTaskGuards,
   submitGuidedTask,
 } from "@/lib/guided-task";
+import { SocraticTutorPanel } from "./socratic-tutor-panel";
 
 type CompletionState =
   | { kind: "loading_case" }
@@ -144,6 +145,7 @@ export function GuidedTaskCompletion({ task, timeZone }: { task: GuidedIntervent
   const disabled = state.kind === "loading_case" || state.kind === "submitting" || !guards.submitAllowed;
   return <div className="guided-task-panel" data-guided-task-state={state.kind}>
     <p className="guided-task-note">逐项完成后再提交。完成本次任务不代表已经掌握，还需要后续复习确认。</p>
+    <SocraticTutorPanel task={task} expectedVersion={expectedVersion} />
     <fieldset disabled={!guards.editable || state.kind === "loading_case" || state.kind === "submitting"}>
       <legend>完成本次引导任务</legend>
       <div className="guided-task-steps">

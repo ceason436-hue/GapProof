@@ -2,6 +2,7 @@ import { createDatabase } from "@gapproof/db";
 import { createJobQueue } from "@gapproof/jobs";
 
 import { buildApi } from "./app.ts";
+import { createDeviceSessionService } from "./device-session-module.ts";
 import { LocalDirectorySourceAssetStorage } from "./source-asset-storage.ts";
 
 const databaseUrl =
@@ -10,6 +11,10 @@ const databaseUrl =
 const port = Number(process.env.API_PORT ?? "4000");
 const uploadDirectory = process.env.GAPPROOF_UPLOAD_DIR;
 const uploadSigningSecret = process.env.GAPPROOF_UPLOAD_SIGNING_SECRET;
+const deviceSessionSecret = process.env.GAPPROOF_DEVICE_SESSION_SECRET;
+if (deviceSessionSecret === undefined || deviceSessionSecret.length < 32) {
+  throw new Error("GAPPROOF_DEVICE_SESSION_SECRET must contain at least 32 characters.");
+}
 
 const database = createDatabase(databaseUrl);
 const queue = createJobQueue(databaseUrl);
@@ -22,6 +27,11 @@ const api = await buildApi({
   database: database.db,
   queue,
   demoClockEnabled: process.env.GAPPROOF_DEMO_CLOCK_ENABLED === "true",
+  deviceSession: createDeviceSessionService({
+    database: database.db,
+    secret: deviceSessionSecret,
+    secureCookies: process.env.NODE_ENV === "production",
+  }),
   ...(uploadDirectory !== undefined && uploadDirectory.length > 0 &&
   uploadSigningSecret !== undefined && uploadSigningSecret.length > 0
     ? {

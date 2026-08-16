@@ -99,6 +99,12 @@ import {
   type StartRealOcrBatchRequest,
   StartRealOcrBatchViewSchema,
   type StartRealOcrBatchView,
+  CreateTutorTurnRequestSchema,
+  TutorTurnViewSchema,
+  TUTOR_POLICY_VERSION,
+  isUuidV7,
+  type CreateTutorTurnRequest,
+  type TutorTurnView,
 } from "@gapproof/contracts";
 import {
   advanceDemoClock,
@@ -148,6 +154,9 @@ import {
   OcrBatchIdempotencyError,
   removeOcrBatchPage,
   replaceOcrBatchPage,
+  findLatestTutorTurn,
+  queueTutorTurn,
+  TutorTurnRejectedError,
 } from "@gapproof/db";
 import {
   type Clock,
@@ -168,6 +177,7 @@ import {
   SYNTHETIC_PARSE_ASSET_ID,
   enqueueRealOcrBatchTransactional,
   type JobQueue,
+  enqueueTutorTurn,
 } from "@gapproof/jobs";
 import {
   MAX_SOURCE_ASSET_BYTES,
@@ -182,6 +192,13 @@ import {
   SyntheticQuickCheckInputError,
   syntheticQuickCheckView,
 } from "./synthetic-quick-check.ts";
+import {
+  DeviceSessionAuthError,
+  DeviceSessionOwnershipError,
+  registerDeviceOwnershipHook,
+  registerDeviceSessionRoutes,
+  type DeviceSessionService,
+} from "./device-session-module.ts";
 
 export interface BuildApiOptions {
   readonly database: Database;
@@ -190,6 +207,7 @@ export interface BuildApiOptions {
   readonly demoClockEnabled?: boolean;
   readonly uploadStorage?: SourceAssetStorage;
   readonly uploadSigningSecret?: string;
+  readonly deviceSession?: DeviceSessionService;
 }
 
 class ApiHttpError extends Error {
@@ -391,6 +409,37 @@ function profileRequestHash(body: UpdateStudentProfileRequest): string {
     region: body.region,
     learningState: body.learningState,
   })).digest("hex");
+}
+
+function tutorRequestHash(body: CreateTutorTurnRequest, learnerText: string): string {
+  return createHash("sha256").update(JSON.stringify({
+    expectedVersion: body.expectedVersion,
+    stepId: body.stepId,
+    learnerText,
+  })).digest("hex");
+}
+
+function deidentifyTutorText(value: string): string {
+  return value.normalize("NFKC")
+    .replace(/https?:\/\/\S+/giu, "[链接已隐藏]")
+    .replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/giu, "[邮箱已隐藏]")
+    .replace(/(?<!\d)1[3-9]\d{9}(?!\d)/gu, "[手机号已隐藏]")
+    .replace(/(?<!\d)\d{15,18}[0-9Xx]?(?!\d)/gu, "[证件号已隐藏]")
+    .replace(/\s+/gu, " ").trim().slice(0, 800);
+}
+
+function tutorTurnView(turn: Awaited<ReturnType<typeof findLatestTutorTurn>>): TutorTurnView {
+  if (turn === undefined) throw new ApiHttpError(404, "RESOURCE_NOT_FOUND", "Tutor turn was not found.");
+  const response = turn.response;
+  return {
+    turnId: turn.id,
+    taskId: turn.taskId,
+    status: turn.status,
+    response: response !== null && isRecord(response) && typeof response.question === "string" && (typeof response.hint === "string" || response.hint === null) && typeof response.nextAction === "string"
+      ? response as TutorTurnView["response"]
+      : null,
+    retryable: turn.status === "queued" || turn.status === "running" || turn.status === "failed",
+  };
 }
 
 function d1AttemptRequestPayload(
@@ -789,6 +838,10 @@ function isSamePayload(
 
 export async function buildApi(options: BuildApiOptions) {
   const api = Fastify({ logger: false, bodyLimit: MAX_SOURCE_ASSET_BYTES });
+  if (options.deviceSession !== undefined) {
+    registerDeviceOwnershipHook(api, options.deviceSession, options.database);
+    await registerDeviceSessionRoutes(api, options.deviceSession);
+  }
   api.addContentTypeParser(
     ["image/jpeg", "image/png", "image/webp", "application/octet-stream"],
     { parseAs: "buffer" },
@@ -826,6 +879,14 @@ export async function buildApi(options: BuildApiOptions) {
 
     if (error instanceof ApiHttpError) {
       ({ statusCode, code, message, retryable, details } = error);
+    } else if (error instanceof DeviceSessionAuthError || error instanceof DeviceSessionOwnershipError) {
+      statusCode = error.statusCode;
+      code = error.code;
+      message = error.message;
+    } else if (error instanceof TutorTurnRejectedError) {
+      statusCode = 409;
+      code = error.code;
+      message = error.message;
     } else if (error instanceof SourceAssetIdempotencyKeyReusedError) {
       statusCode = 409;
       code = error.code;
@@ -1943,6 +2004,89 @@ export async function buildApi(options: BuildApiOptions) {
         throw new ResourceNotFoundError("Task", request.params.taskId);
       }
       return success(request, toLearningTaskView(task));
+    },
+  );
+
+  api.post<{ Params: TaskIdParams; Body: CreateTutorTurnRequest }>(
+    "/v1/tasks/:taskId/tutor-turns",
+    {
+      schema: {
+        params: TaskIdParamsSchema,
+        body: CreateTutorTurnRequestSchema,
+        response: {
+          200: apiResponseSchema(TutorTurnViewSchema),
+          202: apiResponseSchema(TutorTurnViewSchema),
+          "4xx": ApiErrorResponseSchema,
+          500: ApiErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (options.deviceSession === undefined) throw new ApiHttpError(503, "STUDENT_SESSION_REQUIRED", "A student session is required for tutor guidance.", false);
+      const principal = await options.deviceSession.requirePrincipal(request.headers.cookie);
+      const task = await findTaskById(options.database, request.params.taskId);
+      if (task === undefined) throw new ResourceNotFoundError("Task", request.params.taskId);
+      const caseRow = await findCaseById(options.database, task.caseId);
+      if (caseRow === undefined || caseRow.studentId !== principal.studentId || caseRow.tenantId !== principal.tenantId) throw new ResourceNotFoundError("Task", request.params.taskId);
+      if (task.taskType !== "guided_intervention" || task.status !== "ready") throw new TutorTurnRejectedError("TASK_NOT_READY");
+      if (caseRow.stateVersion !== request.body.expectedVersion) throw new VersionConflictError(task.caseId, request.body.expectedVersion);
+      const rawSteps = task.payload.steps;
+      const step = Array.isArray(rawSteps) ? rawSteps.find((candidate) => isRecord(candidate) && candidate.id === request.body.stepId) : undefined;
+      if (!isRecord(step) || typeof step.title !== "string" || typeof step.content !== "string") throw new ApiHttpError(400, "INVALID_INPUT", "That learning step is not available.");
+      const learnerText = deidentifyTutorText(request.body.learnerText);
+      if (learnerText.length === 0) throw new ApiHttpError(400, "INVALID_INPUT", "Please write one short thought before asking for guidance.");
+      const student = await findStudentById(options.database, principal.studentId);
+      if (student === undefined) throw new ResourceNotFoundError("Student", principal.studentId);
+      const idempotencyKey = getIdempotencyKey(request);
+      if (!isUuidV7(idempotencyKey)) throw new ApiHttpError(400, "INVALID_INPUT", "Idempotency-Key must be a UUIDv7.");
+      const turnId = uuidv7();
+      const sessionId = uuidv7();
+      const queued = await queueTutorTurn(options.database, {
+        turnId,
+        sessionId,
+        tenantId: principal.tenantId,
+        studentId: principal.studentId,
+        caseId: task.caseId,
+        taskId: task.id,
+        idempotencyKey,
+        requestHash: tutorRequestHash(request.body, learnerText),
+        policyVersion: TUTOR_POLICY_VERSION,
+        now: clock.now(),
+        context: {
+          subject: student.subject === "english" ? "英语" : "学习",
+          grade: student.grade === null ? "当前年级" : `${student.grade}年级`,
+          taskTitle: task.title,
+          stepTitle: step.title,
+          stepContent: step.content,
+          learnerText,
+        },
+      });
+      if (!queued.replayed && queued.turn.status === "queued") {
+        await enqueueTutorTurn(options.queue, { turnId: queued.turn.id, traceId: traceId(request) });
+      }
+      const view = tutorTurnView(queued.turn);
+      return reply.status(view.status === "queued" || view.status === "running" ? 202 : 200).send(success(request, view));
+    },
+  );
+
+  api.get<{ Params: TaskIdParams }>(
+    "/v1/tasks/:taskId/tutor-session",
+    {
+      schema: {
+        params: TaskIdParamsSchema,
+        response: {
+          200: apiResponseSchema(TutorTurnViewSchema),
+          "4xx": ApiErrorResponseSchema,
+          500: ApiErrorResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      if (options.deviceSession === undefined) throw new ApiHttpError(503, "STUDENT_SESSION_REQUIRED", "A student session is required for tutor guidance.", false);
+      const principal = await options.deviceSession.requirePrincipal(request.headers.cookie);
+      const latest = await findLatestTutorTurn(options.database, request.params.taskId, principal.studentId);
+      if (latest === undefined) throw new ResourceNotFoundError("Tutor session", request.params.taskId);
+      return success(request, tutorTurnView(latest));
     },
   );
 

@@ -34,7 +34,7 @@ export function refreshAuthoritativeTodayAfterUnknownD1(
 
 export function D1UnknownAttemptRecovery({ onRefresh }: { onRefresh: () => void }) {
   return <div className="attempt-recovery" data-attempt-recovery="network-unknown">
-    <p className="read-only-note">这里不会再次提交你的答案。请重新读取今日页，以服务端返回的最新任务状态为准。</p>
+    <p className="read-only-note">这里不会再次提交你的答案。请重新打开今日页，查看最新任务状态。</p>
     <button type="button" onClick={onRefresh}>重新读取今日状态</button>
     <a className="hero-secondary-link" href="/student/today?source=api">返回今日</a>
   </div>;

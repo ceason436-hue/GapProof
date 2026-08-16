@@ -20,14 +20,20 @@ const webOrigin = `http://127.0.0.1:${webPort}`;
 const fixtureStudentId = "0198c111-1111-7000-8000-000000000001";
 const assetId = "0198c111-1111-7000-8000-000000000002";
 const caseId = "0198c111-1111-7000-8000-000000000003";
+const batchId = "0198c111-1111-7000-8000-000000000005";
+const pageId = "0198c111-1111-7000-8000-000000000006";
 const token = "fixture-review-upload-token-012345678901234567890";
+const deviceToken = "fixture_device_session_token_012345678901234";
+const deviceCookie = `gapproof_device=${deviceToken}`;
 const bytes = Buffer.from("synthetic same-case review bytes\n", "utf8");
 const sha256 = createHash("sha256").update(bytes).digest("hex");
 const fileName = "fixture-review.png";
 const uploadPath = `/api/v1/source-assets/${assetId}/content`;
 const preparePath = `/api/v1/source-assets/${assetId}/commands/prepare`;
 const inspectionPath = `/api/v1/source-assets/${assetId}`;
-const startPath = `/api/v1/source-assets/${assetId}/commands/start-recognition`;
+const createBatchPath = "/api/v1/ocr-batches";
+const addPagePath = `/api/v1/ocr-batches/${batchId}/pages/uploads`;
+const startPath = `/api/v1/ocr-batches/${batchId}/commands/start-recognition`;
 const extractionPath = `/api/v1/cases/${caseId}/extraction`;
 const confirmPath = `/api/v1/cases/${caseId}/extraction/confirm`;
 const runNextPath = `/api/v1/cases/${caseId}/commands/run-next`;
@@ -36,15 +42,13 @@ const attemptPath = `/api/v1/cases/${caseId}/attempts`;
 const backendPath = apiPath => apiPath.replace(/^\/api/, "");
 const uuidV7Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-const initiated = {
-  assetId,
-  processingStatus: "pending_upload",
-  upload: { method: "PUT", path: uploadPath, token, expiresAt: "2026-08-15T04:10:00.000Z", mimeType: "image/png", byteSize: bytes.length },
-};
+const sessionView = { authenticated: true, studentId: fixtureStudentId, expiresAt: "2026-09-15T04:00:00.000Z" };
+const batch = { batchId, caseId, status: "collecting", guardianConfirmed: false, version: 0, pages: [] };
+const initiated = { page: { pageId, assetId, order: 1, status: "pending_upload", retryable: false, needsReview: false }, upload: { method: "PUT", path: uploadPath, token, expiresAt: "2026-08-15T04:10:00.000Z", mimeType: "image/png", byteSize: bytes.length } };
 const uploaded = { assetId, processingStatus: "uploaded", mimeType: "image/png", byteSize: bytes.length, sha256 };
 const inspection = { assetId, stage: "image_quality_check", processingStatus: "succeeded", mimeType: "image/png", byteSize: bytes.length, quality: { status: "passed", detectedMimeType: "image/png", width: 1200, height: 900, reasons: [], checkerVersion: "image-header-v1" } };
-const started = { assetId, caseId, state: "awaiting_evidence", stateVersion: 0, recognitionMode: "synthetic_demo", recognitionSource: "synthetic_fixture", uploadedAssetUsedForRecognition: false, processingStatus: "queued" };
-const extraction = { caseId, state: "awaiting_confirmation", stateVersion: 1, recognitionSource: "synthetic_fixture", uploadedAssetUsedForRecognition: false, items: [{ itemId: "item-synthetic-1", prompt: "Choose the sentence that best describes the next step." }] };
+const started = { batchId, caseId, status: "processing", processingNoticeAccepted: true };
+const extraction = { caseId, state: "awaiting_confirmation", stateVersion: 1, recognitionSource: "real_alibaba", uploadedAssetUsedForRecognition: true, items: [{ itemId: "item-real-1", prompt: "Choose the sentence that best describes the next step." }] };
 const hypotheses = { caseId, stateVersion: 3, candidates: [{ id: "hypothesis-1", title: "顺序线索可能混在一起", explanation: "题目中的时间线索需要按先后顺序整理。", confidence: 0.8, evidenceRefs: ["evidence-1"] }, { id: "hypothesis-2", title: "规则边界需要再确认", explanation: "可以先找出这条规则适用的范围。", confidence: 0.7, evidenceRefs: ["evidence-2"] }], probe: { id: "probe-1", prompt: "哪一种整理方式最能帮助你继续？", choices: [{ id: "choice-a", label: "先按顺序列出已知信息" }, { id: "choice-b", label: "先圈出规则适用范围" }], testedHypothesisIds: ["hypothesis-1", "hypothesis-2"] } };
 const attempt = { attemptId: "0198c111-1111-7000-8000-000000000004", caseId, state: "intervention_ready", stateVersion: 4, probeId: "probe-1", selectedChoiceId: "choice-a", passed: false, selectedHypothesisId: null, scoringMethod: "exact_choice_v1" };
 const envelope = data => ({ data, requestId: `fixture-review-${scenario}-request`, traceId: `fixture-review-${scenario}-trace` });
@@ -57,6 +61,8 @@ let extractionReads = 0;
 let hypothesesReads = 0;
 const apiPaths = [];
 const uploadPosts = [];
+const pagePosts = [];
+const sessionPosts = [];
 const puts = [];
 const preparePosts = [];
 const startPosts = [];
@@ -67,8 +73,25 @@ const attemptPosts = [];
 const fixtureServer = createServer(async (request, response) => {
   const url = request.url ?? "";
   if (url.startsWith("/v1/")) apiPaths.push(url);
-  if (request.method === "POST" && url === "/v1/source-assets/uploads") {
-    const body = await readBody(request); uploadPosts.push({ body: JSON.parse(body.toString("utf8")), key: request.headers["idempotency-key"] }); json(response, 200, envelope(initiated)); return;
+  if (request.method === "POST" && url === "/v1/device-session") {
+    sessionPosts.push({ key: request.headers["idempotency-key"] });
+    response.setHeader("Set-Cookie", `${deviceCookie}; Path=/; HttpOnly; SameSite=Lax`);
+    json(response, 201, envelope(sessionView)); return;
+  }
+  if (request.method === "GET" && url === "/v1/device-session") {
+    if (!request.headers.cookie?.includes(deviceCookie)) { error(response, 401, "DEVICE_SESSION_REQUIRED"); return; }
+    json(response, 200, envelope(sessionView)); return;
+  }
+  if (request.method === "GET" && url === "/v1/device-session/ocr-batches") {
+    if (!request.headers.cookie?.includes(deviceCookie)) { error(response, 401, "DEVICE_SESSION_REQUIRED"); return; }
+    json(response, 200, envelope({ batches: [] })); return;
+  }
+  if (url.startsWith("/v1/") && !request.headers.cookie?.includes(deviceCookie)) { error(response, 401, "DEVICE_SESSION_REQUIRED"); return; }
+  if (request.method === "POST" && url === backendPath(createBatchPath)) {
+    const body = await readBody(request); uploadPosts.push({ body: JSON.parse(body.toString("utf8")), key: request.headers["idempotency-key"] }); json(response, 201, envelope(batch)); return;
+  }
+  if (request.method === "POST" && url === backendPath(addPagePath)) {
+    const body = await readBody(request); pagePosts.push({ body: JSON.parse(body.toString("utf8")), key: request.headers["idempotency-key"] }); json(response, 201, envelope(initiated)); return;
   }
   if (request.method === "PUT" && url === backendPath(uploadPath)) {
     const body = await readBody(request); puts.push({ body, token: request.headers["x-gapproof-upload-token"], contentType: request.headers["content-type"] }); json(response, 200, envelope(uploaded)); return;
@@ -115,19 +138,21 @@ let serverOutput = "";
 webServer.stdout.on("data", chunk => { serverOutput += chunk; }); webServer.stderr.on("data", chunk => { serverOutput += chunk; });
 const webServerExit = new Promise(resolveExit => webServer.once("exit", resolveExit));
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
-const reset = currentScenario => { scenario = currentScenario; extractionReads = 0; hypothesesReads = 0; apiPaths.length = 0; uploadPosts.length = 0; puts.length = 0; preparePosts.length = 0; startPosts.length = 0; confirmPosts.length = 0; runNextPosts.length = 0; attemptPosts.length = 0; };
+const reset = currentScenario => { scenario = currentScenario; extractionReads = 0; hypothesesReads = 0; apiPaths.length = 0; uploadPosts.length = 0; pagePosts.length = 0; puts.length = 0; preparePosts.length = 0; startPosts.length = 0; confirmPosts.length = 0; runNextPosts.length = 0; attemptPosts.length = 0; };
 const choose = async page => { const chooserPromise = page.waitForEvent("filechooser"); await page.locator('label[for="source-upload-input"]').click(); const chooser = await chooserPromise; await chooser.setFiles({ name: fileName, mimeType: "image/png", buffer: bytes }); };
 
 const visitReview = async page => {
   await page.goto(`${webOrigin}/materials/new`, { waitUntil: "networkidle" });
+  await page.locator("[data-upload-picker]").waitFor({ timeout: 15_000 });
   await choose(page);
-  await page.getByRole("button", { name: "开始上传" }).click();
-  await page.locator('[data-upload-status="succeeded"]').waitFor({ timeout: 40_000 });
+  await page.getByRole("button", { name: "上传并检查图片" }).click();
+  await page.locator('[data-page-status="passed"]').waitFor({ timeout: 40_000 });
+  await page.getByRole("checkbox", { name: /图片处理说明/ }).check();
   await page.getByRole("checkbox", { name: /监护人确认/ }).check();
-  await page.getByRole("button", { name: "开始识别并继续", exact: true }).click();
-  await page.locator('[data-recognition-start-status="success"]').waitFor({ timeout: 10_000 });
-  assert(new URL(page.url()).pathname === "/materials/new", "Synthetic start success auto-navigated instead of waiting for the explicit CTA.");
-  await page.getByRole("button", { name: "查看并确认识别内容", exact: true }).click();
+  await page.getByRole("button", { name: "开始识别", exact: true }).click();
+  await page.getByRole("button", { name: "查看识别进度", exact: true }).waitFor({ timeout: 10_000 });
+  assert(new URL(page.url()).pathname === "/materials/new", "Recognition start auto-navigated instead of waiting for the explicit CTA.");
+  await page.getByRole("button", { name: "查看识别进度", exact: true }).click();
   await page.waitForURL(`**/materials/${caseId}/review`, { timeout: 10_000 });
   assert(new URL(page.url()).pathname === `/materials/${caseId}/review`, "Explicit CTA did not enter the same-Case review route.");
   assert(!page.url().includes("/materials/demo/review"), "Review flow fell back to the legacy demo review route.");
@@ -147,21 +172,21 @@ try {
       const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
       await visitReview(page);
       const prompt = page.locator(".case-review-item textarea");
-      assert(await prompt.count() === 1 && await page.getByText("题干", { exact: true }).count() === 1, `${currentScenario}: extraction prompt was not accessible.`);
+      assert(await prompt.count() === 1 && await page.getByText("本页识别内容", { exact: true }).count() === 1, `${currentScenario}: extraction prompt was not accessible.`);
       const extractionText = await page.locator(".case-review-panel").innerText();
       assert(!extractionText.includes("学生答案") && !extractionText.includes("置信度"), `${currentScenario}: student answer or precise confidence leaked.`);
-      await page.getByRole("checkbox", { name: "我确认这一项题干" }).check();
+      await page.getByRole("checkbox", { name: "我已核对本页识别内容" }).check();
       await page.getByRole("button", { name: "确认识别内容", exact: true }).click();
       if (currentScenario === "confirm-conflict") {
         await page.locator('[data-review-state="confirm_conflict"]').waitFor();
-        await page.getByRole("checkbox", { name: "我确认这一项题干" }).check();
+        await page.getByRole("checkbox", { name: "我已核对本页识别内容" }).check();
         await page.getByRole("button", { name: "确认后重新提交", exact: true }).click();
       }
       if (currentScenario === "confirm-network-unknown") {
         await page.locator('[data-review-state="confirm_unknown"]').waitFor();
         assert(confirmPosts.length === 2, "confirm-network-unknown: expected exactly one retry.");
         assert(confirmPosts[0].key === confirmPosts[1].key && JSON.stringify(confirmPosts[0].body) === JSON.stringify(confirmPosts[1].body), "confirm-network-unknown: retry changed key/body.");
-        assert(await page.getByRole("checkbox", { name: "我确认这一项题干" }).isDisabled(), "confirm-network-unknown: confirmation remained editable.");
+        assert(await page.getByRole("checkbox", { name: "我已核对本页识别内容" }).isDisabled(), "confirm-network-unknown: confirmation remained editable.");
         await new Promise(resolveWait => setTimeout(resolveWait, 1_000));
         assert(confirmPosts.length === 2, "confirm-network-unknown: a third POST was sent.");
         await page.close();
@@ -179,13 +204,16 @@ try {
       const visibleText = await page.locator("body").innerText();
       assert(!visibleText.includes(assetId) && !visibleText.includes(caseId) && !visibleText.includes(token) && !visibleText.includes(fileName) && !visibleText.includes(sha256) && !visibleText.includes("objectKey") && !visibleText.includes("jobId"), `${currentScenario}: sensitive internal fact leaked.`);
       assert(!visibleText.includes("/materials/demo/review") && !visibleText.includes("真实 OCR") && !visibleText.includes("报告已生成") && !visibleText.includes("学习效果"), `${currentScenario}: fallback or unsupported claim appeared.`);
-      assert(apiPaths.every(path => ["/v1/source-assets/uploads", backendPath(uploadPath), backendPath(preparePath), backendPath(inspectionPath), backendPath(startPath), backendPath(extractionPath), backendPath(confirmPath), backendPath(runNextPath), backendPath(hypothesesPath), backendPath(attemptPath)].includes(path)), `${currentScenario}: unexpected API path.`);
-      assert(uploadPosts.length === 1 && startPosts.length === 1 && confirmPosts.length === (currentScenario === "confirm-conflict" ? 2 : 1) && runNextPosts.length === 2 && attemptPosts.length === 1, `${currentScenario}: unexpected write counts.`);
-      assert(uuidV7Pattern.test(uploadPosts[0].key) && uuidV7Pattern.test(startPosts[0].key) && uuidV7Pattern.test(confirmPosts[0].key) && uuidV7Pattern.test(runNextPosts[0].key) && uuidV7Pattern.test(attemptPosts[0].key), `${currentScenario}: a write intent was not UUIDv7.`);
-      assert(new Set([uploadPosts[0].key, startPosts[0].key, confirmPosts[0].key, runNextPosts[0].key, attemptPosts[0].key]).size === 5, `${currentScenario}: independent write intents were reused.`);
+      assert(apiPaths.every(path => ["/v1/device-session", "/v1/device-session/ocr-batches", backendPath(createBatchPath), backendPath(addPagePath), backendPath(uploadPath), backendPath(preparePath), backendPath(inspectionPath), backendPath(startPath), backendPath(extractionPath), backendPath(confirmPath), backendPath(runNextPath), backendPath(hypothesesPath), backendPath(attemptPath)].includes(path)), `${currentScenario}: unexpected API path.`);
+      assert(uploadPosts.length === 1 && pagePosts.length === 1 && startPosts.length === 1 && confirmPosts.length === (currentScenario === "confirm-conflict" ? 2 : 1) && runNextPosts.length === 2 && attemptPosts.length === 1, `${currentScenario}: unexpected write counts.`);
+      assert(uuidV7Pattern.test(uploadPosts[0].key) && uuidV7Pattern.test(pagePosts[0].key) && uuidV7Pattern.test(startPosts[0].key) && uuidV7Pattern.test(confirmPosts[0].key) && uuidV7Pattern.test(runNextPosts[0].key) && uuidV7Pattern.test(attemptPosts[0].key), `${currentScenario}: a write intent was not UUIDv7.`);
+      assert(new Set([uploadPosts[0].key, pagePosts[0].key, startPosts[0].key, confirmPosts[0].key, runNextPosts[0].key, attemptPosts[0].key]).size === 6, `${currentScenario}: independent write intents were reused.`);
       if (currentScenario === "confirm-conflict") assert(confirmPosts[0].key !== confirmPosts[1].key, "confirm-conflict: explicit re-confirm did not create a new intent.");
       if (currentScenario === "success") {
-        assert(JSON.stringify(confirmPosts[0].body) === JSON.stringify({ expectedVersion: 1, confirmedItemIds: ["item-synthetic-1"], corrections: [] }), "success: confirm body was not exact.");
+        assert(JSON.stringify(uploadPosts[0].body) === JSON.stringify({ studentId: fixtureStudentId }), "success: batch ownership did not use the device-session student.");
+        assert(JSON.stringify(pagePosts[0].body) === JSON.stringify({ fileName, mimeType: "image/png", byteSize: bytes.length, sha256 }), "success: batch page upload metadata was not exact.");
+        assert(JSON.stringify(startPosts[0].body) === JSON.stringify({ guardianConfirmed: true, processingNoticeAccepted: true }), "success: recognition consent body was not exact.");
+        assert(JSON.stringify(confirmPosts[0].body) === JSON.stringify({ expectedVersion: 1, confirmedItemIds: ["item-real-1"], corrections: [] }), "success: confirm body was not exact.");
         assert(JSON.stringify(runNextPosts[0].body) === JSON.stringify({ expectedVersion: 2 }) && JSON.stringify(runNextPosts[1].body) === JSON.stringify({ expectedVersion: 4 }), "success: run-next versions were not authoritative.");
         assert(JSON.stringify(attemptPosts[0].body) === JSON.stringify({ expectedVersion: 3, probeId: "probe-1", selectedChoiceId: "choice-a" }), "success: probe body was not exact.");
       }
@@ -196,16 +224,17 @@ try {
     for (const [width, height] of [[1440, 900], [1366, 768]]) {
       const page = await browser.newPage({ viewport: { width, height } });
       await visitReview(page);
-      await page.getByRole("checkbox", { name: "我确认这一项题干" }).check();
+      await page.getByRole("checkbox", { name: "我已核对本页识别内容" }).check();
       await page.getByRole("button", { name: "确认识别内容", exact: true }).click();
       await page.locator('[data-review-state="confirmed"]').waitFor();
       await page.getByRole("button", { name: "开始找原因", exact: true }).click();
       await page.locator('[data-review-state="hypotheses"]').waitFor({ timeout: 40_000 });
-      const overflow = await page.evaluate(() => ({ horizontal: document.documentElement.scrollWidth > document.documentElement.clientWidth, marker: document.body.innerText.includes("不会保存为正式学习记录") }));
+      const overflow = await page.evaluate(() => ({ horizontal: document.documentElement.scrollWidth > document.documentElement.clientWidth, marker: document.body.innerText.includes("题目来自你上传的图片并由识别服务处理") }));
       assert(!overflow.horizontal && overflow.marker, `screenshot ${width}x${height}: overflow or boundary marker missing.`);
       await page.screenshot({ path: resolve(screenshots, `same-case-review-hypotheses-${width}x${height}.png`) });
       await page.close();
     }
+    assert(sessionPosts.length >= 1 && sessionPosts.every(post => uuidV7Pattern.test(post.key ?? "")), "Device-session bootstrap did not use UUIDv7 intents.");
   } finally { await browser.close(); }
 } finally {
   if (webServer.exitCode === null) webServer.kill();

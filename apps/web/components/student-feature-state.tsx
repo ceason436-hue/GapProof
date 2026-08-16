@@ -23,7 +23,7 @@ export function StudentFeatureState({
   return <AppShell actionHref="/diagnose" actionLabel="开始一次检查">
     <section className="today-page feature-state-page">
       <div className="title-row"><div><h1>{title}</h1><p>{description}</p></div></div>
-      <article className="state-card"><Icon name={icon}/><div><h2>{cardTitle}</h2><p>{cardDescription}</p><div className="button-row"><Link className="primary-blue" href="/diagnose">选择诊断方式</Link><Link className="ghost-link" href={secondaryHref}>{secondaryLabel}</Link></div></div></article>
+      <article className="state-card"><Icon name={icon}/><div><h2>{cardTitle}</h2><p>{cardDescription}</p><div className="button-row"><Link className="primary-blue" href="/diagnose">开始一次检查</Link><Link className="ghost-link" href={secondaryHref}>{secondaryLabel}</Link></div></div></article>
     </section>
   </AppShell>;
 }

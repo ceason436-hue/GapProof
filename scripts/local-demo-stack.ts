@@ -82,6 +82,7 @@ export function buildDemoEnvironment(
     GAPPROOF_ALLOWED_DEV_ORIGINS: discoverLocalDevOrigins().join(","),
     GAPPROOF_UPLOAD_DIR: config.uploadDirectory,
     GAPPROOF_UPLOAD_SIGNING_SECRET: signingSecret,
+    GAPPROOF_DEVICE_SESSION_SECRET: signingSecret,
   } as unknown as NodeJS.ProcessEnv;
 }
 
@@ -209,7 +210,7 @@ async function main() {
   for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, stop);
 
   try {
-    await waitForHttp(`${config.apiOrigin}/v1/students/${config.studentId}/today`, "API", (body) => body.includes('"overview"'));
+    await waitForHttp(`${config.apiOrigin}/v1/quick-checks/synthetic`, "API", (body) => body.includes('"questions"'));
     await waitForHttp(`http://127.0.0.1:${config.webPort}/student/today`, "Web", (body) => body.includes("today-page"));
     process.stdout.write(`Local Demo stack ready: http://127.0.0.1:${config.webPort}/student/today\n`);
     const lanHost = discoverLocalDevOrigins().find((origin) => origin !== "localhost" && origin !== "127.0.0.1");

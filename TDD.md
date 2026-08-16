@@ -2,15 +2,15 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.40"
+version: "0.3.41"
 status: "DRAFT_FOR_IMPLEMENTATION"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.47"
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.39"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.48"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.40"
 ---
 
 # 知隙 GapProof 技术设计文档（TDD）
@@ -1614,6 +1614,7 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 
 | Push ID | 日期 | 分支 | 状态 | 提交摘要 | 主要内容 | 验证 |
 |---|---|---|---|---|---|---|
+| PUSH-033 | 2026-08-16 | `main` | `pushed` | `feat: add student continuity and Socratic guidance` | 新增 HttpOnly 匿名设备会话、SHA-256 token 存储与学生/Case/task/asset/OCR batch 所有权；Today/上传支持未完成 OCR 批次跨刷新继续。ready guided task 经中央 API/pg-boss/Worker 调用受约束 DeepSeek 单问导师，具备去标识、幂等、版本、轮次限额、输出守卫和规则降级且不改变 Case/任务。新增任务型错题本/回顾/ready 重做、真实导航/学习设置、错误/404 与学生文案治理；不把任务历史称为完整 OCR 原题档案 | 222 fast、127 Web、69 PostgreSQL/API/Worker、双 TypeScript、Next production build、实际 migration、真实 DeepSeek tutor synthetic 全链路 smoke、7 条串行 Playwright fixture（首次使用、多图上传/核对、导师、D1/D7、demo review）与凭据/隐私/diff 检查通过；Drizzle `check` 因本地版本兼容阻断，内置浏览器 localhost URL policy blocked 不计为通过；`.env`、授权测试材料、`next-env.d.ts` 与本地 agent 文件不纳入暂存 |
 | PUSH-032 | 2026-08-16 | `main` | `pushed` | `feat: diagnose confirmed OCR evidence safely` | 新增 server-only DeepSeek 真实错因候选 adapter；真实 Case 必须同时具备 `real_alibaba_ocr` 与 `student_confirmation`，按学生修正重建最多 8 项/4000 字去标识 ContextPack，禁止回退 Fake/Mina。输出经 Schema、PII/答案/确诊措辞、重复项和至少两假设可区分性守卫；模型不写库、不评分、不直接转换 Case。OCR 启动、确认、run-next、probe、intervention、D1/D7 的 `NETWORK_UNKNOWN` 均新增只读权威恢复且不自动重放写入 | 207 fast、117 Web、50 PostgreSQL/API/Worker、27 focused、workspace TypeScript、Next production build、DeepSeek synthetic 真实 smoke（845 ms、281 tokens）、`git diff --check` 与凭据/隐私扫描通过；真实学生材料未发送 DeepSeek，授权测试材料、`.env` 与本地 agent 文件未纳入暂存 |
 | PUSH-031 | 2026-08-16 | `main` | `pushed` | `feat: connect real multi-page OCR review` | 新增有序 OCR 批次/页面迁移、幂等添加/移除/替换/启动/重试、服务端真实字节校验和阿里云教育 OCR Worker；学生端支持多选、继续添加、逐页状态/替换/移除/重试、处理同意与监护确认。真实来源写入非合成同一 Case，页面级文本强制人工核对；不存储或公开 Provider 原始响应、凭据、内部 ID 或精确置信度。真实材料诊断、DeepSeek 导师、身份恢复、错题本、计划/进步/报告和学习效果未提升 | 200 fast、112 Web、62 PostgreSQL/API/Worker、workspace 与 Web TypeScript、Next production build、`git diff --check`、迁移顺序/schema 集成、真实 OCR 产品 smoke 与凭据/隐私扫描通过；Drizzle `check` 因本地版本兼容检查未执行成功，桌面内置浏览器因 URL 安全策略未能重载 localhost，不计为通过；授权测试材料、`.env`、`next-env.d.ts` 与本地 agent 文件未纳入暂存 |
 | PUSH-030 | 2026-08-16 | `main` | `pushed` | `feat: add explicit student setup and actionable retests` | 新增版本化学生粗分档案与 `/setup` 五项明确选择，Today 未完成时只引导设置范围；ready D1/D7 通过重新读取的同一 API 响应安全打开作答，scheduled/completed 不再呈现伪按钮；顶栏移除无行为的案例/角色切换。真实 OCR、DeepSeek、计划、错题本、报告和学习效果未提升 | 196 fast、111 Web、档案 API 幂等/冲突集成、schema 集成、workspace TypeScript、Next production build、`git diff --check`、运行中 Today→/setup 浏览器核验通过；实现提交 `2fc6753` 已推送至 `origin/main` |
@@ -1648,6 +1649,11 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-026 | 2026-08-16 | `main` | `pushed` | `fix: decouple demo readiness from product copy` | Demo 栈 Web readiness 从已移除的“真实 API 模式”可见文案改为稳定 `today-page` 页面结构信号，防止产品文案治理后 90 秒误判并停止 API/Worker/Web 子进程 | root typecheck、`git diff --check`、Web 200、API Today 200 且含 overview、Demo 父进程持续存活、3000/4000 监听及生成残留精确清理通过；同轮推送后核对本地/远端 SHA 一致 |
 
 ## 27. 变更日志
+
+### v0.3.41 — 2026-08-16
+
+- 新增 `0012_device_sessions` 与匿名设备身份：opaque cookie 为 HttpOnly/SameSite=Lax，数据库只存 token SHA-256；生产启用时所有 student/Case/task/asset/OCR batch 路由按同一 student/tenant 所有权校验。未完成 OCR 批次提供设备级恢复查询。
+- 新增 `0013_socratic_tutor`、导师 contracts/repository/API/pg-boss Worker/UI：仅 ready guided task 可排队，每任务 6 轮、滚动日 12 轮、单 pending；ContextPack 去标识且输出只允许一个问题/可选提示/限定动作。Provider 失败规则降级，导师不推进 Case、不完成任务、不评分。新增真实 provider synthetic 全链路 smoke 与任务型错题本；计划/进步/事实报告仍待实现。同步 PROJECT_MASTER v0.1.48、PRD v0.1.40、DESIGN v0.2.38 与 PUSH-033。
 
 ### v0.3.40 — 2026-08-16
 

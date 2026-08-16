@@ -1,4 +1,4 @@
-import type { D1RetestTaskView, D7RetestTaskView, GuidedInterventionTaskView, TodayOverview } from "@gapproof/contracts";
+import type { D1RetestTaskView, D7RetestTaskView, GuidedInterventionTaskView, RecoverableOcrBatchView, TodayOverview } from "@gapproof/contracts";
 import Link from "next/link";
 import { AppShell } from "./app-shell";
 import { D1AttemptPanel } from "./d1-attempt-panel";
@@ -14,7 +14,11 @@ import {
   type CurrentTaskSelection,
   type RetestTaskView,
 } from "@/lib/today-adapter";
-import { fetchDemoStudentToday } from "@/lib/today-server";
+import { fetchCurrentStudentToday } from "@/lib/today-server";
+import { StudentSessionRequiredError } from "@/lib/student-session-server";
+import { StudentSessionBootstrap } from "./student-session-bootstrap";
+import { OcrBatchRecovery } from "./ocr-batch-recovery";
+import { fetchRecoverableOcrBatches } from "@/lib/ocr-recovery-server";
 
 function TaskDates({
   scheduledFor,
@@ -82,9 +86,10 @@ export function TodayOverviewPanel({ overview }: { overview: TodayOverview }) {
   </section>;
 }
 
-export function FirstUseToday() {
+export function FirstUseToday({ recoverableBatches = [] }: { recoverableBatches?: readonly RecoverableOcrBatchView[] }) {
   return <AppShell actionHref="/diagnose" actionLabel="开始第一次检查"><section className="today-page" data-first-use-today>
     <div className="title-row"><div><h1>从一次小检查开始</h1><p>上传一张或多张错题、作业图片，或先用 3 道题找到适合你的起点。</p></div></div>
+    <OcrBatchRecovery batches={recoverableBatches}/>
     <div className="onboarding-grid">
       <article className="onboarding-main"><span className="eyebrow">推荐路径</span><h2>三步完成第一次检查</h2><ol><li><span className="step-number">1</span><div><strong>选择开始方式</strong><span>上传错题，或先做 3 道快速练习题。</span></div></li><li><span className="step-number">2</span><div><strong>核对题目内容</strong><span>逐项检查题干，发现问题可以自己修改。</span></div></li><li><span className="step-number">3</span><div><strong>开始针对性练习</strong><span>完成检查后，继续今天的练习和后续巩固。</span></div></li></ol><div className="button-row"><Link className="primary-blue" href="/materials/new">上传错题或作业</Link><Link className="ghost-link" href="/diagnose/quick-check">没有材料，先做 3 道题</Link></div></article>
       <aside className="prepare-card"><h2>开始前说明</h2><ul><li>上传后由你决定是否继续，不会自动建立学习结论。</li><li>图片通过检查并由你确认后，才会发送给识别服务。</li><li>三题体验只显示本次结果，不保存为正式学习记录。</li></ul><p>请先遮盖姓名、学校和班级等不必要信息。</p></aside>
@@ -92,9 +97,10 @@ export function FirstUseToday() {
   </section></AppShell>;
 }
 
-function ProfileSetupRequired() {
+function ProfileSetupRequired({ recoverableBatches = [] }: { recoverableBatches?: readonly RecoverableOcrBatchView[] }) {
   return <AppShell actionHref="/setup" actionLabel="设置学习范围"><section className="today-page" data-profile-setup-required>
     <div className="title-row"><div><h1>先选一下学习范围</h1><p>完成这些选择后，再开始上传材料或进行学习检查。</p></div></div>
+    <OcrBatchRecovery batches={recoverableBatches}/>
     <article className="state-card"><Icon name="today"/><div><h2>让接下来的内容更贴合你的学习范围</h2><p>请确认年级、学科、学期、学习地区和目前的学习状态。它们不会被默认补全。</p><Link className="primary-blue" href="/setup">设置学习范围</Link></div></article>
   </section></AppShell>;
 }
@@ -254,12 +260,14 @@ export function TodayDashboard({
   retests,
   timeZone,
   completed,
+  recoverableBatches = [],
 }: {
   current: CurrentTaskSelection;
   overview: TodayOverview;
   retests: RetestTaskView[];
   timeZone: string;
   completed: boolean;
+  recoverableBatches?: readonly RecoverableOcrBatchView[];
 }) {
   const heading = completed
     ? "今天的任务已完成"
@@ -275,6 +283,7 @@ export function TodayDashboard({
 
   return <section className="today-page" data-live-today-dashboard>
     <div className="title-row"><div><h1>{heading}</h1><p>{summary}</p></div><TodayDateSummary overview={overview}/></div>
+    <OcrBatchRecovery batches={recoverableBatches}/>
     <div className="today-grid">
       <div className="main-column">
         <CurrentPanel current={current} timeZone={timeZone} completed={completed}/>
@@ -311,10 +320,11 @@ function LiveError({ error }: { error: unknown }) {
 
 export async function LiveToday({ selectedRetestId }: { selectedRetestId?: string } = {}) {
   try {
-    const response = await fetchDemoStudentToday();
+    const [response, recoveryResponse] = await Promise.all([fetchCurrentStudentToday(), fetchRecoverableOcrBatches()]);
+    const recoverableBatches = recoveryResponse.data.batches;
     const model = toTodayReadModel(response.data, selectedRetestId);
-    if (!model.profile.completed) return <ProfileSetupRequired/>;
-    if (!model.overview.hasStartedJourney) return <FirstUseToday/>;
+    if (!model.profile.completed) return <ProfileSetupRequired recoverableBatches={recoverableBatches}/>;
+    if (!model.overview.hasStartedJourney) return <FirstUseToday recoverableBatches={recoverableBatches}/>;
     const completed = model.taskCount === 0 && model.current.kind === "none";
     if (completed) return <AppShell actionHref="/diagnose" actionLabel="开始新的检查"><TodayDashboard
       current={model.current}
@@ -322,15 +332,17 @@ export async function LiveToday({ selectedRetestId }: { selectedRetestId?: strin
       retests={model.retests}
       timeZone={model.timeZone}
       completed
+      recoverableBatches={recoverableBatches}
     /></AppShell>;
 
     const actionLabel = model.current.kind === "selected"
       ? model.current.task.taskType === "guided_intervention" ? "完成今天的练习" : model.current.task.taskType === "d1_retest" ? "完成明日复习" : "完成巩固练习"
       : model.current.kind === "contract_error" ? "当前任务不可用" : "暂无当前任务";
     return <AppShell actionDisabled actionLabel={actionLabel}>
-      <TodayDashboard current={model.current} overview={model.overview} retests={model.retests} timeZone={model.timeZone} completed={false}/>
+      <TodayDashboard current={model.current} overview={model.overview} retests={model.retests} timeZone={model.timeZone} completed={false} recoverableBatches={recoverableBatches}/>
     </AppShell>;
   } catch (error) {
+    if (error instanceof StudentSessionRequiredError) return <StudentSessionBootstrap/>;
     return <LiveError error={error}/>;
   }
 }

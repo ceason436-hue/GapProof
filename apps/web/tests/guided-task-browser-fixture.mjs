@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { handleDeviceSessionFixture, installDeviceSessionCookie } from "./device-session-browser-fixture.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const nextEnvPath = resolve(webRoot, "next-env.d.ts");
@@ -28,6 +29,7 @@ const task = {
 };
 const today = {
   studentId, timeZone: "Asia/Shanghai", currentTaskId: taskId, tasks: [task],
+  profile: { studentId, grade: "8", subject: "english", term: "first_term", region: "shanghai", learningState: "steady", timeZone: "Asia/Shanghai", version: 1, completed: true },
   overview: {
     hasStartedJourney: true,
     activityDays: Array.from({ length: 7 }, (_, index) => ({ localDate: `2026-08-${String(10 + index).padStart(2, "0")}`, completedTaskCount: 0 })),
@@ -56,7 +58,9 @@ let scenario = "success";
 let caseReads = 0;
 let caseReadFailureMode = null;
 const posts = [];
+const tutorPosts = [];
 const fixtureServer = createServer(async (request, response) => {
+  if (handleDeviceSessionFixture(request, response, studentId)) return;
   if (request.method === "GET" && request.url === `/v1/students/${studentId}/today`) {
     response.writeHead(200, { "Content-Type": "application/json" });
     response.end(JSON.stringify(envelope(today)));
@@ -89,6 +93,23 @@ const fixtureServer = createServer(async (request, response) => {
     response.end(JSON.stringify(envelope(completion(body, body.expectedVersion + 1))));
     return;
   }
+  if (request.method === "POST" && request.url === `/v1/tasks/${taskId}/tutor-turns`) {
+    const body = await readJsonBody(request);
+    tutorPosts.push({ body, idempotencyKey: request.headers["idempotency-key"] });
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify(envelope({
+      turnId: "0198b111-1111-7000-8000-000000000071",
+      taskId,
+      status: "succeeded",
+      response: {
+        question: "你能先指出这一步里最关键的线索吗？",
+        hint: "只看当前步骤，不需要直接写出答案。",
+        nextAction: "reflect",
+      },
+      retryable: false,
+    })));
+    return;
+  }
   response.writeHead(404, { "Content-Type": "application/json" });
   response.end(JSON.stringify({ error: { code: "RESOURCE_NOT_FOUND", message: "Fixture route not found.", retryable: false }, requestId: "guided-not-found", traceId: "guided-not-found" }));
 });
@@ -117,8 +138,9 @@ try {
   const browser = await chromium.launch({ channel: "msedge", headless: true });
   try {
     for (const currentScenario of ["success", "conflict", "network-unknown", "initial-get-failure", "pre-submit-get-failure", "conflict-get-failure", "case-not-found"]) {
-      scenario = currentScenario; caseReads = 0; caseReadFailureMode = currentScenario === "initial-get-failure" ? "network" : currentScenario === "case-not-found" ? "not_found" : null; posts.length = 0;
+      scenario = currentScenario; caseReads = 0; caseReadFailureMode = currentScenario === "initial-get-failure" ? "network" : currentScenario === "case-not-found" ? "not_found" : null; posts.length = 0; tutorPosts.length = 0;
       const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+      await installDeviceSessionCookie(page, webOrigin);
       await page.addInitScript(() => {
         window.__guidedUuidCalls = 0;
         const originalGetRandomValues = crypto.getRandomValues.bind(crypto);
@@ -128,6 +150,19 @@ try {
         });
       });
       await page.goto(`${webOrigin}/student/today?source=api&fixture=${currentScenario}`, { waitUntil: "networkidle" });
+      if (currentScenario === "success") {
+        await page.getByRole("heading", { name: "把你的思路说出来" }).waitFor();
+        const tutorButton = page.getByRole("button", { name: "请导师引导我" });
+        assert(await tutorButton.isDisabled(), "success: tutor submit should be disabled before learner input.");
+        await page.getByLabel("写下你的思路").fill("我注意到了这一步的时态线索。");
+        assert(await tutorButton.isEnabled(), "success: tutor submit did not become actionable after learner input.");
+        await tutorButton.click();
+        await page.getByText("你能先指出这一步里最关键的线索吗？", { exact: true }).waitFor();
+        assert(tutorPosts.length === 1, `success: expected one tutor POST, observed ${tutorPosts.length}.`);
+        assert(tutorPosts[0].body.expectedVersion === 4 && tutorPosts[0].body.stepId === stepIds[0], "success: tutor POST did not use current Case version and selected step.");
+        assert(tutorPosts[0].body.learnerText === "我注意到了这一步的时态线索。", "success: tutor POST changed learner input.");
+        assert(uuidV7Pattern.test(tutorPosts[0].idempotencyKey ?? ""), "success: tutor Idempotency-Key was not UUIDv7.");
+      }
       if (currentScenario === "initial-get-failure" || currentScenario === "case-not-found") {
         await page.locator('[data-guided-task-state="case_error"]').waitFor({ timeout: 10_000 });
         assert(posts.length === 0, `${currentScenario}: Case GET failure caused a POST.`);

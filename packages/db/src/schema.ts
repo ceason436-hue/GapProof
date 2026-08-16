@@ -89,6 +89,19 @@ export const ocrBatchStatus = appSchema.enum("ocr_batch_status", [
   "failed",
 ]);
 
+export const tutorSessionStatus = appSchema.enum("tutor_session_status", [
+  "active",
+  "closed",
+]);
+
+export const tutorTurnStatus = appSchema.enum("tutor_turn_status", [
+  "queued",
+  "running",
+  "succeeded",
+  "fallback",
+  "failed",
+]);
+
 export const students = appSchema.table(
   "students",
   {
@@ -138,6 +151,28 @@ export const studentProfileRevisions = appSchema.table(
     uniqueIndex("student_profile_revisions_student_version_uidx").on(table.studentId, table.version),
     check("student_profile_revisions_version_positive", sql`${table.version} > 0`),
     check("student_profile_revisions_hash_lower_hex", sql`${table.requestHash} ~ '^[0-9a-f]{64}$'`),
+  ],
+);
+
+export const deviceSessions = appSchema.table(
+  "device_sessions",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    studentId: uuid("student_id").notNull().references(() => students.id),
+    tokenHash: char("token_hash", { length: 64 }).notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("device_sessions_token_hash_uidx").on(table.tokenHash),
+    uniqueIndex("device_sessions_idempotency_key_uidx").on(table.idempotencyKey),
+    index("device_sessions_student_expires_idx").on(table.studentId, table.expiresAt),
+    check("device_sessions_token_hash_lower_hex", sql`${table.tokenHash} ~ '^[0-9a-f]{64}$'`),
+    check("device_sessions_expiry_after_creation", sql`${table.expiresAt} > ${table.createdAt}`),
   ],
 );
 
@@ -367,6 +402,58 @@ export const tasks = appSchema.table(
   ],
 );
 
+export const tutorSessions = appSchema.table(
+  "tutor_sessions",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    studentId: uuid("student_id").notNull().references(() => students.id),
+    caseId: uuid("case_id").notNull().references(() => cases.id),
+    taskId: uuid("task_id").notNull().references(() => tasks.id),
+    status: tutorSessionStatus("status").notNull().default("active"),
+    policyVersion: text("policy_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("tutor_sessions_task_uidx").on(table.taskId),
+    index("tutor_sessions_student_updated_idx").on(table.studentId, table.updatedAt),
+  ],
+);
+
+export const tutorTurns = appSchema.table(
+  "tutor_turns",
+  {
+    id: uuid("id").primaryKey(),
+    sessionId: uuid("session_id").notNull().references(() => tutorSessions.id),
+    studentId: uuid("student_id").notNull().references(() => students.id),
+    taskId: uuid("task_id").notNull().references(() => tasks.id),
+    idempotencyKey: text("idempotency_key").notNull(),
+    requestHash: char("request_hash", { length: 64 }).notNull(),
+    status: tutorTurnStatus("status").notNull().default("queued"),
+    context: jsonb("context").$type<Record<string, unknown>>().notNull(),
+    response: jsonb("response").$type<Record<string, unknown> | null>(),
+    provider: text("provider"),
+    model: text("model"),
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
+    errorCode: text("error_code"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("tutor_turns_student_key_uidx").on(table.studentId, table.idempotencyKey),
+    uniqueIndex("tutor_turns_one_outstanding_uidx").on(table.sessionId)
+      .where(sql`${table.status} in ('queued', 'running')`),
+    index("tutor_turns_session_created_idx").on(table.sessionId, table.createdAt),
+    index("tutor_turns_student_created_idx").on(table.studentId, table.createdAt),
+    check("tutor_turns_request_hash_lower_hex", sql`${table.requestHash} ~ '^[0-9a-f]{64}$'`),
+    check("tutor_turns_input_tokens_nonnegative", sql`${table.inputTokens} is null or ${table.inputTokens} >= 0`),
+    check("tutor_turns_output_tokens_nonnegative", sql`${table.outputTokens} is null or ${table.outputTokens} >= 0`),
+  ],
+);
+
 export const demoClocks = appSchema.table(
   "demo_clocks",
   {
@@ -395,6 +482,7 @@ export const demoClocks = appSchema.table(
 export type StudentRow = typeof students.$inferSelect;
 export type NewStudentRow = typeof students.$inferInsert;
 export type StudentProfileRevisionRow = typeof studentProfileRevisions.$inferSelect;
+export type DeviceSessionRow = typeof deviceSessions.$inferSelect;
 export type CaseRow = typeof cases.$inferSelect;
 export type NewCaseRow = typeof cases.$inferInsert;
 export type SourceAssetRow = typeof sourceAssets.$inferSelect;
@@ -409,4 +497,6 @@ export type NewLearningEvidenceEventRow =
   typeof learningEvidenceEvents.$inferInsert;
 export type TaskRow = typeof tasks.$inferSelect;
 export type NewTaskRow = typeof tasks.$inferInsert;
+export type TutorSessionRow = typeof tutorSessions.$inferSelect;
+export type TutorTurnRow = typeof tutorTurns.$inferSelect;
 export type DemoClockRow = typeof demoClocks.$inferSelect;

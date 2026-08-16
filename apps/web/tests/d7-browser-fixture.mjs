@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { handleDeviceSessionFixture, installDeviceSessionCookie } from "./device-session-browser-fixture.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const nextEnvPath = resolve(webRoot, "next-env.d.ts");
@@ -46,6 +47,7 @@ const today = {
   timeZone: "Asia/Shanghai",
   currentTaskId: taskId,
   tasks: [task],
+  profile: { studentId, grade: "8", subject: "english", term: "first_term", region: "shanghai", learningState: "steady", timeZone: "Asia/Shanghai", version: 1, completed: true },
   overview: {
     hasStartedJourney: true,
     activityDays: Array.from({ length: 7 }, (_, index) => ({
@@ -84,6 +86,7 @@ let scenario = "success";
 let caseReads = 0;
 const posts = [];
 const fixtureServer = createServer(async (request, response) => {
+  if (handleDeviceSessionFixture(request, response, studentId)) return;
   if (request.method === "GET" && request.url === `/v1/students/${studentId}/today`) {
     response.writeHead(200, { "Content-Type": "application/json" });
     response.end(JSON.stringify(envelope(today, `${scenario}-today`)));
@@ -163,6 +166,7 @@ try {
       caseReads = 0;
       posts.length = 0;
       const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+      await installDeviceSessionCookie(page, webOrigin);
       const browserPostPaths = [];
       page.on("request", request => { if (request.method() === "POST") browserPostPaths.push(new URL(request.url()).pathname); });
       await page.goto(`${webOrigin}/student/today?source=api&fixture=${currentScenario}`, { waitUntil: "networkidle" });
@@ -198,10 +202,9 @@ try {
         assert(JSON.stringify(posts[0].body) === JSON.stringify(posts[1].body), "network-unknown: retry changed the body.");
         const selected = page.locator(`input[value="${selectedChoiceId}"]`);
         const other = page.locator(`input[value="${otherChoiceId}"]`);
-        const submit = page.getByRole("button", { name: "请先确认任务状态" });
-        assert(await selected.isDisabled() && await other.isDisabled() && await submit.isDisabled(), "network-unknown: choices/submission were not locked.");
+        assert(await selected.isDisabled() && await other.isDisabled(), "network-unknown: choices were not locked.");
+        assert(await page.getByRole("button", { name: "重新读取今日状态" }).count() === 1, "network-unknown: refresh recovery action was missing.");
         await other.dispatchEvent("change");
-        await submit.dispatchEvent("click");
         await page.waitForTimeout(300);
         assert(await selected.isChecked(), "network-unknown: locked choice changed.");
         assert(posts.length === 2, "network-unknown: lock allowed a third POST.");

@@ -170,6 +170,21 @@ describe("FirstUseToday", () => {
     expect(html).not.toContain("服务端返回空任务列表");
     expect(html).not.toMatch(/合成 Demo|真实 API|Mock|Case/);
   });
+
+  it("surfaces an unfinished recognition batch after refresh", () => {
+    const html = renderToStaticMarkup(createElement(FirstUseToday, { recoverableBatches: [{
+      batchId: "0198c111-1111-7000-8000-000000000001",
+      caseId: "0198c111-1111-7000-8000-000000000002",
+      status: "processing" as const,
+      pageCount: 2,
+      resumeKind: "wait" as const,
+      updatedAt: "2026-08-16T08:00:00.000Z",
+    }] }));
+    expect(html).toContain("材料正在识别");
+    expect(html).toContain("查看识别进度");
+    expect(html).toContain("2 张图片");
+    expect(html).not.toContain("识别已经完成");
+  });
 });
 
 describe("Today frozen dashboard structure", () => {

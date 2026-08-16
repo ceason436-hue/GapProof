@@ -1,5 +1,5 @@
 import { StudentFeatureState } from "@/components/student-feature-state";
 
 export default function ProgressPage() {
-  return <StudentFeatureState title="每次完成，都会留下新的学习足迹" description="积累更多练习后，这里会展示你的变化。" cardTitle="暂时还没有学习趋势" cardDescription="先从“今日”完成一次任务。体验内容不会保存为正式学习记录，也不会被当作真实学习效果。" icon="progress" secondaryLabel="查看今日任务"/>;
+  return <StudentFeatureState title="我的进步" description="完成的正式练习会在这里留下可回看的记录。" cardTitle="还没有可以对比的记录" cardDescription="先从“今日”完成一次正式任务。有两次以上同类练习后，这里才会展示基于作答记录的变化。" icon="progress" secondaryLabel="查看今日任务"/>;
 }

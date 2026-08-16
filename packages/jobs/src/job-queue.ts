@@ -4,6 +4,7 @@ import type {
   RunNextJobData,
   SourceAssetQualityCheckJobData,
   RealOcrBatchJobData,
+  TutorTurnJobData,
 } from "@gapproof/contracts";
 import {
   apiIdempotencyRecords,
@@ -27,6 +28,7 @@ export const RETEST_DUE_QUEUE = "retest.due";
 export const REPLAN_QUEUE = "case.replan";
 export const SOURCE_ASSET_QUALITY_CHECK_QUEUE = "source_asset.quality_check";
 export const REAL_OCR_BATCH_QUEUE = "ocr.real_batch";
+export const TUTOR_TURN_QUEUE = "tutor.turn";
 export const SYNTHETIC_PARSE_ASSET_ID = "asset-synthetic-paper-1";
 
 export interface EnqueueRunNextInput extends RunNextJobData {
@@ -58,6 +60,7 @@ export class JobQueue {
     await this.boss.createQueue(REPLAN_QUEUE);
     await this.boss.createQueue(SOURCE_ASSET_QUALITY_CHECK_QUEUE);
     await this.boss.createQueue(REAL_OCR_BATCH_QUEUE);
+    await this.boss.createQueue(TUTOR_TURN_QUEUE);
   }
 
   async stop(): Promise<void> {
@@ -148,6 +151,17 @@ export class JobQueue {
   async stopRealOcrBatchWorker(workerId: string): Promise<void> {
     await this.boss.offWork(REAL_OCR_BATCH_QUEUE, { id: workerId, wait: true });
   }
+
+  async workTutorTurn(handler: (job: Job<TutorTurnJobData>) => Promise<object>): Promise<string> {
+    return this.boss.work<TutorTurnJobData, object>(TUTOR_TURN_QUEUE, { batchSize: 1, pollingIntervalSeconds: 1 }, async ([job]) => {
+      if (job === undefined) throw new Error("pg-boss delivered an empty tutor turn batch.");
+      return handler(job);
+    });
+  }
+
+  async stopTutorTurnWorker(workerId: string): Promise<void> {
+    await this.boss.offWork(TUTOR_TURN_QUEUE, { id: workerId, wait: true });
+  }
 }
 
 export function createJobQueue(databaseUrl: string): JobQueue {
@@ -227,6 +241,18 @@ export async function enqueueRealOcrBatchTransactional(
     id: input.jobId, retryLimit: 0, db: fromDrizzle(database, sql),
   });
   if (jobId === null) throw new Error("The real OCR batch job was not queued.");
+  return jobId;
+}
+
+export async function enqueueTutorTurn(queue: JobQueue, input: TutorTurnJobData): Promise<string> {
+  const jobId = await queue.boss.send(TUTOR_TURN_QUEUE, input, {
+    id: input.turnId,
+    retryLimit: 1,
+    retryDelay: 1,
+    retryBackoff: true,
+    retryDelayMax: 5,
+  });
+  if (jobId === null) throw new Error("The tutor turn job was not queued.");
   return jobId;
 }
 

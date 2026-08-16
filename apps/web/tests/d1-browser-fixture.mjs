@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { handleDeviceSessionFixture, installDeviceSessionCookie } from "./device-session-browser-fixture.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const nextEnvPath = resolve(webRoot, "next-env.d.ts");
@@ -49,6 +50,7 @@ const today = {
   timeZone: "Asia/Shanghai",
   currentTaskId: taskId,
   tasks: [task],
+  profile: { studentId, grade: "8", subject: "english", term: "first_term", region: "shanghai", learningState: "steady", timeZone: "Asia/Shanghai", version: 1, completed: true },
   overview: {
     hasStartedJourney: true,
     activityDays: Array.from({ length: 7 }, (_, index) => ({
@@ -106,6 +108,7 @@ let caseReads = 0;
 const posts = [];
 
 const fixtureServer = createServer(async (request, response) => {
+  if (handleDeviceSessionFixture(request, response, studentId)) return;
   if (request.method === "GET" && request.url === `/v1/students/${studentId}/today`) {
     response.writeHead(200, { "Content-Type": "application/json" });
     response.end(JSON.stringify(envelope(today, `${scenario}-today`)));
@@ -205,6 +208,7 @@ try {
       caseReads = 0;
       posts.length = 0;
       const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+      await installDeviceSessionCookie(page, webOrigin);
       const browserPostPaths = [];
       page.on("request", request => {
         if (request.method() === "POST") browserPostPaths.push(new URL(request.url()).pathname);
@@ -250,10 +254,9 @@ try {
         assert(uuidV7Pattern.test(posts[0].idempotencyKey ?? ""), "Unknown-result Idempotency-Key is not UUIDv7.");
         const selected = page.locator(`input[value="${selectedChoiceId}"]`);
         const other = page.locator(`input[value="${otherChoiceId}"]`);
-        const submit = page.getByRole("button", { name: "请先确认任务状态" });
-        assert(await selected.isDisabled() && await other.isDisabled() && await submit.isDisabled(), "Unknown result did not lock choice editing and submission.");
+        assert(await selected.isDisabled() && await other.isDisabled(), "Unknown result did not lock choice editing.");
+        assert(await page.getByRole("button", { name: "重新读取今日状态" }).count() === 1, "Unknown result did not provide the refresh recovery action.");
         await other.dispatchEvent("change");
-        await submit.dispatchEvent("click");
         await page.waitForTimeout(300);
         assert(await selected.isChecked(), "Unknown-result lock allowed the selected choice to change.");
         assert(posts.length === 2, "Unknown-result lock allowed a third POST.");

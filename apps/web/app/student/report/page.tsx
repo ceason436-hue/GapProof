@@ -1,5 +1,5 @@
 import { StudentFeatureState } from "@/components/student-feature-state";
 
 export default function ReportPage() {
-  return <StudentFeatureState title="报告功能暂未开放" description="完成检查后还需要积累足够的学习记录，才能形成报告。" cardTitle="当前还没有学习报告" cardDescription="你可以先完成今日任务。体验内容不会生成正式报告，也不代表真实学习效果。" icon="report"/>;
+  return <StudentFeatureState title="学习报告" description="报告只汇总你已经确认并完成的学习记录。" cardTitle="还没有足够的记录生成报告" cardDescription="先完成一次正式检查和后续任务。记录足够后，这里会展示做过的内容、仍需复习的地方和下一步安排。" icon="report"/>;
 }

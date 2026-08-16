@@ -31,6 +31,7 @@ import {
   cases,
   createDatabase,
   demoClocks,
+  deviceSessions,
   eq,
   findCurrentActionableTaskId,
   learningEvidenceEvents,
@@ -290,6 +291,7 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     await database.db.delete(apiIdempotencyRecords);
     await database.db.delete(cases);
     await database.db.delete(studentProfileRevisions);
+    await database.db.delete(deviceSessions);
     await database.db.delete(students);
 
     await queue.start();
