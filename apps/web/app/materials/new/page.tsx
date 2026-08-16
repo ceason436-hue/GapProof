@@ -3,8 +3,10 @@ import { AppShell } from "@/components/app-shell";
 import { Icon } from "@/components/icons";
 import Link from "next/link";
 import { parseApiOrigin, WebConfigurationError } from "@/lib/runtime-config";
-import { getCurrentStudentSession, StudentSessionRequiredError } from "@/lib/student-session-server";
+import { StudentSessionRequiredError } from "@/lib/student-session-server";
 import { StudentSessionBootstrap } from "@/components/student-session-bootstrap";
+import { ProfileSetupRequired } from "@/components/live-today";
+import { getCurrentStudentProfile } from "@/lib/student-profile-server";
 import { fetchRecoverableOcrBatches } from "@/lib/ocr-recovery-server";
 import { apiServerGet } from "@/lib/api-server";
 import { RealOcrBatchViewSchema } from "@gapproof/contracts";
@@ -35,7 +37,8 @@ type PageProps = { searchParams: Promise<{ batch?: string }> };
 export default async function MaterialsNewPage({ searchParams }: PageProps) {
   try {
     parseApiOrigin(process.env.GAPPROOF_API_ORIGIN);
-    const { session, cookieHeader } = await getCurrentStudentSession();
+    const { session, cookieHeader, profile } = await getCurrentStudentProfile();
+    if (!profile.completed) return <ProfileSetupRequired profile={profile}/>;
     const { batch: requestedBatchId } = await searchParams;
     const recoverable = (await fetchRecoverableOcrBatches()).data.batches;
     const selectedBatch = recoverable.find(batch => batch.batchId === requestedBatchId);

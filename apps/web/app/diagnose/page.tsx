@@ -2,9 +2,16 @@ import Link from "next/link";
 
 import { AppShell } from "@/components/app-shell";
 import { Icon } from "@/components/icons";
+import { ProfileSetupRequired } from "@/components/live-today";
+import { StudentSessionBootstrap } from "@/components/student-session-bootstrap";
+import { getCurrentStudentProfile } from "@/lib/student-profile-server";
+import { StudentSessionRequiredError } from "@/lib/student-session-server";
 
-export default function DiagnosePage() {
-  return <AppShell actionHref="/materials/new" actionLabel="上传学习材料">
+export default async function DiagnosePage() {
+  try {
+    const { profile } = await getCurrentStudentProfile();
+    if (!profile.completed) return <ProfileSetupRequired profile={profile}/>;
+    return <AppShell actionHref="/materials/new" actionLabel="上传学习材料">
     <section className="today-page diagnose-page">
       <div className="title-row"><div><h1>选择一种方式开始检查</h1><p>有错题就上传；手边没有材料，也可以先做 3 道练习题看看从哪里开始。</p></div></div>
       <div className="diagnose-entry-grid">
@@ -13,5 +20,9 @@ export default function DiagnosePage() {
       </div>
       <p className="synthetic-boundary-note">快速检查使用体验题，结果不会写入学习记录；上传自己的材料后，你需要先核对识别内容。</p>
     </section>
-  </AppShell>;
+    </AppShell>;
+  } catch (error) {
+    if (error instanceof StudentSessionRequiredError) return <StudentSessionBootstrap/>;
+    throw error;
+  }
 }
