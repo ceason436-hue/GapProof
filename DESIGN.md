@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.62"
+version: "0.2.63"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "PUSH-057 已发布：学习范围保存网络未知时从 Today 读取最新设置；生产配置边界不改变，完整浏览器/移动端/真实学生验收仍 deferred"
+current_design_stage: "PUSH-058 已发布：上传、导师与引导任务未知写入提供学生可操作恢复；完整浏览器/移动端/真实学生验收仍 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -1782,6 +1782,12 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 ---
 
 ## 22. 版本记录
+
+### v0.2.63 — 2026-08-16
+
+- 多图队列的添加、上传、检查和移除若结果未知，锁定对应图片的重复操作并显示“读取最新状态”、返回材料页和返回今日入口；只有权威状态确认未完成后才允许学生重新操作。
+- 导师首次空会话恢复为可输入状态；上一轮仍待处理或轮询超时时锁定输入，要求先读取最新状态。引导任务完成提交未知时也先读取任务状态，不再只把学生送回 Today 猜测结果。
+- 比赛提交前暂停新增浏览器、视觉、移动端和真实学生验收；本轮实现不代表这些体验已验收，也不代表 OCR 准确率、真实个性化或学习效果。
 
 ### v0.2.44 — 2026-08-16
 
