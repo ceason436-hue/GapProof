@@ -139,7 +139,7 @@ webServer.stdout.on("data", chunk => { serverOutput += chunk; }); webServer.stde
 const webServerExit = new Promise(resolveExit => webServer.once("exit", resolveExit));
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
 const reset = currentScenario => { scenario = currentScenario; extractionReads = 0; hypothesesReads = 0; apiPaths.length = 0; uploadPosts.length = 0; pagePosts.length = 0; puts.length = 0; preparePosts.length = 0; startPosts.length = 0; confirmPosts.length = 0; runNextPosts.length = 0; attemptPosts.length = 0; };
-const choose = async page => { const chooserPromise = page.waitForEvent("filechooser"); await page.locator('label[for="source-upload-input"]').click(); const chooser = await chooserPromise; await chooser.setFiles({ name: fileName, mimeType: "image/png", buffer: bytes }); };
+const choose = async page => { const chooserPromise = page.waitForEvent("filechooser"); await page.getByRole("button", { name: /选择图片|继续添加图片/ }).click(); const chooser = await chooserPromise; await chooser.setFiles({ name: fileName, mimeType: "image/png", buffer: bytes }); };
 
 const visitReview = async page => {
   await page.goto(`${webOrigin}/materials/new`, { waitUntil: "networkidle" });
@@ -171,8 +171,9 @@ try {
       reset(currentScenario);
       const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
       await visitReview(page);
-      const prompt = page.locator(".case-review-item textarea");
-      assert(await prompt.count() === 1 && await page.getByText("本页识别内容", { exact: true }).count() === 1, `${currentScenario}: extraction prompt was not accessible.`);
+      const prompt = page.getByRole("textbox", { name: "本页识别内容" });
+      const learnerAnswer = page.getByRole("textbox", { name: "你当时的作答（选填）" });
+      assert(await prompt.count() === 1 && await learnerAnswer.count() === 1, `${currentScenario}: extraction confirmation fields were not accessible.`);
       const extractionText = await page.locator(".case-review-panel").innerText();
       assert(!extractionText.includes("学生答案") && !extractionText.includes("置信度"), `${currentScenario}: student answer or precise confidence leaked.`);
       await page.getByRole("checkbox", { name: "我已核对本页识别内容" }).check();

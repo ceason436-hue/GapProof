@@ -14,6 +14,7 @@ export * from "./task-repository.ts";
 export * from "./student-profile-repository.ts";
 export * from "./today-overview-repository.ts";
 export * from "./progress-report-repository.ts";
+export * from "./question-archive-repository.ts";
 export * from "./tutor-repository.ts";
 export * from "./device-session-repository.ts";
 export { and, eq, sql } from "drizzle-orm";

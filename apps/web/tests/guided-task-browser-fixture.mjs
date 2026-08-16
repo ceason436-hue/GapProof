@@ -154,7 +154,7 @@ try {
         await page.getByRole("heading", { name: "把你的思路说出来" }).waitFor();
         const tutorButton = page.getByRole("button", { name: "请导师引导我" });
         assert(await tutorButton.isDisabled(), "success: tutor submit should be disabled before learner input.");
-        await page.getByLabel("写下你的思路").fill("我注意到了这一步的时态线索。");
+        await page.getByLabel("写下你对当前步骤的思路").fill("我注意到了这一步的时态线索。");
         assert(await tutorButton.isEnabled(), "success: tutor submit did not become actionable after learner input.");
         await tutorButton.click();
         await page.getByText("你能先指出这一步里最关键的线索吗？", { exact: true }).waitFor();

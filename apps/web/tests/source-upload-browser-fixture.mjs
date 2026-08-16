@@ -256,7 +256,7 @@ const assert = (condition, message) => {
 const uuidV7Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const choose = async page => {
   const chooserPromise = page.waitForEvent("filechooser");
-  await page.locator('label[for="source-upload-input"]').click();
+  await page.getByRole("button", { name: /选择图片|继续添加图片/ }).click();
   const chooser = await chooserPromise;
   await chooser.setFiles({ name: fileName, mimeType: "image/png", buffer: bytes });
 };
@@ -467,7 +467,7 @@ try {
       const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
       await page.goto(`${webOrigin}/materials/new`, { waitUntil: "networkidle" });
       const chooserPromise = page.waitForEvent("filechooser");
-      await page.locator('label[for="source-upload-input"]').click();
+      await page.getByRole("button", { name: /选择图片|继续添加图片/ }).click();
       const chooser = await chooserPromise;
       await chooser.setFiles(invalid);
       await page.locator('[data-page-status="failed"]').waitFor();

@@ -109,6 +109,7 @@ import {
   type DeletedCaseSourceAssetsView,
   StudentProgressViewSchema,
   StudentFactReportsViewSchema,
+  QuestionArchiveViewSchema,
 } from "@gapproof/contracts";
 import {
   advanceDemoClock,
@@ -164,6 +165,7 @@ import {
   scheduleCaseSourceAssetRetention,
   markSourceAssetDeleted,
   findStudentProgressAndReports,
+  findStudentQuestionArchive,
 } from "@gapproof/db";
 import {
   type Clock,
@@ -2050,6 +2052,27 @@ export async function buildApi(options: BuildApiOptions) {
         timeZone: requireValidStudentTimeZone(student.timezone),
       });
       return success(request, projection.progress);
+    },
+  );
+
+  api.get<{ Params: StudentIdParams }>(
+    "/v1/students/:studentId/question-archive",
+    {
+      schema: {
+        params: StudentIdParamsSchema,
+        response: { 200: apiResponseSchema(QuestionArchiveViewSchema), "4xx": ApiErrorResponseSchema, 500: ApiErrorResponseSchema },
+      },
+    },
+    async (request) => {
+      const student = await findStudentById(options.database, request.params.studentId);
+      if (student === undefined) throw new ResourceNotFoundError("Student", request.params.studentId);
+      return success(request, {
+        timeZone: requireValidStudentTimeZone(student.timezone),
+        items: await findStudentQuestionArchive(options.database, {
+          studentId: student.id,
+          tenantId: student.tenantId,
+        }),
+      });
     },
   );
 

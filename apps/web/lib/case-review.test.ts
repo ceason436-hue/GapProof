@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ApiClientError } from "./api-client";
 import {
   attemptPath,
+  buildExtractionCorrections,
   caseOriginalImagesPath,
   confirmExtractionPath,
   createConfirmExtractionIntent,
@@ -42,5 +43,17 @@ describe("same Case recognition review client", () => {
     expect(reviewErrorMessage(notFound, "fallback")).toContain("返回今日页");
     expect(reviewErrorMessage(notFound, "fallback")).not.toMatch(/assetId|caseId|jobId|answer|confidence|objectKey/i);
     expect(reviewErrorMessage(notFound, "fallback")).not.toMatch(/Case|服务端|请求编号/);
+  });
+
+  it("stores an optional student answer in the same confirmation intent", () => {
+    expect(buildExtractionCorrections(
+      [{ itemId: "item-1", prompt: "OCR text" }],
+      { "item-1": "Corrected text" },
+      { "item-1": "  my original answer  " },
+    )).toEqual([
+      { itemId: "item-1", field: "prompt", value: "Corrected text" },
+      { itemId: "item-1", field: "student_answer", value: "my original answer" },
+    ]);
+    expect(buildExtractionCorrections([{ itemId: "item-1", prompt: "OCR text" }], {}, { "item-1": "   " })).toEqual([]);
   });
 });

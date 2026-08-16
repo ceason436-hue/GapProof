@@ -13,6 +13,7 @@ import {
   apiErrorCode,
   confirmExtraction,
   createConfirmExtractionIntent,
+  buildExtractionCorrections,
   createProbeIntent,
   createRunNextIntent,
   deleteCaseOriginalImages,
@@ -143,6 +144,7 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
   const [message, setMessage] = useState(initialMessage);
   const [extraction, setExtraction] = useState<ExtractionView | null>(null);
   const [promptValues, setPromptValues] = useState<Record<string, string>>({});
+  const [answerValues, setAnswerValues] = useState<Record<string, string>>({});
   const [confirmedItemIds, setConfirmedItemIds] = useState<string[]>([]);
   const [hypotheses, setHypotheses] = useState<HypothesesView | null>(null);
   const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
@@ -256,9 +258,9 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
     };
   }, [caseId]);
 
-  const corrections = useMemo(() => extraction?.items
-    .filter(item => promptValues[item.itemId] !== item.prompt)
-    .map(item => ({ itemId: item.itemId, field: "prompt" as const, value: promptValues[item.itemId] ?? item.prompt })) ?? [], [extraction, promptValues]);
+  const corrections = useMemo(() => extraction
+    ? buildExtractionCorrections(extraction.items, promptValues, answerValues)
+    : [], [answerValues, extraction, promptValues]);
   const allConfirmed = Boolean(extraction?.items.length) && extraction?.items.every(item => confirmedItemIds.includes(item.itemId));
   const promptsValid = Boolean(extraction?.items.length) && extraction?.items.every(item => (promptValues[item.itemId] ?? item.prompt).trim().length > 0);
   const controlsLocked = ["confirming", "confirm_unknown", "run_next", "run_next_unknown", "probe_submitting", "probe_unknown", "intervention_unknown", "intervention_accepted"].includes(state);
@@ -445,7 +447,8 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
               const checked = confirmedItemIds.includes(item.itemId);
               return <article className="case-review-item" key={item.itemId}>
                 <label htmlFor={`prompt-${item.itemId}`}>{realExtraction ? "本页识别内容" : "题干"}</label>
-                <textarea id={`prompt-${item.itemId}`} value={promptValues[item.itemId] ?? item.prompt} onChange={event => setPromptValues(previous => ({ ...previous, [item.itemId]: event.currentTarget.value }))} disabled={controlsLocked} rows={3}/>
+                <textarea id={`prompt-${item.itemId}`} value={promptValues[item.itemId] ?? item.prompt} onChange={event => { const value = event.currentTarget.value; setPromptValues(previous => ({ ...previous, [item.itemId]: value })); }} disabled={controlsLocked} rows={3}/>
+                {realExtraction ? <><label htmlFor={`answer-${item.itemId}`}>你当时的作答（选填）</label><textarea id={`answer-${item.itemId}`} value={answerValues[item.itemId] ?? ""} onChange={event => { const value = event.currentTarget.value; setAnswerValues(previous => ({ ...previous, [item.itemId]: value })); }} disabled={controlsLocked} rows={2} placeholder="如果图片里没有清楚识别出你的作答，可以在这里补充"/></> : null}
                 <label className="case-review-confirm-item"><input type="checkbox" checked={checked} onChange={event => { const nextChecked = event.currentTarget.checked; setConfirmedItemIds(previous => nextChecked ? [...previous, item.itemId] : previous.filter(id => id !== item.itemId)); }} disabled={controlsLocked}/><span>{realExtraction ? "我已核对本页识别内容" : "我确认这一项题干"}</span></label>
               </article>;
             })}

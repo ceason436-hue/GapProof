@@ -20,6 +20,8 @@ describe("SourceUpload component", () => {
     expect(html).toContain('multiple=""');
     expect(html).toContain('accept="image/jpeg,image/png,image/webp"');
     expect(html).toContain("data-upload-picker");
+    expect(html).toContain('<button type="button" class="upload-picker"');
+    expect(html).not.toContain('role="button"');
     expect(html).toContain("选择一张或多张图片");
     expect(html).toContain("aria-live=\"polite\"");
     expect(html).not.toContain("图片基础检查通过");

@@ -23,6 +23,7 @@ import type {
   SyntheticQuickCheckView,
   TaskCompletionView,
   TodayTasksView,
+  QuestionArchiveView,
   UploadedSourceAssetView,
 } from "@gapproof/contracts";
 import {
@@ -1556,6 +1557,46 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     expect(JSON.stringify(generated?.payload)).not.toMatch(/Mina|saving water|学生确认后的真实题干|integration-fixture/);
   }, 15_000);
 
+  it("projects only human-confirmed real OCR items into the question archive", async () => {
+    const tenantId = uuidv7();
+    const studentId = uuidv7();
+    const caseId = uuidv7();
+    const extractionEventId = uuidv7();
+    const confirmationEventId = uuidv7();
+    const taskId = uuidv7();
+    const occurredAt = new Date("2026-08-15T01:00:00.000Z");
+    await database.db.insert(students).values({ id: studentId, tenantId, anonymousKey: `question-archive-${studentId}`, timezone: "Asia/Shanghai" });
+    await database.db.insert(cases).values({ id: caseId, tenantId, studentId, state: "d1_scheduled", stateVersion: 6, title: "英语周练", simulation: false, synthetic: false });
+    await database.db.insert(learningEvidenceEvents).values([
+      {
+        id: extractionEventId, tenantId, studentId, caseId,
+        eventType: "evidence_ingested", sourceType: "real_alibaba_ocr", sourceRef: "private-batch-reference",
+        payload: { extraction: { items: [{ itemId: "confirmed-item", prompt: "OCR 题干" }, { itemId: "not-confirmed", prompt: "不能展示" }] }, confidence: 0.9987, objectKey: "private/object/key" },
+        confidence: "0.9987", occurredAt, idempotencyKey: `archive-extraction:${caseId}`,
+      },
+      {
+        id: confirmationEventId, tenantId, studentId, caseId,
+        eventType: "recognition_confirmed", sourceType: "student_confirmation", sourceRef: null,
+        payload: { confirmedItemIds: ["confirmed-item"], corrections: [{ itemId: "confirmed-item", field: "prompt", value: "学生核对后的题干" }, { itemId: "confirmed-item", field: "student_answer", value: "学生当时的答案" }] },
+        confidence: null, occurredAt: new Date("2026-08-15T01:01:00.000Z"), idempotencyKey: `archive-confirmation:${caseId}`,
+      },
+    ]);
+    await database.db.insert(tasks).values({
+      id: taskId, tenantId, studentId, caseId, taskType: "d1_retest", status: "ready", title: "明日复习",
+      estimatedMinutes: 4, scheduledFor: occurredAt, dueAt: null, sourceEventId: confirmationEventId,
+      payload: { rationale: "检查是否能在新题中应用", item: { id: "retest-item", prompt: "A new question", choices: [{ id: "a", label: "A" }, { id: "b", label: "B" }], expectedChoiceId: "a", scoringMethod: "exact-choice-v1" } },
+    });
+
+    const response = await api.inject({ method: "GET", url: `/v1/students/${studentId}/question-archive` });
+    expect(response.statusCode).toBe(200);
+    const body = response.json<ApiResponse<QuestionArchiveView>>();
+    expect(body.data).toMatchObject({
+      timeZone: "Asia/Shanghai",
+      items: [{ source: "real_uploaded_material", sourceTitle: "英语周练", prompt: "学生核对后的题干", studentAnswer: "学生当时的答案", tasks: [{ taskId, status: "ready", taskType: "d1_retest" }] }],
+    });
+    expect(JSON.stringify(body.data)).not.toMatch(/不能展示|private\/object\/key|private-batch-reference|expectedChoiceId|0\.9987|confidence|objectKey|sha256|token/i);
+  });
+
   it("scores an attempt deterministically and advances to intervention_ready", async () => {
     const { caseId, hypotheses } = await createProbeRequiredCase(
       api,
@@ -2088,6 +2129,13 @@ describeWithDatabase("Fastify API and run-next worker", () => {
   it("activates an overdue task without affecting another Case or clock", async () => {
     const left = await createD1ScheduledCase(api, "demo-clock-isolation-left-v1");
     const right = await createD1ScheduledCase(api, "demo-clock-isolation-right-v1");
+    const rightRetestId = right.completion.scheduledRetest.id;
+    // Keep the control task outside the real due worker's clock so this test
+    // isolates the scoped demo-clock write instead of racing background work.
+    await database.db
+      .update(tasks)
+      .set({ scheduledFor: new Date("2099-01-01T00:00:00.000Z") })
+      .where(eq(tasks.id, rightRetestId));
     const response = await api.inject({
       method: "POST",
       url: "/v1/demo/clock/advance",

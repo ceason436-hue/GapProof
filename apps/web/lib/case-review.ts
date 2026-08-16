@@ -11,6 +11,7 @@ import {
   DeletedCaseSourceAssetsViewSchema,
   type ConfirmExtractionRequest,
   type SubmitAttemptRequest,
+  type ExtractionView,
 } from "@gapproof/contracts";
 import { ApiClientError, apiDelete, apiGet, apiPost } from "./api-client";
 import { createBrowserUuidV7 } from "./browser-uuidv7";
@@ -23,6 +24,21 @@ export type WriteIntent<T> = {
   body: T;
   idempotencyKey: string;
 };
+
+export function buildExtractionCorrections(
+  items: ExtractionView["items"],
+  promptValues: Readonly<Record<string, string>>,
+  answerValues: Readonly<Record<string, string>>,
+): ConfirmExtractionRequest["corrections"] {
+  return items.flatMap(item => {
+    const corrections: ConfirmExtractionRequest["corrections"] = [];
+    const prompt = promptValues[item.itemId] ?? item.prompt;
+    if (prompt !== item.prompt) corrections.push({ itemId: item.itemId, field: "prompt", value: prompt });
+    const answer = answerValues[item.itemId]?.trim();
+    if (answer) corrections.push({ itemId: item.itemId, field: "student_answer", value: answer });
+    return corrections;
+  });
+}
 
 export const extractionPath = (caseId: string): `/api/v1/${string}` =>
   `/api/v1/cases/${caseId}/extraction`;

@@ -648,6 +648,36 @@ export const TodayTasksViewSchema = Type.Object({
 
 export type TodayTasksView = Static<typeof TodayTasksViewSchema>;
 
+export const QuestionArchiveTaskFactSchema = Type.Object({
+  taskId: Type.String({ format: "uuid" }),
+  taskType: TaskTypeSchema,
+  status: TaskStatusSchema,
+  title: Type.String({ minLength: 1 }),
+  scheduledFor: Type.String({ format: "date-time" }),
+  dueAt: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
+  completedAt: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
+}, { additionalProperties: false });
+
+export const QuestionArchiveItemSchema = Type.Object({
+  /** Opaque navigation reference. It must never be rendered as student-facing text. */
+  entryRef: Type.String({ minLength: 1, maxLength: 160 }),
+  source: Type.Literal("real_uploaded_material"),
+  sourceTitle: Type.String({ minLength: 1 }),
+  confirmedAt: Type.String({ format: "date-time" }),
+  prompt: Type.String({ minLength: 1 }),
+  studentAnswer: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+  tasks: Type.Array(QuestionArchiveTaskFactSchema),
+}, { additionalProperties: false });
+
+export const QuestionArchiveViewSchema = Type.Object({
+  timeZone: Type.String({ minLength: 1 }),
+  items: Type.Array(QuestionArchiveItemSchema),
+}, { additionalProperties: false });
+
+export type QuestionArchiveTaskFact = Static<typeof QuestionArchiveTaskFactSchema>;
+export type QuestionArchiveItem = Static<typeof QuestionArchiveItemSchema>;
+export type QuestionArchiveView = Static<typeof QuestionArchiveViewSchema>;
+
 export const CompleteTaskRequestSchema = Type.Object({
   expectedVersion: Type.Integer({ minimum: 0 }),
   completedStepIds: Type.Array(Type.String({ minLength: 1 }), {
