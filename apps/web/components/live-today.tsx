@@ -344,7 +344,8 @@ export async function LiveToday({ selectedRetestId }: { selectedRetestId?: strin
     const model = toTodayReadModel(response.data, selectedRetestId);
     if (!model.profile.completed) return <ProfileSetupRequired profile={model.profile} recoverableBatches={recoverableBatches}/>;
     if (!model.overview.hasStartedJourney) return <FirstUseToday recoverableBatches={recoverableBatches}/>;
-    const completed = model.taskCount === 0 && model.current.kind === "none";
+    const completedToday = model.overview.activityDays.at(-1)?.completedTaskCount ?? 0;
+    const completed = model.current.kind === "none" && completedToday > 0;
     if (completed) return <AppShell actionHref="/diagnose" actionLabel="开始新的检查"><TodayDashboard
       current={model.current}
       overview={model.overview}
