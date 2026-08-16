@@ -69,8 +69,9 @@ withDatabase("device-bound student session", () => {
     expect(response.body).not.toMatch(/tenantId|0198ffff/);
     expect(response.json()).toMatchObject({ requestId: expect.any(String), traceId: expect.any(String) });
     const setCookie = response.headers["set-cookie"];
-    expect(typeof setCookie).toBe("string");
-    const principal = await service.requirePrincipal((setCookie as string).split(";", 1)[0]);
+    const serializedCookie = Array.isArray(setCookie) ? setCookie[0] : setCookie;
+    expect(typeof serializedCookie).toBe("string");
+    const principal = await service.requirePrincipal(serializedCookie!.split(";", 1)[0]);
     studentIds.push(principal.studentId);
     expect(principal.studentId).not.toBe("0198ffff-ffff-7000-8000-000000000001");
     await api.close();

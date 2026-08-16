@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.53"
+version: "0.1.54"
 status: "ACTIVE"
-current_stage: "PUSH-038：真实 OCR 处理说明版本与接受时间在启动事务中持久化，学生 24 小时 OCR 批次限额生效；学生全路由可达性已核验，生产 OSS、Provider 配额与完整真实学生验收仍 deferred"
+current_stage: "PUSH-039 准备发布：已确认真实题目可主动创建内容绑定的错题重做任务，API/Worker 共用 S3 兼容对象存储适配；比赛落地优先，完整集中门禁、真实对象存储 smoke 与真实学生验收仍 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -2122,6 +2122,12 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.54 — 2026-08-16
+
+- 已确认真实 OCR 题目在同一 Case 形成权威内容绑定后，可由学生主动创建错题重做任务；任务进入 Today、错题本和 7 日计划，完成只记录学生当前思路，不自动推进掌握状态，也不公开答案键。
+- API 与 Worker 改用共享 S3 兼容存储适配，生产环境禁止静默回退本地目录；当前只证明适配代码与模拟 transport，未执行真实对象存储上传/读取/删除 smoke。
+- 按比赛落地优先暂停追加审查与全量门禁；设备恢复集成测试的连续读取波动、完整 PostgreSQL 套件、浏览器验收和真实学生验收继续 deferred，不据此宣称生产验收完成。
 
 ### v0.1.51 — 2026-08-16
 

@@ -5,14 +5,15 @@ import type {
   StudentFactReportsView,
   StudentProgressView,
 } from "@gapproof/contracts";
-import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 
 import type { Database } from "./client.ts";
 import { cases, learningEvidenceEvents, tasks } from "./schema.ts";
 
 type ProgressDatabase = Pick<Database, "select">;
 type CaseProjectionRow = Pick<typeof cases.$inferSelect, "id" | "title" | "state" | "synthetic" | "simulation" | "createdAt" | "updatedAt">;
-type TaskProjectionRow = Pick<typeof tasks.$inferSelect, "caseId" | "taskType" | "status" | "title" | "scheduledFor" | "completedAt">;
+type ProgressTaskType = "guided_intervention" | "d1_retest" | "d7_retest";
+type TaskProjectionRow = Omit<Pick<typeof tasks.$inferSelect, "caseId" | "taskType" | "status" | "title" | "scheduledFor" | "completedAt">, "taskType"> & { taskType: ProgressTaskType };
 type EvidenceProjectionRow = Pick<typeof learningEvidenceEvents.$inferSelect, "id" | "caseId" | "eventType" | "payload" | "occurredAt">;
 
 function recordSource(row: CaseProjectionRow): LearningRecordSource {
@@ -40,7 +41,8 @@ function timelineKind(row: EvidenceProjectionRow): ProgressTimelineKind | null {
   switch (row.eventType) {
     case "recognition_confirmed": return "material_confirmed";
     case "probe_evaluated": return "diagnosis_checked";
-    case "intervention_completed": return "practice_completed";
+    case "intervention_completed":
+    case "mistake_review_completed": return "practice_completed";
     case "plan_replanned": return "plan_adjusted";
     case "retest_evaluated": {
       const kind = row.payload.kind;
@@ -173,9 +175,9 @@ export async function findStudentProgressAndReports(database: ProgressDatabase, 
     database.select({ id: cases.id, title: cases.title, state: cases.state, synthetic: cases.synthetic, simulation: cases.simulation, createdAt: cases.createdAt, updatedAt: cases.updatedAt })
       .from(cases).where(and(eq(cases.studentId, input.studentId), eq(cases.tenantId, input.tenantId), isNull(cases.deletedAt))).orderBy(desc(cases.updatedAt), desc(cases.id)),
     database.select({ caseId: tasks.caseId, taskType: tasks.taskType, status: tasks.status, title: tasks.title, scheduledFor: tasks.scheduledFor, completedAt: tasks.completedAt })
-      .from(tasks).where(and(eq(tasks.studentId, input.studentId), eq(tasks.tenantId, input.tenantId))).orderBy(asc(tasks.scheduledFor), asc(tasks.id)),
+      .from(tasks).where(and(eq(tasks.studentId, input.studentId), eq(tasks.tenantId, input.tenantId), inArray(tasks.taskType, ["guided_intervention", "d1_retest", "d7_retest"]))).orderBy(asc(tasks.scheduledFor), asc(tasks.id)),
     database.select({ id: learningEvidenceEvents.id, caseId: learningEvidenceEvents.caseId, eventType: learningEvidenceEvents.eventType, payload: learningEvidenceEvents.payload, occurredAt: learningEvidenceEvents.occurredAt })
       .from(learningEvidenceEvents).where(and(eq(learningEvidenceEvents.studentId, input.studentId), eq(learningEvidenceEvents.tenantId, input.tenantId))).orderBy(desc(learningEvidenceEvents.occurredAt), desc(learningEvidenceEvents.id)),
   ]);
-  return projectStudentProgress({ studentId: input.studentId, timeZone: input.timeZone, cases: caseRows, tasks: taskRows, evidence: evidenceRows });
+  return projectStudentProgress({ studentId: input.studentId, timeZone: input.timeZone, cases: caseRows, tasks: taskRows.filter((task): task is TaskProjectionRow => task.taskType !== "mistake_review"), evidence: evidenceRows });
 }

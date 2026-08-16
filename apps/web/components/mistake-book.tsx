@@ -5,11 +5,14 @@ import { archiveTaskAction, findArchiveItem, selectArchiveTask, taskKindLabel } 
 import { fetchCurrentStudentQuestionArchive } from "@/lib/question-archive-server";
 import { fetchCurrentStudentToday } from "@/lib/today-server";
 import { StudentSessionRequiredError } from "@/lib/student-session-server";
+import { getCurrentStudentSession } from "@/lib/student-session-server";
 import { formatTaskDateTime } from "@/lib/today-adapter";
 import { AppShell } from "./app-shell";
 import { D1AttemptPanel } from "./d1-attempt-panel";
 import { D7AttemptPanel } from "./d7-attempt-panel";
 import { GuidedTaskCompletion } from "./guided-task-completion";
+import { MistakeReviewStart } from "./mistake-review-start";
+import { MistakeReviewTask } from "./mistake-review-task";
 import { Icon } from "./icons";
 import { StudentSessionBootstrap } from "./student-session-bootstrap";
 
@@ -60,7 +63,8 @@ export async function QuestionArchiveDetail({ entryRef }: { entryRef: string }) 
     const response = await fetchCurrentStudentQuestionArchive();
     const item = findArchiveItem(response.data.items, entryRef);
     if (item === null) return <ErrorState missing/>;
-    return <AppShell actionHref="/student/mistakes" actionLabel="返回错题本"><section className="mistake-task-page archive-detail" data-question-archive-detail><Link className="back-link" href="/student/mistakes">← 返回错题本</Link><header><span className="task-kind">你已确认 · {item.sourceTitle}</span><h1>{item.prompt}</h1><p>确认于 {formatTaskDateTime(item.confirmedAt, response.data.timeZone)}</p></header><article className="mistake-task-panel"><h2>题目记录</h2><div className="archive-question"><strong>题干</strong><p>{item.prompt}</p></div><div className="archive-question"><strong>当时的作答</strong><p>{item.studentAnswer ?? "确认时没有填写作答"}</p></div><p className="mistake-truth-note">这里只展示你确认后的题目文字与已有任务事实，不展示答案键或系统内部判断。</p></article><ArchiveTaskFacts item={item} timeZone={response.data.timeZone}/></section></AppShell>;
+    const { session } = await getCurrentStudentSession();
+    return <AppShell actionHref="/student/mistakes" actionLabel="返回错题本"><section className="mistake-task-page archive-detail" data-question-archive-detail><Link className="back-link" href="/student/mistakes">← 返回错题本</Link><header><span className="task-kind">你已确认 · {item.sourceTitle}</span><h1>{item.prompt}</h1><p>确认于 {formatTaskDateTime(item.confirmedAt, response.data.timeZone)}</p></header><article className="mistake-task-panel"><h2>题目记录</h2><div className="archive-question"><strong>题干</strong><p>{item.prompt}</p></div><div className="archive-question"><strong>当时的作答</strong><p>{item.studentAnswer ?? "确认时没有填写作答"}</p></div><p className="mistake-truth-note">这里只展示你确认后的题目文字与已有任务事实，不展示答案键或系统内部判断。</p>{item.reviewReady ? <MistakeReviewStart studentId={session.studentId} entryRef={item.entryRef}/> : <p className="mistake-truth-note">完成这份材料的诊断后，就可以从这里重新做这道题。</p>}</article><ArchiveTaskFacts item={item} timeZone={response.data.timeZone}/></section></AppShell>;
   } catch (error) {
     if (error instanceof StudentSessionRequiredError) return <StudentSessionBootstrap/>;
     if (error instanceof ApiClientError && error.response.error.code === "RESOURCE_NOT_FOUND") return <ErrorState missing/>;
@@ -71,9 +75,11 @@ export async function QuestionArchiveDetail({ entryRef }: { entryRef: string }) 
 function TaskContent({ task, timeZone }: { task: LearningTaskView; timeZone: string }) {
   if (task.status === "ready") {
     if (task.taskType === "guided_intervention") return <GuidedTaskCompletion task={task} timeZone={timeZone}/>;
+    if (task.taskType === "mistake_review") return <MistakeReviewTask task={task}/>;
     if (task.taskType === "d1_retest") return <D1AttemptPanel task={task} timeZone={timeZone}/>;
     return <D7AttemptPanel task={task}/>;
   }
+  if (task.taskType === "mistake_review") return <MistakeReviewTask task={task}/>;
   if (task.taskType === "guided_intervention") return <ol className="mistake-review-steps">{task.steps.map(step => <li key={step.id}><strong>{step.title}</strong><span>{step.content}</span></li>)}</ol>;
   return <div className="mistake-review-question"><h2>{task.item.prompt}</h2><ul>{task.item.choices.map(choice => <li key={choice.id}>{choice.label}</li>)}</ul><p>这里只展示已有的复习题目，不补充答案或学习结论。</p></div>;
 }

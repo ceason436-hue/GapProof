@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.43"
+version: "0.2.44"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "PUSH-038：真实 OCR 处理说明版本与接受时间已在启动事务持久化，学生 24 小时 OCR 批次限额已接入；学生主路由可达性已核验，生产 OSS 与完整真实学生验收仍 deferred"
+current_design_stage: "PUSH-039 准备发布：错题详情提供真实可执行的主动重做入口，任务状态回到 Today 与 7 日计划；完整浏览器/移动端/真实学生验收仍 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -1782,6 +1782,12 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 ---
 
 ## 22. 版本记录
+
+### v0.2.44 — 2026-08-16
+
+- 错题详情在题目已形成真实内容绑定时显示“现在重做这道题”；尚未完成诊断时只说明完成诊断后开放，不呈现无法执行的按钮。
+- 重做页要求学生先写下当前思路，不直接给答案；完成后回到权威任务状态，并明确记录不等于已经掌握。Today 与 7 日计划均可继续进入该任务。
+- 本轮未完成浏览器、移动端和真实学生视觉验收；不得据组件实现宣称生产体验已全部验收。
 
 ### v0.2.43 — 2026-08-16
 

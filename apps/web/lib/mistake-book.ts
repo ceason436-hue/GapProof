@@ -14,11 +14,13 @@ export function selectArchiveTask(tasks: readonly QuestionArchiveTaskFact[]) {
 }
 
 export function taskKindLabel(task: { taskType: QuestionArchiveTaskFact["taskType"] }) {
+  if (task.taskType === "mistake_review") return "错题重做";
   if (task.taskType === "guided_intervention") return "针对练习";
   return task.taskType === "d1_retest" ? "明日复习" : "7 天后巩固";
 }
 
 export function archiveTaskAction(task: QuestionArchiveTaskFact) {
+  if (task.taskType === "mistake_review") return task.status === "ready" ? "开始重做" : task.status === "completed" ? "查看重做记录" : "查看重做安排";
   if (task.status === "ready") return task.taskType === "guided_intervention" ? "继续当前任务" : "开始复测";
   if (task.status === "scheduled") return "查看复习安排";
   return "查看任务记录";

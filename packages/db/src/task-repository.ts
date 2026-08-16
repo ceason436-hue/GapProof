@@ -41,7 +41,8 @@ export async function findTasksByStudentId(
         when 'd1_retest' then 1
         when 'd7_retest' then 2
         when 'guided_intervention' then 3
-        else 4
+        when 'mistake_review' then 4
+        else 5
       end`,
       asc(tasks.createdAt),
       asc(tasks.id),
@@ -59,7 +60,7 @@ export async function findCurrentActionableTaskId(
       and(
         eq(tasks.studentId, studentId),
         eq(tasks.status, "ready"),
-        inArray(tasks.taskType, ["d1_retest", "d7_retest", "guided_intervention"]),
+        inArray(tasks.taskType, ["d1_retest", "d7_retest", "guided_intervention", "mistake_review"]),
       ),
     )
     .orderBy(
@@ -68,7 +69,8 @@ export async function findCurrentActionableTaskId(
         when 'd1_retest' then 1
         when 'd7_retest' then 2
         when 'guided_intervention' then 3
-        else 4
+        when 'mistake_review' then 4
+        else 5
       end`,
       asc(tasks.createdAt),
       asc(tasks.id),

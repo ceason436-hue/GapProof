@@ -41,6 +41,12 @@ import {
   type InterventionStep,
   type LearningTaskView,
   LearningTaskViewSchema,
+  CreateMistakeReviewRequestSchema,
+  type CreateMistakeReviewRequest,
+  CompleteMistakeReviewRequestSchema,
+  type CompleteMistakeReviewRequest,
+  MistakeReviewCompletionViewSchema,
+  type MistakeReviewCompletionView,
   RunNextQueuedSchema,
   RunNextRequestSchema,
   type RunNextRequest,
@@ -170,6 +176,9 @@ import {
   markSourceAssetDeleted,
   findStudentProgressAndReports,
   findStudentQuestionArchive,
+  findMistakeReviewSource,
+  createMistakeReviewTask,
+  completeMistakeReviewTask,
 } from "@gapproof/db";
 import {
   type Clock,
@@ -618,6 +627,29 @@ function toLearningTaskView(row: TaskRow): LearningTaskView {
       ...base,
       taskType: "guided_intervention",
       steps: steps as InterventionStep[],
+    };
+  }
+
+  if (row.taskType === "mistake_review") {
+    const prompt = row.payload.prompt;
+    const originalAnswer = row.payload.originalAnswer;
+    const reflectionPrompt = row.payload.reflectionPrompt;
+    const submittedResponse = row.payload.submittedResponse;
+    if (
+      typeof prompt !== "string" || prompt.trim().length === 0 ||
+      (originalAnswer !== null && typeof originalAnswer !== "string") ||
+      typeof reflectionPrompt !== "string" || reflectionPrompt.trim().length === 0 ||
+      (submittedResponse !== null && typeof submittedResponse !== "string")
+    ) {
+      throw new ApiHttpError(500, "STORED_TASK_INVALID", `Stored mistake review ${row.id} is invalid.`);
+    }
+    return {
+      ...base,
+      taskType: "mistake_review",
+      prompt: prompt.trim(),
+      originalAnswer: typeof originalAnswer === "string" ? originalAnswer : null,
+      reflectionPrompt: reflectionPrompt.trim(),
+      submittedResponse: typeof submittedResponse === "string" ? submittedResponse : null,
     };
   }
 
@@ -2202,6 +2234,77 @@ export async function buildApi(options: BuildApiOptions) {
           tenantId: student.tenantId,
         }),
       });
+    },
+  );
+
+  api.post<{ Params: StudentIdParams; Body: CreateMistakeReviewRequest }>(
+    "/v1/students/:studentId/question-archive/reviews",
+    {
+      schema: {
+        params: StudentIdParamsSchema,
+        body: CreateMistakeReviewRequestSchema,
+        response: { 200: apiResponseSchema(LearningTaskViewSchema), "4xx": ApiErrorResponseSchema, 500: ApiErrorResponseSchema },
+      },
+    },
+    async (request) => {
+      if (options.deviceSession === undefined) throw new ApiHttpError(503, "STUDENT_SESSION_REQUIRED", "A student session is required to start a review.");
+      const principal = await options.deviceSession.requirePrincipal(request.headers.cookie);
+      if (principal.studentId !== request.params.studentId) throw new ResourceNotFoundError("Question", request.body.entryRef);
+      const source = await findMistakeReviewSource(options.database, {
+        studentId: principal.studentId,
+        tenantId: principal.tenantId,
+        entryRef: request.body.entryRef,
+      });
+      if (source === undefined) throw new ResourceNotFoundError("Question", request.body.entryRef);
+      const result = await createMistakeReviewTask(options.database, {
+        source,
+        taskId: uuidv7(),
+        eventId: uuidv7(),
+        idempotencyKey: `mistake-review-create:${principal.studentId}:${request.body.entryRef}:${getIdempotencyKey(request)}`,
+        createdAt: clock.now(),
+      });
+      return success(request, toLearningTaskView(result.task));
+    },
+  );
+
+  api.post<{ Params: TaskIdParams; Body: CompleteMistakeReviewRequest }>(
+    "/v1/tasks/:taskId/mistake-review/complete",
+    {
+      schema: {
+        params: TaskIdParamsSchema,
+        body: CompleteMistakeReviewRequestSchema,
+        response: { 200: apiResponseSchema(MistakeReviewCompletionViewSchema), "4xx": ApiErrorResponseSchema, 500: ApiErrorResponseSchema },
+      },
+    },
+    async (request) => {
+      if (options.deviceSession === undefined) throw new ApiHttpError(503, "STUDENT_SESSION_REQUIRED", "A student session is required to complete a review.");
+      const principal = await options.deviceSession.requirePrincipal(request.headers.cookie);
+      const task = await findTaskById(options.database, request.params.taskId);
+      if (task === undefined || task.studentId !== principal.studentId || task.tenantId !== principal.tenantId || task.taskType !== "mistake_review") throw new ResourceNotFoundError("Task", request.params.taskId);
+      const idempotencyKey = `mistake-review-complete:${principal.studentId}:${task.id}:${getIdempotencyKey(request)}`;
+      const existingEvent = await findEvidenceEventByIdempotencyKey(options.database, idempotencyKey);
+      if (existingEvent === undefined && task.status !== "ready") throw new ApiHttpError(409, "INVALID_TASK_STATE", "This review has already been completed or is not ready.");
+      const responseText = request.body.responseText.trim();
+      if (responseText.length === 0) throw new ApiHttpError(400, "INVALID_INPUT", "Please write your current thinking before completing the review.");
+      const completedAt = clock.now();
+      const result = await completeMistakeReviewTask(options.database, {
+        taskId: task.id,
+        studentId: principal.studentId,
+        tenantId: principal.tenantId,
+        responseText,
+        eventId: uuidv7(),
+        idempotencyKey,
+        completedAt,
+      });
+      const eventRequest = isRecord(result.event.payload.request) && typeof result.event.payload.request.responseText === "string"
+        ? result.event.payload.request.responseText
+        : responseText;
+      return success(request, {
+        taskId: task.id,
+        status: "completed" as const,
+        completedAt: result.event.occurredAt.toISOString(),
+        submittedResponse: eventRequest,
+      } satisfies MistakeReviewCompletionView);
     },
   );
 

@@ -47,6 +47,7 @@ function progressKind(
     case "probe_evaluated":
       return "diagnosis_checked";
     case "intervention_completed":
+    case "mistake_review_completed":
       return "practice_completed";
     case "plan_replanned":
       return "plan_adjusted";
@@ -64,7 +65,7 @@ function toNextCheck(
   row:
     | {
         readonly id: string;
-        readonly taskType: "guided_intervention" | "d1_retest" | "d7_retest";
+        readonly taskType: "guided_intervention" | "d1_retest" | "d7_retest" | "mistake_review";
         readonly title: string;
         readonly scheduledFor: Date;
         readonly dueAt: Date | null;
@@ -140,6 +141,7 @@ export async function findTodayOverview(
               "recognition_confirmed",
               "probe_evaluated",
               "intervention_completed",
+              "mistake_review_completed",
               "retest_evaluated",
               "plan_replanned",
             ]),

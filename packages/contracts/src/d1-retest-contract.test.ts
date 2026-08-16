@@ -69,6 +69,7 @@ describe("D1 retest HTTP contracts", () => {
       "d1_retest",
       "d7_retest",
       "guided_intervention",
+      "mistake_review",
     ]);
   });
   it("requires the frozen objective-attempt request fields", () => {

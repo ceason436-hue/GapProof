@@ -1,6 +1,10 @@
 import { createDatabase } from "@gapproof/db";
 import { createJobQueue } from "@gapproof/jobs";
-import { createRealBuildInterventionAdapterFromEnv, createRealFormHypothesesAdapterFromEnv } from "@gapproof/tools";
+import {
+  createRealBuildInterventionAdapterFromEnv,
+  createRealFormHypothesesAdapterFromEnv,
+  createSourceAssetStorageFromEnvironment,
+} from "@gapproof/tools";
 
 import { createRunNextWorker } from "./run-next-worker.ts";
 import { createRetestDueWorker } from "./retest-due-worker.ts";
@@ -9,14 +13,15 @@ import { createSourceAssetQualityWorker } from "./source-asset-quality-worker.ts
 import { createTutorTurnWorker } from "./tutor-turn-worker.ts";
 import { createRealOcrBatchWorker } from "./real-ocr-batch-worker.ts";
 import { createSourceAssetRetentionWorker } from "./source-asset-retention-worker.ts";
-import { LocalDirectorySourceAssetStorage } from "./local-source-asset-storage.ts";
-import { requireUploadDirectory } from "./worker-config.ts";
 
 const databaseUrl =
   process.env.DATABASE_URL ??
   "postgres://gapproof:gapproof_local@127.0.0.1:55432/gapproof";
 
-const uploadDirectory = requireUploadDirectory(process.env.GAPPROOF_UPLOAD_DIR);
+const sourceAssetStorage = createSourceAssetStorageFromEnvironment();
+if (sourceAssetStorage === undefined) {
+  throw new Error("Source asset storage must be configured before the worker can start.");
+}
 const database = createDatabase(databaseUrl);
 const queue = createJobQueue(databaseUrl);
 queue.boss.on("error", (error) => {
@@ -35,7 +40,6 @@ const retestDueWorker = createRetestDueWorker({
   queue,
 });
 const replanWorker = createReplanWorker({ database: database.db, queue });
-const sourceAssetStorage = new LocalDirectorySourceAssetStorage(uploadDirectory);
 const qualityWorker = createSourceAssetQualityWorker({
   database: database.db,
   queue,

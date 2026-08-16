@@ -48,6 +48,7 @@ export function buildLearningPlan(view: TodayTasksView, now = new Date()): Learn
 }
 
 export function planTaskLabel(task: LearningTaskView) {
+  if (task.taskType === "mistake_review") return "错题重做";
   if (task.taskType === "guided_intervention") return "重点练习";
   return task.taskType === "d1_retest" ? "明天再试" : "换道新题";
 }

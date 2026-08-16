@@ -522,6 +522,7 @@ export const TaskTypeSchema = Type.Union([
   Type.Literal("guided_intervention"),
   Type.Literal("d1_retest"),
   Type.Literal("d7_retest"),
+  Type.Literal("mistake_review"),
 ]);
 
 export const TaskStatusSchema = Type.Union([
@@ -575,10 +576,21 @@ export const D7RetestTaskViewSchema = Type.Object({
   item: RetestItemViewSchema,
 }, { additionalProperties: false });
 
+/** A student-started review task. It contains no answer key or scoring data. */
+export const MistakeReviewTaskViewSchema = Type.Object({
+  ...LearningTaskBaseSchema.properties,
+  taskType: Type.Literal("mistake_review"),
+  prompt: Type.String({ minLength: 1 }),
+  originalAnswer: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+  reflectionPrompt: Type.String({ minLength: 1 }),
+  submittedResponse: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+}, { additionalProperties: false });
+
 export const LearningTaskViewSchema = Type.Union([
   GuidedInterventionTaskViewSchema,
   D1RetestTaskViewSchema,
   D7RetestTaskViewSchema,
+  MistakeReviewTaskViewSchema,
 ]);
 
 /** Stable actionable tie-break order after dueAt ASC NULLS LAST. */
@@ -586,6 +598,7 @@ export const CURRENT_ACTIONABLE_TASK_TYPE_PRIORITY = [
   "d1_retest",
   "d7_retest",
   "guided_intervention",
+  "mistake_review",
 ] as const;
 
 export type LearningTaskView = Static<typeof LearningTaskViewSchema>;
@@ -594,6 +607,7 @@ export type GuidedInterventionTaskView = Static<
 >;
 export type D1RetestTaskView = Static<typeof D1RetestTaskViewSchema>;
 export type D7RetestTaskView = Static<typeof D7RetestTaskViewSchema>;
+export type MistakeReviewTaskView = Static<typeof MistakeReviewTaskViewSchema>;
 
 export const TodayActivityDaySchema = Type.Object({
   localDate: Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" }),
@@ -685,6 +699,8 @@ export const QuestionArchiveItemSchema = Type.Object({
   confirmedAt: Type.String({ format: "date-time" }),
   prompt: Type.String({ minLength: 1 }),
   studentAnswer: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+  /** True only after the same real-material case has authoritative content binding. */
+  reviewReady: Type.Boolean(),
   tasks: Type.Array(QuestionArchiveTaskFactSchema),
 }, { additionalProperties: false });
 
@@ -696,6 +712,24 @@ export const QuestionArchiveViewSchema = Type.Object({
 export type QuestionArchiveTaskFact = Static<typeof QuestionArchiveTaskFactSchema>;
 export type QuestionArchiveItem = Static<typeof QuestionArchiveItemSchema>;
 export type QuestionArchiveView = Static<typeof QuestionArchiveViewSchema>;
+
+export const CreateMistakeReviewRequestSchema = Type.Object({
+  entryRef: Type.String({ minLength: 1, maxLength: 160 }),
+}, { additionalProperties: false });
+export type CreateMistakeReviewRequest = Static<typeof CreateMistakeReviewRequestSchema>;
+
+export const CompleteMistakeReviewRequestSchema = Type.Object({
+  responseText: Type.String({ minLength: 1, maxLength: 4_000 }),
+}, { additionalProperties: false });
+export type CompleteMistakeReviewRequest = Static<typeof CompleteMistakeReviewRequestSchema>;
+
+export const MistakeReviewCompletionViewSchema = Type.Object({
+  taskId: Type.String({ format: "uuid" }),
+  status: Type.Literal("completed"),
+  completedAt: Type.String({ format: "date-time" }),
+  submittedResponse: Type.String({ minLength: 1 }),
+}, { additionalProperties: false });
+export type MistakeReviewCompletionView = Static<typeof MistakeReviewCompletionViewSchema>;
 
 export const CompleteTaskRequestSchema = Type.Object({
   expectedVersion: Type.Integer({ minimum: 0 }),

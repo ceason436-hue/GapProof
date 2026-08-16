@@ -3,13 +3,14 @@ import type {
   D7RetestTaskView,
   GuidedInterventionTaskView,
   LearningTaskView,
+  MistakeReviewTaskView,
   StudentProfileView,
   TodayOverview,
   TodayTasksView,
 } from "@gapproof/contracts";
 
 export type RetestTaskView = D1RetestTaskView | D7RetestTaskView;
-export type CurrentActionableTask = GuidedInterventionTaskView | D1RetestTaskView | D7RetestTaskView;
+export type CurrentActionableTask = GuidedInterventionTaskView | D1RetestTaskView | D7RetestTaskView | MistakeReviewTaskView;
 
 export type CurrentTaskSelection =
   | { kind: "none" }
@@ -80,7 +81,7 @@ export function toTodayReadModel(view: TodayTasksView, selectedRetestId?: string
     // is permitted.
     current: selectCurrentTask(view, selectedRetestId),
     retests: view.tasks.filter(
-      (task): task is RetestTaskView => task.taskType !== "guided_intervention",
+      (task): task is RetestTaskView => task.taskType === "d1_retest" || task.taskType === "d7_retest",
     ),
     overview: view.overview,
   };

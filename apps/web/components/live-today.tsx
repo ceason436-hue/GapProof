@@ -1,4 +1,4 @@
-import type { D1RetestTaskView, D7RetestTaskView, GuidedInterventionTaskView, RecoverableOcrBatchView, StudentProfileView, TodayOverview } from "@gapproof/contracts";
+import type { D1RetestTaskView, D7RetestTaskView, GuidedInterventionTaskView, MistakeReviewTaskView, RecoverableOcrBatchView, StudentProfileView, TodayOverview } from "@gapproof/contracts";
 import Link from "next/link";
 import { AppShell } from "./app-shell";
 import { D1AttemptPanel } from "./d1-attempt-panel";
@@ -20,6 +20,7 @@ import { StudentSessionBootstrap } from "./student-session-bootstrap";
 import { OcrBatchRecovery } from "./ocr-batch-recovery";
 import { fetchRecoverableOcrBatches } from "@/lib/ocr-recovery-server";
 import { StudentProfileSetup } from "./student-profile-setup";
+import { MistakeReviewTask } from "./mistake-review-task";
 
 function TaskDates({
   scheduledFor,
@@ -189,6 +190,18 @@ function D7Current({ task, timeZone }: { task: D7RetestTaskView; timeZone: strin
   </article>;
 }
 
+function MistakeReviewCurrent({ task }: { task: MistakeReviewTaskView }) {
+  return <article className="hero-card live-task-hero" data-current-task-type={task.taskType}>
+    <HeroArt/><span className="time-chip"><Icon name="clock"/> 预计 {task.estimatedMinutes} 分钟</span>
+    <div className="hero-content">
+      <div className="task-label-row"><span className="dark-chip"><i/> 错题重做</span></div>
+      <h2>{task.title}</h2>
+      <p>{task.rationale}</p>
+      <MistakeReviewTask task={task}/>
+    </div>
+  </article>;
+}
+
 function HeroArt() {
   return <svg className="book-art" aria-hidden="true" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>;
 }
@@ -222,6 +235,7 @@ function CurrentPanel({ current, timeZone, completed }: { current: CurrentTaskSe
   }
   if (current.kind === "contract_error") return <CurrentContractError current={current}/>;
   if (current.task.taskType === "guided_intervention") return <GuidedCurrent task={current.task} timeZone={timeZone}/>;
+  if (current.task.taskType === "mistake_review") return <MistakeReviewCurrent task={current.task}/>;
   return current.task.taskType === "d1_retest"
     ? <D1Current task={current.task} timeZone={timeZone}/>
     : <D7Current task={current.task} timeZone={timeZone}/>;
@@ -337,7 +351,7 @@ export async function LiveToday({ selectedRetestId }: { selectedRetestId?: strin
     /></AppShell>;
 
     const actionLabel = model.current.kind === "selected"
-      ? model.current.task.taskType === "guided_intervention" ? "完成今天的练习" : model.current.task.taskType === "d1_retest" ? "完成明日复习" : "完成巩固练习"
+      ? model.current.task.taskType === "guided_intervention" ? "完成今天的练习" : model.current.task.taskType === "d1_retest" ? "完成明日复习" : model.current.task.taskType === "d7_retest" ? "完成巩固练习" : "完成错题重做"
       : model.current.kind === "contract_error" ? "当前任务不可用" : "暂无当前任务";
     return <AppShell actionDisabled actionLabel={actionLabel}>
       <TodayDashboard current={model.current} overview={model.overview} retests={model.retests} timeZone={model.timeZone} completed={false} recoverableBatches={recoverableBatches}/>

@@ -48,12 +48,15 @@ export const evidenceEventType = evidenceSchema.enum("evidence_event_type", [
   "demo_clock_advanced",
   "retest_evaluated",
   "plan_replanned",
+  "mistake_review_created",
+  "mistake_review_completed",
 ]);
 
 export const taskType = appSchema.enum("task_type", [
   "guided_intervention",
   "d1_retest",
   "d7_retest",
+  "mistake_review",
 ]);
 
 export const taskStatus = appSchema.enum("task_status", [

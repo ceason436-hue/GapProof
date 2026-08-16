@@ -21,7 +21,7 @@ describe("question archive actions", () => {
   });
 
   it("finds only a reference returned by the owned archive response", () => {
-    const item = { entryRef: "case:0", source: "real_uploaded_material", sourceTitle: "练习", confirmedAt: "2026-08-16T00:00:00.000Z", prompt: "Question", studentAnswer: null, tasks: [] } satisfies QuestionArchiveItem;
+    const item = { entryRef: "case:0", source: "real_uploaded_material", sourceTitle: "练习", confirmedAt: "2026-08-16T00:00:00.000Z", prompt: "Question", studentAnswer: null, reviewReady: false, tasks: [] } satisfies QuestionArchiveItem;
     expect(findArchiveItem([item], "case:0")).toBe(item);
     expect(findArchiveItem([item], "another:0")).toBeNull();
   });
