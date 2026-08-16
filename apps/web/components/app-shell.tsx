@@ -13,7 +13,7 @@ const items = [
 
 function isActive(pathname: string | null, href: string) {
   if (!pathname) return false;
-  if (href === "/student/today") return pathname === href;
+  if (href === "/student/today") return pathname === href || pathname.startsWith("/student/tasks/");
   if (href === "/diagnose") return pathname.startsWith("/diagnose") || pathname.startsWith("/materials");
   return pathname.startsWith(href);
 }

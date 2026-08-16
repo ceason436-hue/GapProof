@@ -14,7 +14,7 @@ export function MistakeReviewStart({ studentId, entryRef }: { studentId: string;
     setState("starting");
     try {
       const response = await startMistakeReview(studentId, entryRef);
-      router.push(`/student/mistakes/${encodeURIComponent(response.data.id)}`);
+      router.push(`/student/tasks/${encodeURIComponent(response.data.id)}`);
     } catch (error) {
       if (error instanceof ApiClientError) {
         setState("error");

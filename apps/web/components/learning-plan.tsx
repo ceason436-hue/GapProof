@@ -25,7 +25,7 @@ export function LearningPlan({ view, now = new Date() }: { view: TodayTasksView;
           <header><DayLabel localDate={day.localDate}/><span>{index === 0 ? "今天" : day.tasks.length > 0 ? `${day.totalMinutes} 分钟` : "暂无安排"}</span></header>
           {day.tasks.length === 0 ? <p className="plan-day-empty">这一天暂时没有任务</p> : <div className="plan-task-list">{day.tasks.map(task => <article key={task.id} data-task-status={task.status}>
             <div><span className="task-kind">{planTaskLabel(task)}</span><h2>{task.title}</h2><p>{task.rationale}</p></div>
-            <div className="plan-task-action"><span className={`status-chip ${task.status}`}>{planTaskStatus(task)}</span><Link href={`/student/mistakes/${encodeURIComponent(task.id)}`}>{task.status === "ready" ? "开始" : task.status === "completed" ? "回顾" : "查看"}<Icon name="arrow"/></Link></div>
+            <div className="plan-task-action"><span className={`status-chip ${task.status}`}>{planTaskStatus(task)}</span><Link href={`/student/tasks/${encodeURIComponent(task.id)}`}>{task.status === "ready" ? "开始" : task.status === "completed" ? "回顾" : "查看"}<Icon name="arrow"/></Link></div>
           </article>)}</div>}
         </section>)}</div>
         <p className="mistake-truth-note">计划只显示已经写入学习记录的任务；安排会在复习结果需要调整时更新，不代表已经掌握。</p>

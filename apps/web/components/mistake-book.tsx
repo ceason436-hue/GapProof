@@ -53,7 +53,7 @@ export async function MistakeBook() {
 
 function ArchiveTaskFacts({ item, timeZone }: { item: QuestionArchiveItem; timeZone: string }) {
   if (item.tasks.length === 0) return <section className="archive-task-facts"><h2>同一份材料的练习与复习</h2><p>这份材料还没有后续任务。你可以回到今日页查看诊断是否仍在进行。</p><Link className="secondary-button" href="/student/today?source=api">返回今日</Link></section>;
-  return <section className="archive-task-facts"><h2>同一份材料的练习与复习</h2><div>{item.tasks.map(task => <article key={task.taskId}><div><strong>{task.title}</strong><TaskSummary task={task} timeZone={timeZone}/></div><Link href={`/student/mistakes/${encodeURIComponent(task.taskId)}`}>{archiveTaskAction(task)}<Icon name="arrow"/></Link></article>)}</div><p>这些是同一份上传材料下的任务记录，不代表每项任务只对应这一道题。作答与完成状态由服务端记录决定，查看错题不会自动标记完成。</p></section>;
+  return <section className="archive-task-facts"><h2>同一份材料的练习与复习</h2><div>{item.tasks.map(task => <article key={task.taskId}><div><strong>{task.title}</strong><TaskSummary task={task} timeZone={timeZone}/></div><Link href={`/student/tasks/${encodeURIComponent(task.taskId)}`}>{archiveTaskAction(task)}<Icon name="arrow"/></Link></article>)}</div><p>这些是同一份上传材料下的任务记录，不代表每项任务只对应这一道题。作答与完成状态由服务端记录决定，查看错题不会自动标记完成。</p></section>;
 }
 
 export async function QuestionArchiveDetail({ entryRef }: { entryRef: string }) {
@@ -82,12 +82,14 @@ function TaskContent({ task, timeZone }: { task: LearningTaskView; timeZone: str
   return <div className="mistake-review-question"><h2>{task.item.prompt}</h2><ul>{task.item.choices.map(choice => <li key={choice.id}>{choice.label}</li>)}</ul><p>这里只展示已有的复习题目，不补充答案或学习结论。</p></div>;
 }
 
-export async function MistakeBookTask({ taskId }: { taskId: string }) {
+export async function StudentTask({ taskId }: { taskId: string }) {
   try {
     const response = await fetchCurrentStudentToday();
     const task = response.data.tasks.find(candidate => candidate.id === taskId);
     if (task === undefined) return <ErrorState missing/>;
-    return <AppShell actionHref="/student/mistakes" actionLabel="返回错题本"><section className="mistake-task-page" data-mistake-task={task.id}><Link className="back-link" href="/student/mistakes">← 返回错题本</Link><header><span className="task-kind">{taskKindLabel(task)} · {statusCopy(task.status)}</span><h1>{task.title}</h1><p>{task.rationale}</p></header><article className="mistake-task-panel"><TaskContent task={task} timeZone={response.data.timeZone}/></article>{task.status === "completed" ? <p className="mistake-truth-note">这项任务已有完成记录。当前页面只供回顾，不会重复写入结果或改变学习进度。</p> : task.status === "scheduled" ? <p className="mistake-truth-note">还没到复习时间。到期后这里会开放作答。</p> : null}</section></AppShell>;
+    const returnHref = task.taskType === "mistake_review" ? "/student/mistakes" : "/student/today?source=api";
+    const returnLabel = task.taskType === "mistake_review" ? "返回错题本" : "返回今日";
+    return <AppShell actionHref={returnHref} actionLabel={returnLabel}><section className="mistake-task-page" data-student-task={task.id}><Link className="back-link" href={returnHref}>← {returnLabel}</Link><header><span className="task-kind">{taskKindLabel(task)} · {statusCopy(task.status)}</span><h1>{task.title}</h1><p>{task.rationale}</p></header><article className="mistake-task-panel"><TaskContent task={task} timeZone={response.data.timeZone}/></article>{task.status === "completed" ? <p className="mistake-truth-note">这项任务已有完成记录。当前页面只供回顾，不会重复写入结果或改变学习进度。</p> : task.status === "scheduled" ? <p className="mistake-truth-note">还没到复习时间。到期后这里会开放作答。</p> : null}</section></AppShell>;
   } catch (error) {
     if (error instanceof StudentSessionRequiredError) return <StudentSessionBootstrap/>;
     if (error instanceof ApiClientError && error.response.error.code === "RESOURCE_NOT_FOUND") return <ErrorState missing/>;
