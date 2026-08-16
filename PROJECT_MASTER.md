@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.83"
+version: "0.1.84"
 status: "ACTIVE"
-current_stage: "PUSH-068 已发布：首次 Today 也显示三题完成后的连续引导；比赛功能落地优先，测试与审查统一 deferred"
+current_stage: "PUSH-069 已发布：正式检查入口统一要求学生确认学习范围；比赛功能落地优先，测试与审查统一 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -2122,6 +2122,12 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.84 — 2026-08-16
+
+- “找原因”、原创三题和上传材料三个正式检查入口统一读取当前设备学生学习范围；未完成时显示同一品牌化五项选择，不能通过侧栏或直达 URL 绕过。
+- 服务端共享学习范围读取函数复用设备会话和受所有权保护的 profile API；不生成默认年级、学科、学期、地区或学习状态。
+- 按比赛功能落地优先要求，本批未运行测试、审查或浏览器验收，全部继续 deferred。
 
 ### v0.1.83 — 2026-08-16
 
