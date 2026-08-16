@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.69"
+version: "0.1.70"
 status: "ACTIVE"
-current_stage: "PUSH-054 已发布：导师备用规则轮次明确披露，不冒充真实 DeepSeek 输出；学生真实闭环继续推进，完整集中门禁与真实学生验收仍 deferred"
+current_stage: "PUSH-055 已发布：D7 终态进入事实报告，继续练习状态进入后续计划；学生真实闭环继续推进，完整集中门禁与真实学生验收仍 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -2122,6 +2122,10 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.70 — 2026-08-16
+
+- D7 完成后，`repair_verified` / `support_required` 提供学习报告入口；尚需继续练习时提供后续计划入口，不提前生成报告结论。
 
 ### v0.1.69 — 2026-08-16
 
