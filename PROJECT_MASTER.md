@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.86"
+version: "0.1.87"
 status: "ACTIVE"
-current_stage: "PUSH-071 已发布：历史 D1/D7 可回顾学生作答与结果事实；比赛功能落地优先，测试与审查统一 deferred"
+current_stage: "PUSH-072 已发布：完成任务可只读回顾导师对话历史；比赛功能落地优先，测试与审查统一 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -2122,6 +2122,12 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.87 — 2026-08-16
+
+- 已完成的引导任务页读取受设备所有权保护的导师会话，最多展示现有六轮学生思路、导师问题及按需提示；完成后不显示输入或继续提问动作。
+- fallback 轮次继续标记“本轮使用备用引导”，无保存会话时明确无记录，读取失败不影响任务完成事实。
+- 按比赛功能落地优先要求，本批未运行测试、审查或浏览器验收，全部继续 deferred；导师历史不等于真实个性化或学习效果。
 
 ### v0.1.86 — 2026-08-16
 
