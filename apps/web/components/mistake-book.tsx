@@ -13,6 +13,7 @@ import { D7AttemptPanel } from "./d7-attempt-panel";
 import { GuidedTaskCompletion } from "./guided-task-completion";
 import { MistakeReviewStart } from "./mistake-review-start";
 import { MistakeReviewTask } from "./mistake-review-task";
+import { MistakeBookBrowser } from "./mistake-book-browser";
 import { Icon } from "./icons";
 import { StudentSessionBootstrap } from "./student-session-bootstrap";
 
@@ -43,10 +44,7 @@ export async function MistakeBook() {
   try {
     const response = await fetchCurrentStudentQuestionArchive();
     const { items, timeZone } = response.data;
-    return <AppShell actionHref="/materials/new" actionLabel="添加错题"><section className="mistake-book-page" data-question-archive><div className="title-row"><div><h1>错题本</h1><p>这里收录你亲自核对过的上传题目，以及同一份材料下已有的练习和复习记录。</p></div><div className="mistake-book-count"><strong>{items.length}</strong><span>道已确认题目</span></div></div>{items.length === 0 ? <EmptyBook/> : <div className="mistake-book-list">{items.map(item => {
-      const task = selectArchiveTask(item.tasks);
-      return <article className="mistake-entry" key={item.entryRef}><div className="mistake-entry-main"><span className="task-kind">来自 {item.sourceTitle}</span><h2>{item.prompt}</h2><Answer value={item.studentAnswer}/><span className="mistake-date">确认于 {formatTaskDateTime(item.confirmedAt, timeZone)}</span></div><div className="mistake-entry-action">{task ? <TaskSummary task={task} timeZone={timeZone}/> : <span className="status-chip scheduled">尚无后续任务</span>}<Link href={`/student/mistakes/questions/${encodeURIComponent(item.entryRef)}`}>查看题目<Icon name="arrow"/></Link></div></article>;
-    })}</div>}</section></AppShell>;
+    return <AppShell actionHref="/materials/new" actionLabel="添加错题"><section className="mistake-book-page" data-question-archive><div className="title-row"><div><h1>错题本</h1><p>这里收录你亲自核对过的上传题目，以及同一份材料下已有的练习和复习记录。</p></div><div className="mistake-book-count"><strong>{items.length}</strong><span>道已确认题目</span></div></div>{items.length === 0 ? <EmptyBook/> : <MistakeBookBrowser items={items} timeZone={timeZone}/>}</section></AppShell>;
   } catch (error) {
     if (error instanceof StudentSessionRequiredError) return <StudentSessionBootstrap/>;
     return <ErrorState/>;

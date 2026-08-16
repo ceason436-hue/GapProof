@@ -60,11 +60,32 @@ function resultCopy(value: StudentFactReportsView["reports"][number]["d1Result"]
   return `${label}：还没有记录`;
 }
 
+function conclusionCopy(value: StudentFactReportsView["reports"][number]["conclusion"]) {
+  return value === "repair_verified" ? "已完成一次复查" : "还需要继续练习";
+}
+
+function ReportUnavailable({ missing = false }: { missing?: boolean }) {
+  return <AppShell actionHref="/student/report" actionLabel="返回学习报告"><section className="progress-report-page"><div className="title-row"><div><h1>{missing ? "没有找到这份学习报告" : "暂时没能读取学习报告"}</h1><p>{missing ? "这份记录可能尚未形成报告，或已经不在当前学生的记录中。" : "已有学习记录不会受到影响，可以稍后再试。"}</p></div></div><article className="progress-report-empty"><Icon name="report"/><div><h2>{missing ? "先看看其他学习记录" : "请稍后重新打开"}</h2><p>{missing ? "回到报告列表查看当前已有记录，或继续今天的任务。" : "也可以先返回今日页，继续当前可以完成的任务。"}</p><div className="button-row"><Link className="primary-blue" href="/student/report">返回报告列表</Link><Link className="ghost-link" href="/student/today?source=api">查看今日任务</Link></div></div></article></section></AppShell>;
+}
+
+export async function StudentReportDetail({ caseId }: { caseId: string }) {
+  try {
+    const response = await fetchCurrentStudentReports();
+    const report = response.data.reports.find(item => item.caseId === caseId);
+    if (!report) return <ReportUnavailable missing/>;
+
+    return <AppShell actionHref="/student/report" actionLabel="返回学习报告"><section className="progress-report-page report-detail-page"><div className="title-row"><div><p className="eyebrow">学习报告</p><h1>{report.title}</h1><p>这里只整理已经保存的检查记录，不代表永久掌握或整体学习效果。</p></div><SourceNote source={report.source}/></div><article className="fact-report fact-report-detail"><header><span className={`report-conclusion ${report.conclusion}`}>{conclusionCopy(report.conclusion)}</span><span className="record-time">更新至 {formatTaskDateTime(report.evidenceThrough, response.data.timeZone)}</span></header><dl><div><dt>次日检查</dt><dd>{resultCopy(report.d1Result, "次日检查").replace("次日检查：", "")}</dd></div><div><dt>第 7 天检查</dt><dd>{resultCopy(report.d7Result, "第 7 天检查").replace("第 7 天检查：", "")}</dd></div><div><dt>已完成任务</dt><dd>{report.completedTaskCount} 项</dd></div></dl>{report.source === "synthetic_experience" ? <small>这是示例体验内容，仅用于展示流程，不是现实材料诊断或真实学习效果。</small> : <small>这里只复述已保存的任务和检查状态，不推断永久掌握。</small>}</article><nav className="report-detail-links" aria-label="学习报告后续操作"><Link className="primary-blue" href="/student/report">返回报告列表</Link><Link className="secondary-button" href="/student/mistakes">回看错题本</Link><Link className="secondary-button" href="/student/progress">查看进步记录</Link><Link className="secondary-button" href="/student/today?source=api">继续今天的任务</Link></nav></section></AppShell>;
+  } catch (error) {
+    if (error instanceof StudentSessionRequiredError) return <StudentSessionBootstrap/>;
+    return <ReportUnavailable/>;
+  }
+}
+
 export async function StudentReports() {
   try {
     const response = await fetchCurrentStudentReports();
     const { reports, timeZone } = response.data;
-    return <AppShell actionHref="/student/progress" actionLabel="查看我的进步"><section className="progress-report-page"><div className="title-row"><div><h1>学习报告</h1><p>这里整理已经完成的检查记录，帮助你决定下一步。不代表永久掌握或整体学习效果。</p></div><div className="progress-count"><strong>{reports.length}</strong><span>份学习记录</span></div></div>{reports.length === 0 ? <article className="progress-report-empty"><Icon name="report"/><div><h2>还没有可查看的学习记录</h2><p>完成一次材料检查和后续复习后，这里会显示每次检查留下的结果。</p><div className="button-row"><Link className="primary-blue" href="/student/today?source=api">查看今日任务</Link><Link className="ghost-link" href="/student/mistakes">打开错题本</Link></div></div></article> : <div className="fact-report-list">{reports.map(report => <article className="fact-report" key={report.caseId}><header><SourceNote source={report.source}/><span className={`report-conclusion ${report.conclusion}`}>{report.conclusion === "repair_verified" ? "已完成一次复查" : "还需要继续练习"}</span></header><h2>{report.title}</h2><ul><li>{resultCopy(report.d1Result, "次日检查")}</li><li>{resultCopy(report.d7Result, "第 7 天检查")}</li><li>已完成 {report.completedTaskCount} 项相关任务</li></ul><p>记录更新至 {formatTaskDateTime(report.evidenceThrough, timeZone)}</p><div className="report-actions"><Link className="secondary-button" href="/student/progress">查看进步记录</Link><Link className="secondary-button" href="/student/mistakes">回看错题本</Link><Link className="secondary-button" href="/student/today?source=api">继续今天的任务</Link></div>{report.source === "synthetic_experience" ? <small>这是示例体验内容，仅用于展示流程，不是现实材料诊断或真实学习效果。</small> : <small>这里只复述已保存的任务和检查状态，不推断永久掌握。</small>}</article>)}</div>}</section></AppShell>;
+    return <AppShell actionHref="/student/progress" actionLabel="查看我的进步"><section className="progress-report-page"><div className="title-row"><div><h1>学习报告</h1><p>这里整理已经完成的检查记录，帮助你决定下一步。不代表永久掌握或整体学习效果。</p></div><div className="progress-count"><strong>{reports.length}</strong><span>份学习记录</span></div></div>{reports.length === 0 ? <article className="progress-report-empty"><Icon name="report"/><div><h2>还没有可查看的学习记录</h2><p>完成一次材料检查和后续复习后，这里会显示每次检查留下的结果。</p><div className="button-row"><Link className="primary-blue" href="/student/today?source=api">查看今日任务</Link><Link className="ghost-link" href="/student/mistakes">打开错题本</Link></div></div></article> : <div className="fact-report-list">{reports.map(report => <article className="fact-report" key={report.caseId}><header><SourceNote source={report.source}/><span className={`report-conclusion ${report.conclusion}`}>{conclusionCopy(report.conclusion)}</span></header><h2><Link href={`/student/reports/${report.caseId}`}>{report.title}</Link></h2><ul><li>{resultCopy(report.d1Result, "次日检查")}</li><li>{resultCopy(report.d7Result, "第 7 天检查")}</li><li>已完成 {report.completedTaskCount} 项相关任务</li></ul><p>记录更新至 {formatTaskDateTime(report.evidenceThrough, timeZone)}</p><div className="report-actions"><Link className="primary-blue" href={`/student/reports/${report.caseId}`}>查看报告详情</Link><Link className="secondary-button" href="/student/mistakes">回看错题本</Link><Link className="secondary-button" href="/student/today?source=api">继续今天的任务</Link></div>{report.source === "synthetic_experience" ? <small>这是示例体验内容，仅用于展示流程，不是现实材料诊断或真实学习效果。</small> : <small>这里只复述已保存的任务和检查状态，不推断永久掌握。</small>}</article>)}</div>}</section></AppShell>;
   } catch (error) {
     if (error instanceof StudentSessionRequiredError) return <StudentSessionBootstrap/>;
     return <ReadError title="学习报告"/>;
