@@ -79,6 +79,7 @@ function OverviewProgress({ overview }: { overview: TodayOverview }) {
       {overview.recentProgress.length
         ? <ul className="recent-progress-list">{overview.recentProgress.slice(0, 2).map(progress => <li key={progress.eventId}>{progressCopy[progress.kind]}</li>)}</ul>
         : <p>暂无新的学习进展。</p>}
+      {overview.recentProgress.length > 0 ? <Link className="dark-button" href="/student/progress">查看我的进步</Link> : null}
     </div>
     <Icon name="progress" className="card-art"/>
   </article>;
