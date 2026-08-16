@@ -27,7 +27,7 @@ export function StudentProfileSetup({ profile, variant = "standalone" }: Student
   const router = useRouter();
   const [form, setForm] = useState<StudentProfileForm>(() => profileSetupInitialValues(profile));
   const [version, setVersion] = useState(profile.version);
-  const [status, setStatus] = useState<"idle" | "saving" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "saving" | "error" | "unknown">("idle");
   const [message, setMessage] = useState("");
   const remainingCount = useMemo(() => Object.values(form).filter((value) => value === "").length, [form]);
   const completedCount = 5 - remainingCount;
@@ -52,10 +52,15 @@ export function StudentProfileSetup({ profile, variant = "standalone" }: Student
       router.push("/student/today?source=api");
       router.refresh();
     } catch (error) {
-      setStatus("error");
-      setMessage(error instanceof ApiClientError && error.response.error.code === "VERSION_CONFLICT"
-        ? "资料刚刚被更新，请刷新页面后再保存。"
-        : "暂时没有保存成功。请检查网络后重试。");
+      if (error instanceof ApiClientError) {
+        setStatus("error");
+        setMessage(error.response.error.code === "VERSION_CONFLICT"
+          ? "资料刚刚被更新，请刷新页面后再保存。"
+          : "暂时没有保存成功。请检查网络后重试。");
+      } else {
+        setStatus("unknown");
+        setMessage("暂时无法确认是否保存成功。为避免重复提交，请重新打开今日页读取最新设置。");
+      }
     }
   }
 
@@ -82,9 +87,9 @@ export function StudentProfileSetup({ profile, variant = "standalone" }: Student
       </div>
       <div className="setup-actions">
         <div>{message ? <p className="form-error" role="alert">{message}</p> : <p className="setup-action-note">{remainingCount === 0 ? "确认后就可以开始第一次学习检查。" : "选完全部内容后即可确认。"}</p>}</div>
-        <button className="primary-blue" type="button" onClick={() => void save()} disabled={status === "saving" || remainingCount > 0}>
+        {status === "unknown" ? <Link className="primary-blue" href="/student/today?source=api">重新打开今日页</Link> : <button className="primary-blue" type="button" onClick={() => void save()} disabled={status === "saving" || remainingCount > 0}>
           {status === "saving" ? "正在保存" : profile.completed ? "保存修改" : "确认并开始"}{status !== "saving" ? <Icon name="arrow" /> : null}
-        </button>
+        </button>}
         {profile.completed ? <Link className="secondary-button" href="/student/today?source=api">取消并返回今日</Link> : null}
       </div>
     </section>;
