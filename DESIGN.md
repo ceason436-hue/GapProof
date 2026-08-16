@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.79"
+version: "0.2.80"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "PUSH-074 已发布：高频错题可分批浏览并由受保护接口直达单题；比赛功能落地优先，测试与审查 deferred"
+current_design_stage: "PUSH-075 已发布：错题本支持服务端搜索筛选与游标继续加载；比赛功能落地优先，测试与审查 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -1782,6 +1782,13 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 ---
 
 ## 22. 版本记录
+
+### v0.2.80 — 2026-08-16
+
+- 错题本首屏只接收服务端最多 20 道；输入搜索词或切换筛选时显示“正在更新错题”，旧请求被取消，最新响应替换当前列表。
+- 摘要区分当前显示、筛选命中和整本总数；继续显示从服务端读取下一页并追加，避免一次向页面发送完整错题本。
+- 首次查询失败显示保留条件的重新读取动作；后续页失败保留当前列表并在列表下提示重新读取，不把失败误写成没有错题。
+- 按比赛功能落地优先要求，本批测试、视觉、浏览器及真实学生验收继续 deferred。
 
 ### v0.2.79 — 2026-08-16
 

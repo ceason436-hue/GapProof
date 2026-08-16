@@ -733,6 +733,22 @@ export const QuestionArchiveItemSchema = Type.Object({
 export const QuestionArchiveViewSchema = Type.Object({
   timeZone: Type.String({ minLength: 1 }),
   items: Type.Array(QuestionArchiveItemSchema),
+  totalCount: Type.Integer({ minimum: 0 }),
+  matchedCount: Type.Integer({ minimum: 0 }),
+  nextCursor: Type.Union([Type.String({ minLength: 1, maxLength: 256 }), Type.Null()]),
+}, { additionalProperties: false });
+
+export const QuestionArchiveFilterSchema = Type.Union([
+  Type.Literal("all"),
+  Type.Literal("active"),
+  Type.Literal("completed"),
+]);
+
+export const QuestionArchiveQuerySchema = Type.Object({
+  query: Type.Optional(Type.String({ maxLength: 200 })),
+  filter: Type.Optional(QuestionArchiveFilterSchema),
+  cursor: Type.Optional(Type.String({ minLength: 1, maxLength: 256 })),
+  limit: Type.Optional(Type.String({ pattern: "^(?:[1-9]|[1-4][0-9]|50)$" })),
 }, { additionalProperties: false });
 
 export const QuestionArchiveEntryParamsSchema = Type.Object({
@@ -748,6 +764,8 @@ export const QuestionArchiveDetailViewSchema = Type.Object({
 export type QuestionArchiveTaskFact = Static<typeof QuestionArchiveTaskFactSchema>;
 export type QuestionArchiveItem = Static<typeof QuestionArchiveItemSchema>;
 export type QuestionArchiveView = Static<typeof QuestionArchiveViewSchema>;
+export type QuestionArchiveFilter = Static<typeof QuestionArchiveFilterSchema>;
+export type QuestionArchiveQuery = Static<typeof QuestionArchiveQuerySchema>;
 export type QuestionArchiveEntryParams = Static<typeof QuestionArchiveEntryParamsSchema>;
 export type QuestionArchiveDetailView = Static<typeof QuestionArchiveDetailViewSchema>;
 

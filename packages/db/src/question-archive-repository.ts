@@ -406,7 +406,7 @@ export async function findStudentQuestionArchive(
       });
     });
   }
-  return archive.sort((a, b) => Date.parse(b.confirmedAt) - Date.parse(a.confirmedAt));
+  return archive.sort((a, b) => Date.parse(b.confirmedAt) - Date.parse(a.confirmedAt) || a.entryRef.localeCompare(b.entryRef));
 }
 
 export async function findStudentQuestionArchiveItem(

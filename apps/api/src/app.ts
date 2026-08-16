@@ -123,6 +123,10 @@ import {
   StudentProgressViewSchema,
   StudentFactReportsViewSchema,
   QuestionArchiveViewSchema,
+  QuestionArchiveQuerySchema,
+  type QuestionArchiveQuery,
+  type QuestionArchiveFilter,
+  type QuestionArchiveItem,
   QuestionArchiveEntryParamsSchema,
   type QuestionArchiveEntryParams,
   QuestionArchiveDetailViewSchema,
@@ -364,6 +368,57 @@ function extractionConfirmationPayload(
         studentAnswer: question.studentAnswer?.trim() || null,
       })),
     }),
+  };
+}
+
+function selectedArchiveTask(item: QuestionArchiveItem) {
+  return item.tasks[0] ?? null;
+}
+
+function archiveMatchesFilter(item: QuestionArchiveItem, filter: QuestionArchiveFilter) {
+  if (filter === "all") return true;
+  const task = selectedArchiveTask(item);
+  return filter === "completed"
+    ? task?.status === "completed"
+    : task === null || task.status === "ready" || task.status === "scheduled";
+}
+
+function encodeArchiveCursor(item: QuestionArchiveItem) {
+  return Buffer.from(JSON.stringify([item.confirmedAt, item.entryRef]), "utf8").toString("base64url");
+}
+
+function decodeArchiveCursor(cursor: string): { confirmedAt: string; entryRef: string } {
+  try {
+    const value: unknown = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
+    if (!Array.isArray(value) || value.length !== 2 || typeof value[0] !== "string" || Number.isNaN(Date.parse(value[0])) || typeof value[1] !== "string" || value[1].length === 0) throw new Error("INVALID_CURSOR");
+    return { confirmedAt: value[0], entryRef: value[1] };
+  } catch {
+    throw new ApiHttpError(400, "INVALID_ARCHIVE_CURSOR", "The question archive cursor is invalid.", false);
+  }
+}
+
+function archivePage(items: readonly QuestionArchiveItem[], query: QuestionArchiveQuery) {
+  const normalizedQuery = query.query?.trim().toLocaleLowerCase() ?? "";
+  const filter = query.filter ?? "all";
+  const matching = items.filter(item => {
+    const matchesQuery = normalizedQuery.length === 0
+      || item.prompt.toLocaleLowerCase().includes(normalizedQuery)
+      || item.sourceTitle.toLocaleLowerCase().includes(normalizedQuery);
+    return matchesQuery && archiveMatchesFilter(item, filter);
+  });
+  const cursor = query.cursor ? decodeArchiveCursor(query.cursor) : null;
+  const remaining = cursor === null ? matching : matching.filter(item => {
+    const itemTime = Date.parse(item.confirmedAt);
+    const cursorTime = Date.parse(cursor.confirmedAt);
+    return itemTime < cursorTime || (itemTime === cursorTime && item.entryRef.localeCompare(cursor.entryRef) > 0);
+  });
+  const limit = Number(query.limit ?? "20");
+  const pageItems = remaining.slice(0, limit);
+  return {
+    items: pageItems,
+    totalCount: items.length,
+    matchedCount: matching.length,
+    nextCursor: remaining.length > pageItems.length && pageItems.length > 0 ? encodeArchiveCursor(pageItems[pageItems.length - 1]!) : null,
   };
 }
 
@@ -2298,23 +2353,25 @@ export async function buildApi(options: BuildApiOptions) {
     },
   );
 
-  api.get<{ Params: StudentIdParams }>(
+  api.get<{ Params: StudentIdParams; Querystring: QuestionArchiveQuery }>(
     "/v1/students/:studentId/question-archive",
     {
       schema: {
         params: StudentIdParamsSchema,
+        querystring: QuestionArchiveQuerySchema,
         response: { 200: apiResponseSchema(QuestionArchiveViewSchema), "4xx": ApiErrorResponseSchema, 500: ApiErrorResponseSchema },
       },
     },
     async (request) => {
       const student = await findStudentById(options.database, request.params.studentId);
       if (student === undefined) throw new ResourceNotFoundError("Student", request.params.studentId);
+      const page = archivePage(await findStudentQuestionArchive(options.database, {
+        studentId: student.id,
+        tenantId: student.tenantId,
+      }), request.query);
       return success(request, {
         timeZone: requireValidStudentTimeZone(student.timezone),
-        items: await findStudentQuestionArchive(options.database, {
-          studentId: student.id,
-          tenantId: student.tenantId,
-        }),
+        ...page,
       });
     },
   );

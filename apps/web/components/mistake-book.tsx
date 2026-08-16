@@ -44,8 +44,9 @@ function TaskSummary({ task, timeZone }: { task: QuestionArchiveTaskFact; timeZo
 export async function MistakeBook() {
   try {
     const response = await fetchCurrentStudentQuestionArchive();
-    const { items, timeZone } = response.data;
-    return <AppShell actionHref="/materials/new" actionLabel="添加错题"><section className="mistake-book-page" data-question-archive><div className="title-row"><div><h1>错题本</h1><p>这里收录你亲自核对过的上传题目，以及同一份材料下已有的练习和复习记录。</p></div><div className="mistake-book-count"><strong>{items.length}</strong><span>道已确认题目</span></div></div>{items.length === 0 ? <EmptyBook/> : <MistakeBookBrowser items={items} timeZone={timeZone}/>}</section></AppShell>;
+    const { items, timeZone, totalCount, matchedCount, nextCursor } = response.data;
+    const { session } = await getCurrentStudentSession();
+    return <AppShell actionHref="/materials/new" actionLabel="添加错题"><section className="mistake-book-page" data-question-archive><div className="title-row"><div><h1>错题本</h1><p>这里收录你亲自核对过的上传题目，以及同一份材料下已有的练习和复习记录。</p></div><div className="mistake-book-count"><strong>{totalCount}</strong><span>道已确认题目</span></div></div>{totalCount === 0 ? <EmptyBook/> : <MistakeBookBrowser studentId={session.studentId} initialItems={items} initialTotalCount={totalCount} initialMatchedCount={matchedCount} initialNextCursor={nextCursor} timeZone={timeZone}/>}</section></AppShell>;
   } catch (error) {
     if (error instanceof StudentSessionRequiredError) return <StudentSessionBootstrap/>;
     return <ErrorState/>;
