@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.59"
+version: "0.1.60"
 status: "ACTIVE"
-current_stage: "PUSH-044 已发布：Today 最近进展可直接进入我的进步；学生真实闭环继续推进，完整集中门禁与真实学生验收仍 deferred"
+current_stage: "PUSH-045 已发布：Today 未到时间的复习显示明确状态而非禁用按钮；学生真实闭环继续推进，完整集中门禁与真实学生验收仍 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -2122,6 +2122,10 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.60 — 2026-08-16
+
+- Today 下次检查未到时间时改为明确的非交互状态标签，避免学生误以为页面按钮失效；到期后仍由任务状态提供真实入口。
 
 ### v0.1.59 — 2026-08-16
 
