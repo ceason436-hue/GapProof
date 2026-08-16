@@ -203,13 +203,33 @@ export const RealOcrBatchPageSchema = Type.Object({
   status: Type.Union([Type.Literal("pending_upload"), Type.Literal("uploaded"), Type.Literal("queued"), Type.Literal("processing"), Type.Literal("needs_confirmation"), Type.Literal("succeeded"), Type.Literal("retryable_error"), Type.Literal("failed")]),
   retryable: Type.Boolean(), needsReview: Type.Boolean(),
 }, { additionalProperties: false });
+export const RealOcrBatchStatusSchema = Type.Union([
+  Type.Literal("collecting"), Type.Literal("ready"), Type.Literal("processing"),
+  Type.Literal("needs_confirmation"), Type.Literal("completed"),
+  Type.Literal("retryable_error"), Type.Literal("failed"),
+]);
 export const RealOcrBatchViewSchema = Type.Object({
   batchId: Type.String({ format: "uuid" }), caseId: Type.String({ format: "uuid" }),
   title: RealOcrBatchTitleSchema,
-  status: Type.Union([Type.Literal("collecting"), Type.Literal("ready"), Type.Literal("processing"), Type.Literal("needs_confirmation"), Type.Literal("completed"), Type.Literal("retryable_error"), Type.Literal("failed")]),
+  status: RealOcrBatchStatusSchema,
   guardianConfirmed: Type.Boolean(), version: Type.Integer({ minimum: 0 }), pages: Type.Array(RealOcrBatchPageSchema),
 }, { additionalProperties: false });
 export type RealOcrBatchView = Static<typeof RealOcrBatchViewSchema>;
+export const StudentMaterialArchiveItemSchema = Type.Object({
+  batchId: Type.String({ format: "uuid" }),
+  caseId: Type.String({ format: "uuid" }),
+  title: RealOcrBatchTitleSchema,
+  batchStatus: RealOcrBatchStatusSchema,
+  caseState: CaseStatusSchema,
+  pageCount: Type.Integer({ minimum: 0 }),
+  updatedAt: Type.String({ format: "date-time" }),
+}, { additionalProperties: false });
+export const StudentMaterialArchiveViewSchema = Type.Object({
+  items: Type.Array(StudentMaterialArchiveItemSchema),
+  totalCount: Type.Integer({ minimum: 0 }),
+}, { additionalProperties: false });
+export type StudentMaterialArchiveItem = Static<typeof StudentMaterialArchiveItemSchema>;
+export type StudentMaterialArchiveView = Static<typeof StudentMaterialArchiveViewSchema>;
 export const AddRealOcrBatchPageRequestSchema = Type.Object({
   fileName: Type.String({ minLength: 1, maxLength: 200, pattern: "^[^/\\\\\\u0000]+$" }), mimeType: StudentUploadMimeTypeSchema,
   byteSize: Type.Integer({ minimum: 1, maximum: 10_485_760 }), sha256: SourceAssetSha256Schema,

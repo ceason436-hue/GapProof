@@ -1,5 +1,5 @@
-import { and, asc, count, eq, gt, gte, sql } from "drizzle-orm";
-import { MAX_REAL_OCR_BATCHES_PER_24H, MAX_REAL_OCR_BATCH_PAGES, REAL_OCR_PROCESSING_NOTICE_VERSION } from "@gapproof/contracts";
+import { and, asc, count, desc, eq, gt, gte, isNull, sql } from "drizzle-orm";
+import { MAX_REAL_OCR_BATCHES_PER_24H, MAX_REAL_OCR_BATCH_PAGES, REAL_OCR_PROCESSING_NOTICE_VERSION, type StudentMaterialArchiveView } from "@gapproof/contracts";
 import { randomUUID } from "node:crypto";
 import type { Database } from "./client.ts";
 import { ResourceNotFoundError, isPostgresUniqueViolation } from "./case-repository.ts";
@@ -29,6 +29,56 @@ export async function findOcrBatch(database: Pick<Database, "select">, batchId: 
     .from(ocrBatchPages).innerJoin(sourceAssets, eq(ocrBatchPages.assetId, sourceAssets.id))
     .where(eq(ocrBatchPages.batchId, batchId)).orderBy(asc(ocrBatchPages.pageOrder));
   return { batch: result.batch, caseTitle: result.caseTitle, pages };
+}
+
+function archiveTitle(title: string | null): string {
+  return title?.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80)
+    || "上传的学习材料";
+}
+
+export async function findStudentMaterialArchive(
+  database: Pick<Database, "select">,
+  studentId: string,
+): Promise<StudentMaterialArchiveView> {
+  const realCaseFilter = and(
+    eq(ocrBatches.studentId, studentId),
+    eq(cases.studentId, studentId),
+    eq(cases.synthetic, false),
+    eq(cases.simulation, false),
+    isNull(cases.deletedAt),
+  );
+  const [rows, totals] = await Promise.all([
+    database.select({
+      batchId: ocrBatches.id,
+      caseId: ocrBatches.caseId,
+      title: cases.title,
+      batchStatus: ocrBatches.status,
+      caseState: cases.state,
+      pageCount: count(ocrBatchPages.id),
+      updatedAt: ocrBatches.updatedAt,
+    }).from(ocrBatches)
+      .innerJoin(cases, eq(ocrBatches.caseId, cases.id))
+      .leftJoin(ocrBatchPages, eq(ocrBatchPages.batchId, ocrBatches.id))
+      .where(realCaseFilter)
+      .groupBy(ocrBatches.id, cases.id)
+      .orderBy(desc(ocrBatches.updatedAt), desc(ocrBatches.id))
+      .limit(100),
+    database.select({ value: count() }).from(ocrBatches)
+      .innerJoin(cases, eq(ocrBatches.caseId, cases.id))
+      .where(realCaseFilter),
+  ]);
+  return {
+    items: rows.map(row => ({
+      batchId: row.batchId,
+      caseId: row.caseId,
+      title: archiveTitle(row.title),
+      batchStatus: row.batchStatus,
+      caseState: row.caseState,
+      pageCount: row.pageCount,
+      updatedAt: row.updatedAt.toISOString(),
+    })),
+    totalCount: totals[0]?.value ?? 0,
+  };
 }
 
 async function idempotentRecord(database: Pick<Database, "select">, scope: string, key: string) {

@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.81"
+version: "0.2.82"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "PUSH-076 已发布：上传材料名称贯通恢复、错题、计划与报告；比赛功能落地优先，测试与审查 deferred"
+current_design_stage: "PUSH-077 已发布：学生可从我的材料回看真实上传材料并继续各阶段动作；比赛功能落地优先，测试与审查 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -1782,6 +1782,12 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 ---
 
 ## 22. 版本记录
+
+### v0.2.82 — 2026-08-16
+
+- 学生主导航新增“我的材料”，`/materials/*` 统一归入该栏目；页面以材料名称、图片数、更新时间和学生可理解的处理状态展示真实上传材料。
+- 每份材料只显示当前权威状态允许的动作：继续添加/提交、查看处理、人工核对、回到今日、查看错题本或学习记录；空状态可上传，读取失败可重载或返回今日。桌面三列卡片和手机单列动作均保持 8px 以内圆角与稳定布局。
+- 页面不显示内部存储和 Provider 信息，也不把“处理完成”写成题目已核对、已经掌握或学习效果；本批视觉与浏览器验收 deferred。
 
 ### v0.2.81 — 2026-08-16
 

@@ -8,13 +8,15 @@ import { Icon } from "./icons";
 
 const items = [
   ["today", "今日", "/student/today"], ["search", "找原因", "/diagnose"],
+  ["materials", "我的材料", "/student/materials"],
   ["mistakes", "错题本", "/student/mistakes"], ["plan", "7 日计划", "/student/plan"], ["progress", "我的进步", "/student/progress"], ["report", "学习报告", "/student/report"],
 ] as const;
 
 function isActive(pathname: string | null, href: string) {
   if (!pathname) return false;
   if (href === "/student/today") return pathname === href || pathname.startsWith("/student/tasks/");
-  if (href === "/diagnose") return pathname.startsWith("/diagnose") || pathname.startsWith("/materials");
+  if (href === "/diagnose") return pathname.startsWith("/diagnose");
+  if (href === "/student/materials") return pathname.startsWith(href) || pathname.startsWith("/materials");
   return pathname.startsWith(href);
 }
 

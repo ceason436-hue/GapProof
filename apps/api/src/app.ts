@@ -95,6 +95,8 @@ import {
   type CreateRealOcrBatchRequest,
   RealOcrBatchViewSchema,
   type RealOcrBatchView,
+  StudentMaterialArchiveViewSchema,
+  type StudentMaterialArchiveView,
   AddRealOcrBatchPageRequestSchema,
   type AddRealOcrBatchPageRequest,
   OcrBatchPageParamsSchema,
@@ -175,6 +177,7 @@ import {
   VersionConflictError,
   createRealOcrBatch,
   findOcrBatch,
+  findStudentMaterialArchive,
   attachOcrBatchPage,
   startRealOcrBatch,
   OcrBatchIntentError,
@@ -2126,6 +2129,27 @@ export async function buildApi(options: BuildApiOptions) {
       const student = await findStudentProfile(options.database, request.params.studentId);
       if (student === undefined) throw new ResourceNotFoundError("Student", request.params.studentId);
       return success(request, studentProfileView(student));
+    },
+  );
+
+  api.get<{ Params: StudentIdParams }>(
+    "/v1/students/:studentId/materials",
+    {
+      schema: {
+        params: StudentIdParamsSchema,
+        response: {
+          200: apiResponseSchema(StudentMaterialArchiveViewSchema),
+          "4xx": ApiErrorResponseSchema,
+          500: ApiErrorResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      const data: StudentMaterialArchiveView = await findStudentMaterialArchive(
+        options.database,
+        request.params.studentId,
+      );
+      return success(request, data);
     },
   );
 
