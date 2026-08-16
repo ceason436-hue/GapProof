@@ -99,6 +99,8 @@ import {
   type RealOcrBatchView,
   StudentMaterialArchiveViewSchema,
   type StudentMaterialArchiveView,
+  StudentMaterialArchiveQuerySchema,
+  type StudentMaterialArchiveQuery,
   AddRealOcrBatchPageRequestSchema,
   type AddRealOcrBatchPageRequest,
   OcrBatchPageParamsSchema,
@@ -2135,11 +2137,12 @@ export async function buildApi(options: BuildApiOptions) {
     },
   );
 
-  api.get<{ Params: StudentIdParams }>(
+  api.get<{ Params: StudentIdParams; Querystring: StudentMaterialArchiveQuery }>(
     "/v1/students/:studentId/materials",
     {
       schema: {
         params: StudentIdParamsSchema,
+        querystring: StudentMaterialArchiveQuerySchema,
         response: {
           200: apiResponseSchema(StudentMaterialArchiveViewSchema),
           "4xx": ApiErrorResponseSchema,
@@ -2151,6 +2154,12 @@ export async function buildApi(options: BuildApiOptions) {
       const data: StudentMaterialArchiveView = await findStudentMaterialArchive(
         options.database,
         request.params.studentId,
+        {
+          query: request.query.query,
+          filter: request.query.filter,
+          cursor: request.query.cursor,
+          limit: request.query.limit ? Number.parseInt(request.query.limit, 10) : 20,
+        },
       );
       return success(request, data);
     },

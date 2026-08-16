@@ -2,15 +2,15 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.86"
+version: "0.3.87"
 status: "DRAFT_FOR_IMPLEMENTATION"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.93"
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.85"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.94"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.86"
 ---
 
 # 知隙 GapProof 技术设计文档（TDD）
@@ -1655,6 +1655,7 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-076 | 2026-08-16 | `main` | `pushed` | `feat: name uploaded learning materials` | OCR 批次创建请求新增受限材料名称，事务直接写入同一真实 Case 标题；批次与设备恢复视图返回标题，上传页创建前填写、创建后锁定，恢复卡显示名称。错题/计划/进步/报告继续从 Case 标题投影，无重复名称字段或迁移 | 按比赛功能落地优先要求未运行测试、集中审查、Provider smoke、浏览器/视觉或真实学生验收，全部 deferred；输入提示避免姓名/学校/班级，旧批次保留原标题，名称不构成 OCR、诊断、个性化或学习效果证据 |
 | PUSH-077 | 2026-08-16 | `main` | `pushed` | `feat: add student material archive` | 新增 `GET /v1/students/:studentId/materials` 与“我的材料”页面；服务端只投影当前设备学生非 synthetic、非 simulation、未删除的真实 OCR 批次，最近 100 份按更新时间倒序并返回真实总数。Web 按 batch/Case 状态进入继续上传、处理进度、人工核对、今日、错题本或报告 | 按比赛功能落地优先要求未运行测试、构建、集中审查、Provider smoke、浏览器/视觉或真实学生验收，全部 deferred；响应不含对象键、文件名、hash、Provider、原始响应、置信度或答案，不证明 OCR 准确率、真实个性化或学习效果 |
 | PUSH-078 | 2026-08-16 | `main` | `pushed` | `feat: rename uploaded materials` | 新增 `POST /v1/ocr-batches/:batchId/commands/rename`，以受限标题、批次 expectedVersion、UUIDv7 幂等键和请求指纹原子更新真实 Case 标题及批次版本；材料档案返回版本，Web 卡片支持就地改名，成功刷新服务端投影，冲突/未知结果只读恢复 | 按比赛功能落地优先要求未运行测试、构建、集中审查、Provider smoke、浏览器/视觉或真实学生验收，全部 deferred；只允许非 synthetic、非 simulation、未删除且受设备所有权保护的 OCR 批次，不创建学习证据，不证明 OCR 准确率、个性化或学习效果 |
+| PUSH-079 | 2026-08-16 | `main` | `pushed` | `feat: page uploaded material archive` | 材料档案新增受限 query/filter/cursor/limit 契约，数据库按真实材料归属、名称、active/completed 状态及 `(updatedAt,batchId)` 游标直接分页；响应返回 totalCount、matchedCount、最多 50 项和 nextCursor。Web 首屏 20 份，搜索/筛选远程刷新，继续加载去重追加，改名后同步当前卡片 | 按比赛功能落地优先要求未运行测试、构建、集中审查、Provider smoke、浏览器/视觉或真实学生验收，全部 deferred；游标不展示，查询不写学习状态，不把 completed 扩大为永久掌握或学习效果 |
 | PUSH-037 | 2026-08-16 | `main` | `pushed` | `feat: connect real case teaching spine` | 真实 Case 禁止 Fake 干预，要求真实 OCR/学生确认/DeepSeek 诊断证据并调用内容绑定 DeepSeek intervention；私有 D1/D7 与知识目标/来源事件绑定，报告拒绝合成或不匹配复测。首次学习范围保持品牌化五步 Today 引导；永久失败 OCR 可恢复并重新上传，真实批次上限 50 页；DeepSeek 输入扩展姓名、学校、班级、住址脱敏。不得将结果表述为 OCR 准确率、真实个性化或学习效果；处理说明持久化与生产 OSS 仍 deferred | 262 fast、76 skipped、152 Web、隔离 PostgreSQL/API/Worker 77、双 TypeScript、品牌化首次范围桌面/390×844 浏览器核验、5 项 OCR/DeepSeek 聚焦 20、OCR 恢复/50 页聚焦 5、`git diff --check` 通过；Drizzle `check` 仍因本地版本兼容阻断；`.env`、授权材料、`next-env.d.ts`、本地 agent 文件和生成缓存不纳入暂存 |
 | PUSH-036 | 2026-08-16 | `main` | `pushed` | `feat: complete OCR review and tutor continuity` | 真实 OCR 页面支持人工拆分最多 50 道题、逐题题干/选填原作答确认和乱码/低质结果恢复；导师公开并恢复最多六轮历史，下一轮携带最多五轮既有上下文，保留未知写入只读恢复与输出守卫；共享中止控制修复 `REPLACED`。首次学习范围改为 Today 内嵌品牌化五步选择，桌面双列、手机固定确认操作。人工拆题不冒充可靠自动逐题 OCR；审计确认真实 Case 后续固定 Fake 干预与固定 D1/D7 仍为下一 P0，不宣称真实个性化或学习效果 | 254 fast / 74 skipped、152 Web、隔离 PostgreSQL/API/Worker 73、双 TypeScript、Next production build、8 条浏览器主链、授权材料阿里云 OCR 单页 smoke 与 DeepSeek 双轮 synthetic smoke、凭据/隐私和 `git diff --check` 通过；共享库首次 2 项失败已确认由预览 Worker 争用队列导致，隔离复验全过且临时数据库已删除；Drizzle `check` 仍因本地版本兼容阻断；`.env`、授权测试材料、`next-env.d.ts`、本地 agent 文件、生成缓存与截图不纳入暂存 |
 | PUSH-035 | 2026-08-16 | `main` | `pushed` | `feat: add confirmed question archive and tutor recovery` | 新增同设备学生已确认真实 OCR item 的只读错题档案、人工修正/选填原作答及题目/任务详情；排除 synthetic/simulation 与未确认项，ready 任务复用权威提交链路。导师新增最新轮次恢复、NETWORK_UNKNOWN 只读恢复、按需提示与 nextAction；修正上传控件语义及三条浏览器 Fixture 漂移。当前 OCR item 可能对应整页，导师公开契约只返回最新一轮，不宣称可靠自动逐题切分、真实个性化或学习效果 | 242 fast、138 Web、72 串行 PostgreSQL/API/Worker（主 API 51 + 其余 21）、双 TypeScript、Next production build、7 条串行浏览器 fixture、DeepSeek structured 与导师全链路真实 synthetic smoke、授权材料阿里云 OCR 单页 smoke、凭据/隐私和 diff 检查通过；生产 OSS、完整导师历史、跨设备账号、正式 30–50 页基准与真实学生验收继续待办；`.env`、授权测试材料、`next-env.d.ts` 与本地 agent 文件不纳入暂存 |
@@ -1694,6 +1695,11 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-026 | 2026-08-16 | `main` | `pushed` | `fix: decouple demo readiness from product copy` | Demo 栈 Web readiness 从已移除的“真实 API 模式”可见文案改为稳定 `today-page` 页面结构信号，防止产品文案治理后 90 秒误判并停止 API/Worker/Web 子进程 | root typecheck、`git diff --check`、Web 200、API Today 200 且含 overview、Demo 父进程持续存活、3000/4000 监听及生成残留精确清理通过；同轮推送后核对本地/远端 SHA 一致 |
 
 ## 27. 变更日志
+
+### v0.3.87 — 2026-08-16
+
+- `StudentMaterialArchiveView` 增加 matchedCount/nextCursor，并新增 query/filter/cursor/limit 契约；仓储以更新时间和批次 ID 稳定倒序，数据库直接执行真实材料过滤、名称搜索、状态筛选与 limit+1 游标分页。
+- Web 材料浏览器保持首屏服务端读取，客户端仅负责防抖搜索、筛选、继续加载和卡片改名状态；错误保留当前数据。无数据库迁移；测试、构建与审查继续 deferred。
 
 ### v0.3.86 — 2026-08-16
 

@@ -1,5 +1,5 @@
-import { and, asc, count, desc, eq, gt, gte, isNull, sql } from "drizzle-orm";
-import { MAX_REAL_OCR_BATCHES_PER_24H, MAX_REAL_OCR_BATCH_PAGES, REAL_OCR_PROCESSING_NOTICE_VERSION, type StudentMaterialArchiveView } from "@gapproof/contracts";
+import { and, asc, count, desc, eq, gt, gte, ilike, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { MAX_REAL_OCR_BATCHES_PER_24H, MAX_REAL_OCR_BATCH_PAGES, REAL_OCR_PROCESSING_NOTICE_VERSION, type StudentMaterialArchiveFilter, type StudentMaterialArchiveView } from "@gapproof/contracts";
 import { createHash, randomUUID } from "node:crypto";
 import type { Database } from "./client.ts";
 import { ResourceNotFoundError, isPostgresUniqueViolation } from "./case-repository.ts";
@@ -41,7 +41,12 @@ function archiveTitle(title: string | null): string {
 export async function findStudentMaterialArchive(
   database: Pick<Database, "select">,
   studentId: string,
+  options: { query?: string; filter?: StudentMaterialArchiveFilter; cursor?: string; limit?: number } = {},
 ): Promise<StudentMaterialArchiveView> {
+  const limit = Math.min(50, Math.max(1, options.limit ?? 20));
+  const query = options.query?.trim() ?? "";
+  const filter = options.filter ?? "all";
+  const cursor = options.cursor ? decodeMaterialCursor(options.cursor) : undefined;
   const realCaseFilter = and(
     eq(ocrBatches.studentId, studentId),
     eq(cases.studentId, studentId),
@@ -49,6 +54,21 @@ export async function findStudentMaterialArchive(
     eq(cases.simulation, false),
     isNull(cases.deletedAt),
   );
+  const terminalStates = ["repair_verified", "support_required", "report_ready"] as const;
+  const searchFilter = query ? ilike(cases.title, `%${query.replace(/[\\%_]/g, "\\$&")}%`) : undefined;
+  const stateFilter = filter === "completed"
+    ? and(eq(ocrBatches.status, "completed"), inArray(cases.state, [...terminalStates]))
+    : filter === "active"
+      ? or(ne(ocrBatches.status, "completed"), inArray(cases.state, [
+        "awaiting_evidence", "awaiting_confirmation", "ready_for_diagnosis", "probe_required",
+        "intervention_ready", "intervention_active", "d1_scheduled", "d7_scheduled", "replan_required",
+      ]))
+      : undefined;
+  const matchingFilter = and(realCaseFilter, searchFilter, stateFilter);
+  const cursorFilter = cursor ? or(
+    lt(ocrBatches.updatedAt, cursor.updatedAt),
+    and(eq(ocrBatches.updatedAt, cursor.updatedAt), lt(ocrBatches.id, cursor.batchId)),
+  ) : undefined;
   const [rows, totals] = await Promise.all([
     database.select({
       batchId: ocrBatches.id,
@@ -62,16 +82,23 @@ export async function findStudentMaterialArchive(
     }).from(ocrBatches)
       .innerJoin(cases, eq(ocrBatches.caseId, cases.id))
       .leftJoin(ocrBatchPages, eq(ocrBatchPages.batchId, ocrBatches.id))
-      .where(realCaseFilter)
+      .where(and(matchingFilter, cursorFilter))
       .groupBy(ocrBatches.id, cases.id)
       .orderBy(desc(ocrBatches.updatedAt), desc(ocrBatches.id))
-      .limit(100),
-    database.select({ value: count() }).from(ocrBatches)
-      .innerJoin(cases, eq(ocrBatches.caseId, cases.id))
-      .where(realCaseFilter),
+      .limit(limit + 1),
+    Promise.all([
+      database.select({ value: count() }).from(ocrBatches)
+        .innerJoin(cases, eq(ocrBatches.caseId, cases.id))
+        .where(realCaseFilter),
+      database.select({ value: count() }).from(ocrBatches)
+        .innerJoin(cases, eq(ocrBatches.caseId, cases.id))
+        .where(matchingFilter),
+    ]),
   ]);
+  const pageRows = rows.slice(0, limit);
+  const last = pageRows.at(-1);
   return {
-    items: rows.map(row => ({
+    items: pageRows.map(row => ({
       batchId: row.batchId,
       caseId: row.caseId,
       title: archiveTitle(row.title),
@@ -81,8 +108,25 @@ export async function findStudentMaterialArchive(
       pageCount: row.pageCount,
       updatedAt: row.updatedAt.toISOString(),
     })),
-    totalCount: totals[0]?.value ?? 0,
+    totalCount: totals[0][0]?.value ?? 0,
+    matchedCount: totals[1][0]?.value ?? 0,
+    nextCursor: rows.length > limit && last ? encodeMaterialCursor(last.updatedAt, last.batchId) : null,
   };
+}
+
+function encodeMaterialCursor(updatedAt: Date, batchId: string): string {
+  return Buffer.from(JSON.stringify({ u: updatedAt.toISOString(), b: batchId }), "utf8").toString("base64url");
+}
+
+function decodeMaterialCursor(value: string): { updatedAt: Date; batchId: string } {
+  try {
+    const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as { u?: unknown; b?: unknown };
+    const updatedAt = typeof parsed.u === "string" ? new Date(parsed.u) : new Date(Number.NaN);
+    if (!Number.isFinite(updatedAt.getTime()) || typeof parsed.b !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(parsed.b)) throw new Error("invalid");
+    return { updatedAt, batchId: parsed.b };
+  } catch {
+    throw new OcrBatchIntentError("The material archive cursor is invalid.");
+  }
 }
 
 async function idempotentRecord(database: Pick<Database, "select">, scope: string, key: string) {

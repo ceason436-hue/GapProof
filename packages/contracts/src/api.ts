@@ -233,9 +233,22 @@ export const StudentMaterialArchiveItemSchema = Type.Object({
 export const StudentMaterialArchiveViewSchema = Type.Object({
   items: Type.Array(StudentMaterialArchiveItemSchema),
   totalCount: Type.Integer({ minimum: 0 }),
+  matchedCount: Type.Integer({ minimum: 0 }),
+  nextCursor: Type.Union([Type.String({ minLength: 1, maxLength: 256 }), Type.Null()]),
+}, { additionalProperties: false });
+export const StudentMaterialArchiveFilterSchema = Type.Union([
+  Type.Literal("all"), Type.Literal("active"), Type.Literal("completed"),
+]);
+export const StudentMaterialArchiveQuerySchema = Type.Object({
+  query: Type.Optional(Type.String({ maxLength: 80 })),
+  filter: Type.Optional(StudentMaterialArchiveFilterSchema),
+  cursor: Type.Optional(Type.String({ minLength: 1, maxLength: 256 })),
+  limit: Type.Optional(Type.String({ pattern: "^(?:[1-9]|[1-4][0-9]|50)$" })),
 }, { additionalProperties: false });
 export type StudentMaterialArchiveItem = Static<typeof StudentMaterialArchiveItemSchema>;
 export type StudentMaterialArchiveView = Static<typeof StudentMaterialArchiveViewSchema>;
+export type StudentMaterialArchiveFilter = Static<typeof StudentMaterialArchiveFilterSchema>;
+export type StudentMaterialArchiveQuery = Static<typeof StudentMaterialArchiveQuerySchema>;
 export const AddRealOcrBatchPageRequestSchema = Type.Object({
   fileName: Type.String({ minLength: 1, maxLength: 200, pattern: "^[^/\\\\\\u0000]+$" }), mimeType: StudentUploadMimeTypeSchema,
   byteSize: Type.Integer({ minimum: 1, maximum: 10_485_760 }), sha256: SourceAssetSha256Schema,

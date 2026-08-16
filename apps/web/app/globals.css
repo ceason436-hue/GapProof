@@ -98,3 +98,4 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
 @media (max-width:760px){.synthetic-quick-check-status{align-items:stretch;flex-direction:column;margin:-8px 0 20px}.synthetic-quick-check-status-actions{justify-content:flex-start}.synthetic-quick-check-status-actions .primary-blue,.synthetic-quick-check-status-actions .secondary-button{justify-content:center}}
 .task-attempt-summary{display:grid;gap:6px;margin-top:18px;padding:15px;border-left:4px solid var(--blue);background:#f5f7ff}.task-attempt-summary p{margin:0}.task-attempt-summary strong{color:var(--ink)}
 .read-only-tutor-history{margin-top:22px}.read-only-tutor-history .socratic-tutor-history{margin-top:16px}
+.material-archive-browser{display:grid;gap:16px}

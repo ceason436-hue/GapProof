@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.83"
+version: "0.2.84"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "PUSH-078 已发布：学生可在我的材料安全改名并贯通同一 Case；比赛功能落地优先，测试与审查 deferred"
+current_design_stage: "PUSH-079 已发布：我的材料支持服务端搜索、状态筛选与游标继续加载；比赛功能落地优先，测试与审查 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -1782,6 +1782,12 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 ---
 
 ## 22. 版本记录
+
+### v0.2.84 — 2026-08-16
+
+- “我的材料”标题区下增加名称搜索和“全部 / 待继续 / 已有记录”筛选，复用错题本紧凑工具栏；结果摘要同时显示当前数量、筛选命中数与材料总数。
+- 首批显示 20 份，存在更早材料时显示“继续显示更多材料”；加载失败保留已有卡片和搜索条件，提供明确重试。手机端搜索与三个筛选按钮纵向适配。
+- “已有记录”只表示同一材料当前存在终态任务事实，不等于永久掌握或学习效果；本批视觉与浏览器验收 deferred。
 
 ### v0.2.83 — 2026-08-16
 

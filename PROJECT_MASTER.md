@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.93"
+version: "0.1.94"
 status: "ACTIVE"
-current_stage: "PUSH-078 已发布：学生可在我的材料安全改名并贯通同一 Case；比赛功能落地优先，测试与审查统一 deferred"
+current_stage: "PUSH-079 已发布：我的材料支持服务端搜索、状态筛选与游标继续加载；比赛功能落地优先，测试与审查统一 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -2122,6 +2122,11 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.94 — 2026-08-16
+
+- “我的材料”不再固定截断最近 100 份：首屏服务端读取 20 份，支持按材料名称搜索、按待继续/已有记录筛选，并用不透明游标继续加载更早材料。
+- 数据库直接完成学生归属、真实材料、搜索、状态和游标条件；响应区分全部总数与筛选命中数。继续加载失败保留当前结果。按比赛功能落地优先要求未运行测试、构建、审查或浏览器验收，全部继续 deferred。
 
 ### v0.1.93 — 2026-08-16
 

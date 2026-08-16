@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { ApiClientError, apiRequest } from "@/lib/api-client";
 import { createBrowserUuidV7 } from "@/lib/browser-uuidv7";
 
-export function MaterialTitleEditor({ batchId, initialTitle, initialVersion }: { batchId: string; initialTitle: string; initialVersion: number }) {
+export function MaterialTitleEditor({ batchId, initialTitle, initialVersion, onSaved }: { batchId: string; initialTitle: string; initialVersion: number; onSaved?: (title: string, version: number) => void }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(initialTitle);
@@ -65,6 +65,7 @@ export function MaterialTitleEditor({ batchId, initialTitle, initialVersion }: {
       setSavedTitle(response.data.title);
       setTitle(response.data.title);
       setVersion(response.data.version);
+      onSaved?.(response.data.title, response.data.version);
       setEditing(false);
       setState("idle");
       intentKey.current = undefined;
