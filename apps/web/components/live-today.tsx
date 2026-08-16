@@ -116,7 +116,7 @@ export function OverviewNextCheck({ nextCheck, timeZone }: { nextCheck: TodayOve
   return <section className="next-check" data-next-check={nextCheck.taskType}>
     <header><span>下次检查 · {cycle}</span><strong>{formatTaskDateTime(nextCheck.scheduledFor, timeZone)}</strong></header>
     <div><h2>{cycle}练习</h2><p>预计时长：约 {nextCheck.estimatedMinutes} 分钟</p>{nextCheck.dueAt ? <p>截止：{formatTaskDateTime(nextCheck.dueAt, timeZone)}</p> : null}</div>
-    <button type="button" disabled>到时间后开始</button>
+    <span className="next-check-status">到时间后会开放</span>
     <small>完成后会更新你的学习足迹。</small>
   </section>;
 }
