@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.61"
+version: "0.1.62"
 status: "ACTIVE"
-current_stage: "PUSH-046 已发布：正式与体验 Today 均不再用禁用按钮冒充未来复习入口；学生真实闭环继续推进，完整集中门禁与真实学生验收仍 deferred"
+current_stage: "PUSH-047 已发布：真实引导任务完成后可直接回到 Today 或查看 7 日计划；学生真实闭环继续推进，完整集中门禁与真实学生验收仍 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -2122,6 +2122,10 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.62 — 2026-08-16
+
+- 真实引导任务完成态增加“返回今日查看安排”和“查看 7 日计划”入口，明日复习安排形成后不再让学生停在无动作页面。
 
 ### v0.1.61 — 2026-08-16
 
