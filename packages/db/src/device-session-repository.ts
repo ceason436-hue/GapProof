@@ -84,13 +84,13 @@ export async function revokeDeviceSession(database: Database, sessionId: string,
 export type RecoverableOcrBatch = {
   readonly batchId: string;
   readonly caseId: string;
-  readonly status: "collecting" | "ready" | "processing" | "needs_confirmation" | "retryable_error";
+  readonly status: "collecting" | "ready" | "processing" | "needs_confirmation" | "retryable_error" | "failed";
   readonly pageCount: number;
   readonly resumeKind: "continue_upload" | "wait" | "review" | "retry";
   readonly updatedAt: Date;
 };
 
-const recoverableStatuses = ["collecting", "ready", "processing", "needs_confirmation", "retryable_error"] as const;
+export const recoverableOcrBatchStatuses = ["collecting", "ready", "processing", "needs_confirmation", "retryable_error", "failed"] as const;
 
 function resumeKind(status: RecoverableOcrBatch["status"]): RecoverableOcrBatch["resumeKind"] {
   if (status === "collecting" || status === "ready") return "continue_upload";
@@ -111,7 +111,7 @@ async function recoverableView(database: Pick<Database, "select">, batch: typeof
 
 export async function findRecoverableOcrBatchesForStudent(database: Pick<Database, "select">, studentId: string) {
   const rows = await database.select().from(ocrBatches)
-    .where(and(eq(ocrBatches.studentId, studentId), inArray(ocrBatches.status, [...recoverableStatuses])))
+    .where(and(eq(ocrBatches.studentId, studentId), inArray(ocrBatches.status, [...recoverableOcrBatchStatuses])))
     .orderBy(desc(ocrBatches.updatedAt));
   const views = await Promise.all(rows.map((row) => recoverableView(database, row)));
   return views.filter((view): view is RecoverableOcrBatch => view !== undefined);
@@ -119,7 +119,7 @@ export async function findRecoverableOcrBatchesForStudent(database: Pick<Databas
 
 export async function findRecoverableOcrBatchForStudent(database: Pick<Database, "select">, studentId: string, batchId: string) {
   const [row] = await database.select().from(ocrBatches)
-    .where(and(eq(ocrBatches.id, batchId), eq(ocrBatches.studentId, studentId), inArray(ocrBatches.status, [...recoverableStatuses])))
+    .where(and(eq(ocrBatches.id, batchId), eq(ocrBatches.studentId, studentId), inArray(ocrBatches.status, [...recoverableOcrBatchStatuses])))
     .limit(1);
   return row === undefined ? undefined : recoverableView(database, row);
 }

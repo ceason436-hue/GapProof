@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { diagnosisModeForEvidence, reconstructConfirmedDiagnosisItems } from "./run-next-worker.ts";
+import type { BuildInterventionAdapter } from "@gapproof/tools";
+import { diagnosisModeForEvidence, interventionAdapterForCase, reconstructConfirmedDiagnosisItems } from "./run-next-worker.ts";
 
 describe("real diagnosis confirmed evidence reconstruction", () => {
   it("uses only confirmed items and applies the student's prompt and answer corrections", () => {
@@ -32,5 +33,14 @@ describe("real diagnosis confirmed evidence reconstruction", () => {
     expect(diagnosisModeForEvidence({ synthetic: false, simulation: false, extractionSourceType: "real_alibaba_ocr", confirmationSourceType: "student_confirmation" })).toBe("real");
     expect(diagnosisModeForEvidence({ synthetic: false, simulation: false, extractionSourceType: "fake_ocr", confirmationSourceType: "student_confirmation" })).toBe("invalid");
     expect(diagnosisModeForEvidence({ synthetic: true, simulation: true, extractionSourceType: "fake_ocr", confirmationSourceType: "student_confirmation" })).toBe("synthetic");
+  });
+
+  it("never selects a fake intervention adapter for a real Case", () => {
+    const syntheticAdapter = { execute: async () => { throw new Error("fake adapter must not run"); } } as BuildInterventionAdapter;
+    const realAdapter = { execute: async () => { throw new Error("not called by selector test"); } } as BuildInterventionAdapter;
+
+    expect(interventionAdapterForCase({ isRealCase: true, syntheticAdapter, realAdapter })).toBe(realAdapter);
+    expect(() => interventionAdapterForCase({ isRealCase: true, syntheticAdapter })).toThrow("REAL_INTERVENTION_PROVIDER_NOT_CONFIGURED");
+    expect(interventionAdapterForCase({ isRealCase: false, syntheticAdapter })).toBe(syntheticAdapter);
   });
 });

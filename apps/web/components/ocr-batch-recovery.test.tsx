@@ -20,6 +20,7 @@ describe("OcrBatchRecovery", () => {
       base,
       { ...base, batchId: "0198c111-1111-7000-8000-000000000003", status: "needs_confirmation", resumeKind: "review" },
       { ...base, batchId: "0198c111-1111-7000-8000-000000000004", status: "retryable_error", resumeKind: "retry" },
+      { ...base, batchId: "0198c111-1111-7000-8000-000000000005", status: "failed", resumeKind: "retry" },
     ];
     const html = renderToStaticMarkup(createElement(OcrBatchRecovery, { batches }));
 
@@ -30,6 +31,10 @@ describe("OcrBatchRecovery", () => {
     expect(html).toContain('data-resume-kind="review"');
     expect(html).toContain('data-resume-kind="retry"');
     expect(html).toContain("识别内容等你核对");
+    expect(html).toContain("这份材料没有识别完成");
+    expect(html).toContain("原批次无法继续处理，请重新上传图片");
+    expect(html).toContain('href="/materials/new"');
+    expect(html).toContain("重新上传图片");
     expect(html).not.toMatch(/已经诊断|学习效果|识别正确/);
   });
 

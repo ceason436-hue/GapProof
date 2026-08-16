@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.51"
+version: "0.1.52"
 status: "ACTIVE"
-current_stage: "PUSH-036：真实 OCR 页面支持人工逐题拆分，导师支持六轮连续历史，首次学习范围完成品牌化内嵌；真实 Case 干预与 D1/D7 仍须移除固定合成内容"
+current_stage: "PUSH-037：真实 Case 教学脊柱接通 DeepSeek 内容绑定干预与同知识目标 D1/D7；首次学习范围完成品牌化内嵌，失败 OCR 可恢复，PII 脱敏与 50 页上限已加固；处理说明持久化、生产 OSS 与完整生产验收仍 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -2153,6 +2153,12 @@ review_date:
 
 - 将真实多图上传、逐页质量检查、移除/替换/重试、阿里云教育 OCR、同一 Case 逐页核对和强制人工确认登记为已实现的产品路径；Provider 原始响应、凭据、对象键、hash、精确置信度和内部 ID 不进入学生响应。
 - 明确 OCR 文本仍是待核对证据；后续诊断仍含合成 Fixture，不能表述为真实诊断、个性化或学习效果。下一阶段按身份/恢复、真实材料诊断、DeepSeek 苏格拉底导师、错题本、计划/进步/报告和全路径验收推进；同步 PRD v0.1.38、TDD v0.3.39、DESIGN v0.2.36 与 PUSH-031。
+
+### v0.1.52 — 2026-08-16
+
+- 真实 Case 教学脊柱已接通：Worker 禁止真实 Case 使用 Fake intervention，真实干预要求真实 OCR、学生确认、DeepSeek 诊断和确认探针证据；D1/D7 由内容绑定的私有计划生成，报告只接受同 knowledgeTarget 与 contentBasisEventId 的真实复测证据。
+- 首次学习范围采用 Today 品牌化五步引导并通过桌面/390×844 实机核验；永久失败 OCR 批次保留恢复入口并重新上传，真实批次单批上限 50 页；DeepSeek 输入去标识规则覆盖姓名、学校、班级、住址等常见身份信息。
+- 根 262、Web 152、隔离 PostgreSQL/API/Worker 77、双 TypeScript 和 Next production build 通过。处理说明版本接受持久化、生产 OSS、provider 配额和完整真实学生验收仍 deferred；不得将上述工程结果表述为 OCR 准确率、真实个性化或学习效果。
 
 ### v0.1.44 — 2026-08-16
 

@@ -13,6 +13,7 @@ import {
   type DeepSeekStructuredInput,
   type DeepSeekStructuredResult,
 } from "./deepseek-structured.ts";
+import { deidentifyLearningText } from "./deidentify-learning-text.ts";
 
 export const SOCRATIC_TUTOR_TOOL_VERSION = "socratic-tutor-v1";
 
@@ -26,15 +27,7 @@ const unsafeOutputPatterns = [
 ];
 
 export function deidentifyTutorText(value: string): string {
-  return value
-    .normalize("NFKC")
-    .replace(/https?:\/\/\S+/giu, "[链接已隐藏]")
-    .replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/giu, "[邮箱已隐藏]")
-    .replace(/(?<!\d)1[3-9]\d{9}(?!\d)/gu, "[手机号已隐藏]")
-    .replace(/(?<!\d)\d{15,18}[0-9Xx]?(?!\d)/gu, "[证件号已隐藏]")
-    .replace(/\s+/gu, " ")
-    .trim()
-    .slice(0, 800);
+  return deidentifyLearningText(value, 800).text;
 }
 
 export function guardSocraticTutorOutput(value: unknown): SocraticTutorOutput | undefined {

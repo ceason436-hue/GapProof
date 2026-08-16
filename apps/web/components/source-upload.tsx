@@ -1,6 +1,6 @@
 "use client";
 
-import { AddedRealOcrBatchPageViewSchema, RealOcrBatchViewSchema, SourceAssetPrepareViewSchema, StartRealOcrBatchViewSchema, UploadedSourceAssetViewSchema, type RecoverableOcrBatchView, type SourceAssetProcessingView } from "@gapproof/contracts";
+import { AddedRealOcrBatchPageViewSchema, MAX_REAL_OCR_BATCH_PAGES, RealOcrBatchViewSchema, SourceAssetPrepareViewSchema, StartRealOcrBatchViewSchema, UploadedSourceAssetViewSchema, type RecoverableOcrBatchView, type SourceAssetProcessingView } from "@gapproof/contracts";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiDelete, apiGet, apiPost, apiPut, ApiClientError } from "@/lib/api-client";
@@ -57,12 +57,20 @@ export function SourceUpload({ studentId, recoverableBatches = [], initialBatch 
 
   const addFiles = (files: FileList | null) => {
     if (!files?.length) return;
-    const additions = Array.from(files).map(file => {
+    const remaining = Math.max(0, MAX_REAL_OCR_BATCH_PAGES - (initialBatch?.pageCount ?? 0) - itemsRef.current.length);
+    if (remaining === 0) {
+      setMessage(`一份材料最多 ${MAX_REAL_OCR_BATCH_PAGES} 张图片，请移除已有图片后再添加。`);
+      return;
+    }
+    const selected = Array.from(files).slice(0, remaining);
+    const additions = selected.map(file => {
       const valid = validateSourceUploadFile(file);
       return { clientId: createBrowserUuidV7(), file, previewUrl: URL.createObjectURL(file), status: valid.ok ? "waiting" as const : "failed" as const, message: valid.ok ? "尚未上传。" : valid.message };
     });
     updateItems(current => [...current, ...additions]);
-    setMessage("图片已加入队列；开始上传后会逐张检查。识别不会自动开始。");
+    setMessage(selected.length < files.length
+      ? `已加入 ${selected.length} 张图片；一份材料最多 ${MAX_REAL_OCR_BATCH_PAGES} 张，超出的图片未加入。`
+      : "图片已加入队列；开始上传后会逐张检查。识别不会自动开始。");
   };
   const openPicker = () => { if (inputRef.current) { inputRef.current.value = ""; inputRef.current.click(); } };
   const removeItem = async (clientId: string) => {

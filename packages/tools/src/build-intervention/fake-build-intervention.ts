@@ -27,6 +27,7 @@ export class FakeBuildInterventionAdapter
         rationale: hasConfirmedCause
           ? "确认小题支持“过去式与过去分词形式混淆”，先用一个规则和例子完成最小修复。"
           : "确认小题尚未确认单一原因，先用中性的完成时词形复习收集更多证据。",
+        knowledgeTarget: "现在完成时中 write 的过去分词形式",
         estimatedMinutes: 8,
         steps: [
           {
@@ -51,6 +52,30 @@ export class FakeBuildInterventionAdapter
               "朗读并补全：Mina has written three notes. 然后说明为什么不用 wrote。",
           },
         ],
+        retests: {
+          d1: {
+            id: "synthetic-d1-unseen-item-v1",
+            prompt: "Mina has ___ three short notes about saving water this week.",
+            choices: [
+              { id: "choice-wrote", label: "wrote" },
+              { id: "choice-written", label: "written" },
+              { id: "choice-writing", label: "writing" },
+            ],
+            expectedChoiceId: "choice-written",
+            scoringMethod: "exact-choice-v1",
+          },
+          d7: {
+            id: "synthetic-d7-transfer-item-v1",
+            prompt: "The volunteers have ___ three notes about saving water.",
+            choices: [
+              { id: "choice-wrote", label: "wrote" },
+              { id: "choice-written", label: "written" },
+              { id: "choice-writing", label: "writing" },
+            ],
+            expectedChoiceId: "choice-written",
+            scoringMethod: "exact-choice-v1",
+          },
+        },
       },
       confidence: 1,
       evidenceRefs: [request.input.probeEvaluationEventId],

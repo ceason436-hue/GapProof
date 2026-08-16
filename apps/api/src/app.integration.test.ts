@@ -19,6 +19,7 @@ import type {
   SourceAssetProcessingView,
   StartSyntheticRecognitionView,
   StudentProfileView,
+  StudentFactReportsView,
   SyntheticQuickCheckResult,
   SyntheticQuickCheckView,
   TaskCompletionView,
@@ -50,6 +51,7 @@ import {
 } from "@gapproof/db";
 import { FixedClock } from "@gapproof/domain";
 import { RealFormHypothesesAdapter } from "../../../packages/tools/src/form-hypotheses/real-form-hypotheses.ts";
+import { RealBuildInterventionAdapter } from "../../../packages/tools/src/build-intervention/real-build-intervention.ts";
 import {
   createJobQueue,
   REPLAN_QUEUE,
@@ -324,6 +326,32 @@ describeWithDatabase("Fastify API and run-next worker", () => {
                   { label: "我不确定该用哪条规则", hypothesisIndex: 1 },
                   { label: "都不是", hypothesisIndex: null },
                 ],
+              }),
+              model: "integration-fixture",
+            },
+          }),
+        },
+      }),
+      realBuildIntervention: new RealBuildInterventionAdapter({
+        enabled: true,
+        transport: {
+          execute: async () => ({
+            status: 200,
+            payload: {
+              content: JSON.stringify({
+                title: "分清现在完成时的过去分词",
+                rationale: "根据已确认题目，先澄清词形，再用新题独立判断。",
+                knowledgeTarget: "have 或 has 后使用过去分词",
+                estimatedMinutes: 8,
+                steps: [
+                  { kind: "explain", title: "想规则", content: "have 或 has 后需要过去分词。" },
+                  { kind: "worked_example", title: "看例子", content: "They have finished the work." },
+                  { kind: "guided_practice", title: "说理由", content: "补全一个新句子，并说明选择依据。" },
+                ],
+                retests: {
+                  d1: { prompt: "She has ___ the letter.", choices: ["write", "wrote", "written"], correctIndex: 2 },
+                  d7: { prompt: "We have ___ our notes.", choices: ["review", "reviewed", "reviewing"], correctIndex: 1 },
+                },
               }),
               model: "integration-fixture",
             },
@@ -1559,7 +1587,129 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     const generated = events.find((event) => event.eventType === "hypotheses_generated");
     expect(generated?.sourceType).toBe("deepseek_diagnosis");
     expect(JSON.stringify(generated?.payload)).not.toMatch(/Mina|saving water|学生确认后的真实题干|integration-fixture/);
-  }, 15_000);
+
+    const probe = await api.inject({
+      method: "POST",
+      url: `/v1/cases/${caseId}/attempts`,
+      headers: { "idempotency-key": `real-probe:${caseId}` },
+      payload: { expectedVersion: 3, probeId: hypotheses.data.probe.id, selectedChoiceId: hypotheses.data.probe.choices[0]!.id },
+    });
+    expect(probe.statusCode).toBe(200);
+    expect(probe.json<ApiResponse<AttemptView>>().data).toMatchObject({ state: "intervention_ready", stateVersion: 4, selectedHypothesisId: "real-hypothesis-1" });
+
+    const interventionQueued = await api.inject({
+      method: "POST",
+      url: `/v1/cases/${caseId}/commands/run-next`,
+      headers: { "idempotency-key": `real-intervention:${caseId}` },
+      payload: { expectedVersion: 4 },
+    });
+    expect(interventionQueued.statusCode).toBe(202);
+    await waitForState(api, caseId, "intervention_active");
+    const [guided] = await database.db.select().from(tasks).where(eq(tasks.caseId, caseId));
+    expect(guided).toMatchObject({ taskType: "guided_intervention", status: "ready" });
+    expect(guided?.payload).toMatchObject({
+      contentSource: "confirmed_real_material",
+      knowledgeTarget: "have 或 has 后使用过去分词",
+      retests: {
+        d1: { prompt: "She has ___ the letter.", expectedChoiceId: "d1-choice-3" },
+        d7: { prompt: "We have ___ our notes.", expectedChoiceId: "d7-choice-2" },
+      },
+    });
+    expect(JSON.stringify(guided?.payload)).not.toMatch(/Mina|volunteers|saving water/);
+    const interventionEvents = await database.db.select().from(learningEvidenceEvents).where(eq(learningEvidenceEvents.caseId, caseId));
+    expect(interventionEvents.find(event => event.eventType === "intervention_generated")?.sourceType).toBe("deepseek_intervention");
+
+    const steps = (guided?.payload.steps as Array<{ id: string }>).map(step => step.id);
+    const completed = await api.inject({
+      method: "POST",
+      url: `/v1/tasks/${guided!.id}/submit`,
+      headers: { "idempotency-key": `real-complete:${caseId}` },
+      payload: { expectedVersion: 5, completedStepIds: steps },
+    });
+    expect(completed.statusCode).toBe(200);
+    const d1 = completed.json<ApiResponse<TaskCompletionView>>().data.scheduledRetest;
+    expect(d1.item).toMatchObject({ prompt: "She has ___ the letter." });
+    expect(d1.item).not.toHaveProperty("expectedChoiceId");
+    await activateDueRetestTask(database.db, { caseId, taskId: d1.id, effectiveNow: new Date(d1.scheduledFor) });
+    const d1Attempt = await api.inject({
+      method: "POST",
+      url: `/v1/tasks/${d1.id}/attempts`,
+      headers: { "idempotency-key": `real-d1:${caseId}` },
+      payload: { expectedVersion: 6, itemId: d1.item.id, selectedChoiceId: "d1-choice-3" },
+    });
+    expect(d1Attempt.statusCode).toBe(200);
+    const d7 = d1Attempt.json<ApiResponse<D1RetestAttemptView>>().data.scheduledRetest;
+    if (d7 === null) throw new Error("Expected content-bound D7 retest.");
+    expect(d7.item).toMatchObject({ prompt: "We have ___ our notes." });
+    await activateDueRetestTask(database.db, { caseId, taskId: d7.id, effectiveNow: new Date(d7.scheduledFor) });
+    const d7Attempt = await api.inject({
+      method: "POST",
+      url: `/v1/tasks/${d7.id}/attempts`,
+      headers: { "idempotency-key": `real-d7:${caseId}` },
+      payload: { expectedVersion: 7, itemId: d7.item.id, selectedChoiceId: "d7-choice-2" },
+    });
+    expect(d7Attempt.statusCode).toBe(200);
+    expect(d7Attempt.json<ApiResponse<D7RetestAttemptView>>().data).toMatchObject({ state: "repair_verified", stateVersion: 8, passed: true });
+    const reports = await api.inject({ method: "GET", url: `/v1/students/${studentId}/reports` });
+    expect(reports.statusCode).toBe(200);
+    expect(reports.json<ApiResponse<StudentFactReportsView>>().data.reports).toEqual([
+      expect.objectContaining({ caseId, source: "real_material", conclusion: "repair_verified", d1Result: "passed", d7Result: "passed" }),
+    ]);
+  }, 30_000);
+
+  it("fails closed when a real guided task has no private D1 and D7 plan", async () => {
+    const tenantId = uuidv7();
+    const studentId = uuidv7();
+    const caseId = uuidv7();
+    const sourceEventId = uuidv7();
+    const taskId = uuidv7();
+    const occurredAt = new Date(fixedNow);
+    const steps = [
+      { id: "real-step-1", kind: "explain", title: "回想规则", content: "先说明这道题考查的规则。" },
+      { id: "real-step-2", kind: "worked_example", title: "看新例子", content: "用一个新句子检查规则。" },
+      { id: "real-step-3", kind: "guided_practice", title: "自己判断", content: "完成一道同知识点练习。" },
+    ];
+    await database.db.insert(students).values({ id: studentId, tenantId, anonymousKey: `real-missing-retests-${studentId}` });
+    await database.db.insert(cases).values({
+      id: caseId, tenantId, studentId, state: "intervention_active", stateVersion: 5,
+      title: "真实材料干预", simulation: false, synthetic: false,
+    });
+    await database.db.insert(learningEvidenceEvents).values({
+      id: sourceEventId, tenantId, studentId, caseId,
+      eventType: "intervention_generated", sourceType: "deepseek_intervention", sourceRef: "test-real-provider",
+      payload: { taskId, contentSource: "confirmed_real_material", knowledgeTarget: "现在完成时过去分词" },
+      confidence: null, occurredAt, idempotencyKey: `real-missing-retests-event:${caseId}`,
+    });
+    await database.db.insert(tasks).values({
+      id: taskId, tenantId, studentId, caseId, taskType: "guided_intervention", status: "ready",
+      title: "检查现在完成时", estimatedMinutes: 8, scheduledFor: occurredAt,
+      payload: {
+        rationale: "根据学生确认的真实题目安排练习。",
+        contentSource: "confirmed_real_material",
+        knowledgeTarget: "现在完成时过去分词",
+        contentBasisEventId: sourceEventId,
+        steps,
+      },
+      sourceEventId,
+    });
+
+    const response = await api.inject({
+      method: "POST",
+      url: `/v1/tasks/${taskId}/submit`,
+      headers: { "idempotency-key": `real-missing-retests-submit:${caseId}` },
+      payload: { expectedVersion: 5, completedStepIds: steps.map(({ id }) => id) },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json<ApiErrorResponse>().error.code).toBe("REAL_LEARNING_CONTENT_REQUIRED");
+    const [caseAfter] = await database.db.select().from(cases).where(eq(cases.id, caseId));
+    const tasksAfter = await database.db.select().from(tasks).where(eq(tasks.caseId, caseId));
+    const eventsAfter = await database.db.select().from(learningEvidenceEvents).where(eq(learningEvidenceEvents.caseId, caseId));
+    expect(caseAfter).toMatchObject({ state: "intervention_active", stateVersion: 5 });
+    expect(tasksAfter).toHaveLength(1);
+    expect(tasksAfter[0]).toMatchObject({ id: taskId, status: "ready" });
+    expect(eventsAfter.filter(({ eventType }) => eventType === "intervention_completed")).toHaveLength(0);
+  });
 
   it("persists bounded manual question splits when confirming a real OCR page", async () => {
     const tenantId = uuidv7();

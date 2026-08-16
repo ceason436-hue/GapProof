@@ -1,6 +1,6 @@
 import { createDatabase } from "@gapproof/db";
 import { createJobQueue } from "@gapproof/jobs";
-import { createRealFormHypothesesAdapterFromEnv } from "@gapproof/tools";
+import { createRealBuildInterventionAdapterFromEnv, createRealFormHypothesesAdapterFromEnv } from "@gapproof/tools";
 
 import { createRunNextWorker } from "./run-next-worker.ts";
 import { createRetestDueWorker } from "./retest-due-worker.ts";
@@ -28,6 +28,7 @@ const worker = createRunNextWorker({
   database: database.db,
   queue,
   realFormHypotheses: createRealFormHypothesesAdapterFromEnv(process.env),
+  realBuildIntervention: createRealBuildInterventionAdapterFromEnv(process.env),
 });
 const retestDueWorker = createRetestDueWorker({
   database: database.db,

@@ -2,15 +2,15 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.44"
+version: "0.3.45"
 status: "DRAFT_FOR_IMPLEMENTATION"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.51"
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.43"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.52"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.44"
 ---
 
 # 知隙 GapProof 技术设计文档（TDD）
@@ -1614,6 +1614,7 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 
 | Push ID | 日期 | 分支 | 状态 | 提交摘要 | 主要内容 | 验证 |
 |---|---|---|---|---|---|---|
+| PUSH-037 | 2026-08-16 | `main` | `pushed` | `feat: connect real case teaching spine` | 真实 Case 禁止 Fake 干预，要求真实 OCR/学生确认/DeepSeek 诊断证据并调用内容绑定 DeepSeek intervention；私有 D1/D7 与知识目标/来源事件绑定，报告拒绝合成或不匹配复测。首次学习范围保持品牌化五步 Today 引导；永久失败 OCR 可恢复并重新上传，真实批次上限 50 页；DeepSeek 输入扩展姓名、学校、班级、住址脱敏。不得将结果表述为 OCR 准确率、真实个性化或学习效果；处理说明持久化与生产 OSS 仍 deferred | 262 fast、76 skipped、152 Web、隔离 PostgreSQL/API/Worker 77、双 TypeScript、品牌化首次范围桌面/390×844 浏览器核验、5 项 OCR/DeepSeek 聚焦 20、OCR 恢复/50 页聚焦 5、`git diff --check` 通过；Drizzle `check` 仍因本地版本兼容阻断；`.env`、授权材料、`next-env.d.ts`、本地 agent 文件和生成缓存不纳入暂存 |
 | PUSH-036 | 2026-08-16 | `main` | `pushed` | `feat: complete OCR review and tutor continuity` | 真实 OCR 页面支持人工拆分最多 50 道题、逐题题干/选填原作答确认和乱码/低质结果恢复；导师公开并恢复最多六轮历史，下一轮携带最多五轮既有上下文，保留未知写入只读恢复与输出守卫；共享中止控制修复 `REPLACED`。首次学习范围改为 Today 内嵌品牌化五步选择，桌面双列、手机固定确认操作。人工拆题不冒充可靠自动逐题 OCR；审计确认真实 Case 后续固定 Fake 干预与固定 D1/D7 仍为下一 P0，不宣称真实个性化或学习效果 | 254 fast / 74 skipped、152 Web、隔离 PostgreSQL/API/Worker 73、双 TypeScript、Next production build、8 条浏览器主链、授权材料阿里云 OCR 单页 smoke 与 DeepSeek 双轮 synthetic smoke、凭据/隐私和 `git diff --check` 通过；共享库首次 2 项失败已确认由预览 Worker 争用队列导致，隔离复验全过且临时数据库已删除；Drizzle `check` 仍因本地版本兼容阻断；`.env`、授权测试材料、`next-env.d.ts`、本地 agent 文件、生成缓存与截图不纳入暂存 |
 | PUSH-035 | 2026-08-16 | `main` | `pushed` | `feat: add confirmed question archive and tutor recovery` | 新增同设备学生已确认真实 OCR item 的只读错题档案、人工修正/选填原作答及题目/任务详情；排除 synthetic/simulation 与未确认项，ready 任务复用权威提交链路。导师新增最新轮次恢复、NETWORK_UNKNOWN 只读恢复、按需提示与 nextAction；修正上传控件语义及三条浏览器 Fixture 漂移。当前 OCR item 可能对应整页，导师公开契约只返回最新一轮，不宣称可靠自动逐题切分、真实个性化或学习效果 | 242 fast、138 Web、72 串行 PostgreSQL/API/Worker（主 API 51 + 其余 21）、双 TypeScript、Next production build、7 条串行浏览器 fixture、DeepSeek structured 与导师全链路真实 synthetic smoke、授权材料阿里云 OCR 单页 smoke、凭据/隐私和 diff 检查通过；生产 OSS、完整导师历史、跨设备账号、正式 30–50 页基准与真实学生验收继续待办；`.env`、授权测试材料、`next-env.d.ts` 与本地 agent 文件不纳入暂存 |
 | PUSH-034 | 2026-08-16 | `main` | `pushed` | `feat: add factual student views and source retention` | 从权威 tasks 投影学生未来 7 日计划；从 Case/task/evidence 只读投影当前进步与事实报告，报告仅限 `repair_verified` / `support_required`，合成来源明确标注。真实 OCR 确认后原图保留缩短为 24 小时，新增设备所有权保护的主动删除、本地目录到期清理和上传队列物理移除；已确认文字/证据继续保留，不宣称生产 OSS 删除或永久掌握 | 235 fast、131 Web、71 PostgreSQL/API/Worker、双 TypeScript、Next production build、计划/进步/报告真实浏览器空状态、上传/核对/首次使用 3 条串行浏览器 fixture、留存 focused 11、凭据/隐私和 diff 检查通过；常驻 demo worker 停止后数据库套件完整通过；`.env`、授权测试材料、`next-env.d.ts` 与本地 agent 文件不纳入暂存 |
@@ -1652,6 +1653,12 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-026 | 2026-08-16 | `main` | `pushed` | `fix: decouple demo readiness from product copy` | Demo 栈 Web readiness 从已移除的“真实 API 模式”可见文案改为稳定 `today-page` 页面结构信号，防止产品文案治理后 90 秒误判并停止 API/Worker/Web 子进程 | root typecheck、`git diff --check`、Web 200、API Today 200 且含 overview、Demo 父进程持续存活、3000/4000 监听及生成残留精确清理通过；同轮推送后核对本地/远端 SHA 一致 |
 
 ## 27. 变更日志
+
+### v0.3.45 — 2026-08-16
+
+- 真实 Case 的 intervention Worker 只在真实 OCR、学生确认、DeepSeek 诊断、确认题目和学生探针证据齐全时选择真实 DeepSeek adapter；合成 Case 继续隔离使用 Fake adapter，混合来源 fail closed。
+- 真实干预携带 `confirmed_real_material`、`knowledgeTarget` 与私有 D1/D7 计划；API 拒绝缺少私有复测计划，报告只接受同一知识目标与 `contentBasisEventId` 的 D1/D7 证据。DeepSeek 输入脱敏覆盖姓名、学校、班级、住址等常见身份信息。
+- 永久失败 OCR 批次保留恢复入口并引导重新上传，单批最多 50 页；处理说明 UI 已展示，但版本接受事实持久化、生产 OSS 与完整 provider 配额仍 deferred。同步 PROJECT_MASTER v0.1.52、PRD v0.1.44、DESIGN v0.2.42 与 PUSH-037。
 
 ### v0.3.44 — 2026-08-16
 

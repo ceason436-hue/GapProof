@@ -15,6 +15,7 @@ const request: ToolRequest<BuildInterventionInput> = {
   studentId: "student-synthetic-1",
   traceId: "trace-1",
   input: {
+    contentSource: "synthetic_fixture",
     probeEvaluationEventId: "event-probe-evaluated-1",
     selectedHypothesisId: "hyp-participle-form-gap",
     probePassed: false,

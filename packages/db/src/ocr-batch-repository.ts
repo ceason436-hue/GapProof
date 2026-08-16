@@ -1,4 +1,5 @@
 import { and, asc, eq, gt, sql } from "drizzle-orm";
+import { MAX_REAL_OCR_BATCH_PAGES } from "@gapproof/contracts";
 import { randomUUID } from "node:crypto";
 import type { Database } from "./client.ts";
 import { ResourceNotFoundError, isPostgresUniqueViolation } from "./case-repository.ts";
@@ -86,6 +87,7 @@ export async function attachOcrBatchPage(database: Database, input: { batchId: s
       return { page, replayed: true };
     }
     const rows = await tx.select({ pageOrder: ocrBatchPages.pageOrder }).from(ocrBatchPages).where(eq(ocrBatchPages.batchId, batch.id));
+    if (rows.length >= MAX_REAL_OCR_BATCH_PAGES) throw new OcrBatchIntentError(`A real OCR batch can contain at most ${MAX_REAL_OCR_BATCH_PAGES} pages.`);
     const [page] = await tx.insert(ocrBatchPages).values({ id: input.pageId, batchId: batch.id, assetId: input.asset.id, pageOrder: rows.length + 1 }).returning();
     if (page === undefined) throw new Error("The OCR batch page was not created.");
     await tx.insert(apiIdempotencyRecords).values({ id: randomUUID(), scope: PAGE_SCOPE, idempotencyKey: input.idempotencyKey, resourceId: page.id });

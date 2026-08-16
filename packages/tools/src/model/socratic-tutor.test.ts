@@ -20,6 +20,8 @@ describe("Socratic tutor adapter", () => {
   it("removes common direct identifiers before the provider call", () => {
     expect(deidentifyTutorText("联系 13812345678 或 me@example.com https://example.com"))
       .toBe("联系 [手机号已隐藏] 或 [邮箱已隐藏] [链接已隐藏]");
+    expect(deidentifyTutorText("我叫张小明，我在上海实验中学读书，班级：八年级一班，地址：上海市某区某路 1 号"))
+      .not.toMatch(/张小明|上海实验中学|八年级一班|上海市某区/u);
   });
 
   it("accepts one guarded question and rejects direct-answer or non-question output", () => {

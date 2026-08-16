@@ -641,8 +641,8 @@ interface PrivateRetestItem {
   readonly scoringMethod: "exact-choice-v1";
 }
 
-function privateRetestItemFromTask(row: TaskRow): PrivateRetestItem {
-  const item = row.payload.item;
+function privateRetestItem(value: unknown, storedLabel: string): PrivateRetestItem {
+  const item = value;
   if (
     !isRecord(item) ||
     typeof item.id !== "string" ||
@@ -664,10 +664,58 @@ function privateRetestItemFromTask(row: TaskRow): PrivateRetestItem {
     throw new ApiHttpError(
       500,
       "STORED_TASK_INVALID",
-      `Stored retest task ${row.id} is invalid.`,
+      `Stored retest content ${storedLabel} is invalid.`,
     );
   }
   return item as unknown as PrivateRetestItem;
+}
+
+function privateRetestItemFromTask(row: TaskRow): PrivateRetestItem {
+  return privateRetestItem(row.payload.item, row.id);
+}
+
+interface TaskContentAuthenticity {
+  readonly contentSource: "synthetic_fixture" | "confirmed_real_material";
+  readonly knowledgeTarget: string;
+  readonly contentBasisEventId: string;
+}
+
+function taskContentAuthenticity(row: TaskRow, caseIsReal: boolean): TaskContentAuthenticity {
+  const contentSource = row.payload.contentSource;
+  const knowledgeTarget = row.payload.knowledgeTarget;
+  const contentBasisEventId = row.payload.contentBasisEventId ?? row.sourceEventId;
+  if (
+    (contentSource !== "synthetic_fixture" && contentSource !== "confirmed_real_material") ||
+    typeof knowledgeTarget !== "string" || knowledgeTarget.trim().length === 0 ||
+    typeof contentBasisEventId !== "string"
+  ) {
+    if (!caseIsReal) {
+      return {
+        contentSource: "synthetic_fixture",
+        knowledgeTarget: "synthetic_fixture_target",
+        contentBasisEventId: row.sourceEventId,
+      };
+    }
+    throw new ApiHttpError(409, "REAL_LEARNING_CONTENT_REQUIRED", "This real-material task does not have verified content-bound practice.", false);
+  }
+  if (caseIsReal && contentSource !== "confirmed_real_material") {
+    throw new ApiHttpError(409, "REAL_LEARNING_CONTENT_REQUIRED", "Synthetic practice cannot be used for a real-material case.", false);
+  }
+  return { contentSource, knowledgeTarget: knowledgeTarget.trim(), contentBasisEventId };
+}
+
+function plannedRetestsFromGuidedTask(row: TaskRow, caseIsReal: boolean) {
+  const authenticity = taskContentAuthenticity(row, caseIsReal);
+  const retests = row.payload.retests;
+  if (!isRecord(retests)) {
+    if (caseIsReal) throw new ApiHttpError(409, "REAL_LEARNING_CONTENT_REQUIRED", "This real-material task has no verified retest plan.", false);
+    return undefined;
+  }
+  return {
+    ...authenticity,
+    d1: privateRetestItem(retests.d1, `${row.id}:d1`),
+    d7: privateRetestItem(retests.d7, `${row.id}:d7`),
+  };
 }
 
 async function taskCompletionViewFromEvent(
@@ -2346,6 +2394,7 @@ export async function buildApi(options: BuildApiOptions) {
         if (taskRow.status !== "ready" || caseRow.state !== "d7_scheduled") {
           throw new InvalidTaskStateError("Only a ready D7 retest in d7_scheduled can be submitted.");
         }
+        const d7Authenticity = taskContentAuthenticity(taskRow, !caseRow.synthetic && !caseRow.simulation);
         const item = privateRetestItemFromTask(taskRow);
         if (item.id !== request.body.itemId) {
           throw new ApiHttpError(400, "INVALID_INPUT", "The submitted item does not belong to this D7 task.");
@@ -2400,7 +2449,9 @@ export async function buildApi(options: BuildApiOptions) {
           },
           privateEvidence: {
             scoringRule: score.scoringMethod,
-            itemSource: "synthetic_fixture",
+            itemSource: d7Authenticity.contentSource,
+            knowledgeTarget: d7Authenticity.knowledgeTarget,
+            contentBasisEventId: d7Authenticity.contentBasisEventId,
           },
         };
         const persisted = await persistD1RetestEvaluation(options.database, {
@@ -2470,7 +2521,23 @@ export async function buildApi(options: BuildApiOptions) {
       ) {
         throw new InvalidTaskStateError("Only a ready D1 retest in d1_scheduled can be submitted.");
       }
+      const d1Authenticity = taskContentAuthenticity(taskRow, !caseRow.synthetic && !caseRow.simulation);
       const item = privateRetestItemFromTask(taskRow);
+      const plannedD7Item = taskRow.payload.nextItem === undefined
+        ? (!caseRow.synthetic && !caseRow.simulation
+            ? (() => { throw new ApiHttpError(409, "REAL_LEARNING_CONTENT_REQUIRED", "This real-material task has no verified D7 item.", false); })()
+            : {
+                id: "synthetic-d7-transfer-item-v1",
+                prompt: "The volunteers have ___ three notes about saving water.",
+                choices: [
+                  { id: "choice-wrote", label: "wrote" },
+                  { id: "choice-written", label: "written" },
+                  { id: "choice-writing", label: "writing" },
+                ],
+                expectedChoiceId: "choice-written",
+                scoringMethod: "exact-choice-v1" as const,
+              })
+        : privateRetestItem(taskRow.payload.nextItem, `${taskRow.id}:next-d7`);
       if (item.id !== request.body.itemId) {
         throw new ApiHttpError(400, "INVALID_INPUT", "The submitted item does not belong to this D1 task.");
       }
@@ -2518,18 +2585,13 @@ export async function buildApi(options: BuildApiOptions) {
         scheduledFor: d7ScheduledFor,
         dueAt: d7DueAt,
         payload: {
-          rationale: "D1 已完成；在精确 144 小时后使用新的合成题检查迁移。",
-          item: {
-            id: "synthetic-d7-transfer-item-v1",
-            prompt: "The volunteers have ___ three notes about saving water.",
-            choices: [
-              { id: "choice-wrote", label: "wrote" },
-              { id: "choice-written", label: "written" },
-              { id: "choice-writing", label: "writing" },
-            ],
-            expectedChoiceId: "choice-written",
-            scoringMethod: "exact-choice-v1",
-          },
+          rationale: d1Authenticity.contentSource === "confirmed_real_material"
+            ? "D1 已完成；六天后用同一知识目标的另一道新题检查迁移。"
+            : "D1 已完成；在精确 144 小时后使用新的合成题检查迁移。",
+          item: plannedD7Item,
+          contentSource: d1Authenticity.contentSource,
+          knowledgeTarget: d1Authenticity.knowledgeTarget,
+          contentBasisEventId: d1Authenticity.contentBasisEventId,
         },
         sourceEventId: eventId,
       };
@@ -2553,11 +2615,9 @@ export async function buildApi(options: BuildApiOptions) {
             dueAt: d7Task.dueAt?.toISOString() ?? null,
             completedAt: null,
             item: {
-              id: String((d7Task.payload.item as Record<string, unknown>).id),
-              prompt: String((d7Task.payload.item as Record<string, unknown>).prompt),
-              choices: ((d7Task.payload.item as Record<string, unknown>).choices as Array<{ id: string; label: string }>).map(
-                (choice) => ({ ...choice }),
-              ),
+              id: plannedD7Item.id,
+              prompt: plannedD7Item.prompt,
+              choices: plannedD7Item.choices.map((choice) => ({ ...choice })),
             },
           };
       const eventPayload = {
@@ -2579,7 +2639,9 @@ export async function buildApi(options: BuildApiOptions) {
         },
         privateEvidence: {
           scoringRule: score.scoringMethod,
-          itemSource: "synthetic_fixture",
+          itemSource: d1Authenticity.contentSource,
+          knowledgeTarget: d1Authenticity.knowledgeTarget,
+          contentBasisEventId: d1Authenticity.contentBasisEventId,
         },
       };
       const persisted = await persistD1RetestEvaluation(options.database, {
@@ -2746,6 +2808,39 @@ export async function buildApi(options: BuildApiOptions) {
         );
       }
 
+      const caseIsReal = !caseRow.synthetic && !caseRow.simulation;
+      if (caseRow.synthetic !== caseRow.simulation) {
+        throw new ApiHttpError(409, "CASE_SOURCE_INVALID", "The case content source is inconsistent.", false);
+      }
+      const plannedRetests = plannedRetestsFromGuidedTask(taskRow, caseIsReal);
+      const d1Item: PrivateRetestItem = plannedRetests?.d1 ?? {
+        id: "synthetic-d1-unseen-item-v1",
+        prompt: "Mina has ___ three short notes about saving water this week.",
+        choices: [
+          { id: "choice-wrote", label: "wrote" },
+          { id: "choice-written", label: "written" },
+          { id: "choice-writing", label: "writing" },
+        ],
+        expectedChoiceId: "choice-written",
+        scoringMethod: "exact-choice-v1",
+      };
+      const d7Item: PrivateRetestItem = plannedRetests?.d7 ?? {
+        id: "synthetic-d7-transfer-item-v1",
+        prompt: "The volunteers have ___ three notes about saving water.",
+        choices: [
+          { id: "choice-wrote", label: "wrote" },
+          { id: "choice-written", label: "written" },
+          { id: "choice-writing", label: "writing" },
+        ],
+        expectedChoiceId: "choice-written",
+        scoringMethod: "exact-choice-v1",
+      };
+      const contentAuthenticity = plannedRetests ?? {
+        contentSource: "synthetic_fixture" as const,
+        knowledgeTarget: "synthetic_fixture_target",
+        contentBasisEventId: taskRow.sourceEventId,
+      };
+
       const completedAt = clock.now();
       const d1ScheduledFor = new Date(
         completedAt.getTime() + 24 * 60 * 60 * 1_000,
@@ -2775,6 +2870,11 @@ export async function buildApi(options: BuildApiOptions) {
       );
       const eventPayload = {
         request: requestPayload,
+        privateEvidence: {
+          contentSource: contentAuthenticity.contentSource,
+          knowledgeTarget: contentAuthenticity.knowledgeTarget,
+          contentBasisEventId: contentAuthenticity.contentBasisEventId,
+        },
         result: {
           completedTaskId: taskRow.id,
           d1TaskId,
@@ -2814,17 +2914,11 @@ export async function buildApi(options: BuildApiOptions) {
           dueAt: d1DueAt,
           payload: {
             rationale: "最小干预已完成；次日使用新题检查是否能独立回忆。",
-            item: {
-              id: "synthetic-d1-unseen-item-v1",
-              prompt: "Mina has ___ three short notes about saving water this week.",
-              choices: [
-                { id: "choice-wrote", label: "wrote" },
-                { id: "choice-written", label: "written" },
-                { id: "choice-writing", label: "writing" },
-              ],
-              expectedChoiceId: "choice-written",
-              scoringMethod: "exact-choice-v1",
-            },
+            item: d1Item,
+            nextItem: d7Item,
+            contentSource: contentAuthenticity.contentSource,
+            knowledgeTarget: contentAuthenticity.knowledgeTarget,
+            contentBasisEventId: contentAuthenticity.contentBasisEventId,
           },
           sourceEventId: event.eventId,
         },

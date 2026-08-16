@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { createDatabase } from "./client.ts";
-import { attachOcrBatchPage, createRealOcrBatch, findOcrBatch, removeOcrBatchPage, replaceOcrBatchPage } from "./ocr-batch-repository.ts";
+import { attachOcrBatchPage, createRealOcrBatch, findOcrBatch, OcrBatchIntentError, removeOcrBatchPage, replaceOcrBatchPage } from "./ocr-batch-repository.ts";
+import { randomUUID } from "node:crypto";
 import { apiIdempotencyRecords, cases, ocrBatchPages, ocrBatches, sourceAssets, students } from "./schema.ts";
 
 const url = process.env.TEST_DATABASE_URL;
@@ -54,5 +55,22 @@ withDatabase("real OCR batch repository", () => {
     expect((await database.db.select().from(sourceAssets).where(eq(sourceAssets.id, firstAsset.id))).length).toBe(1);
     const replacement = await replaceOcrBatchPage(database.db, { batchId: ids.batch, pageId: second.page.id, asset: replacementAsset });
     expect(replacement).toMatchObject({ id: second.page.id, pageOrder: 1, assetId: replacementAsset.id });
+  });
+  it("rejects the 51st page in a real OCR batch", async () => {
+    const assets = Array.from({ length: 49 }, (_, index) => ({
+      id: randomUUID(), tenantId: ids.tenant, studentId: ids.student, caseId: ids.case,
+      objectKey: `ocr-test/cap-${index}`, sha256: `${String(index).padStart(2, "0")}${"b".repeat(62)}`,
+      mimeType: "image/png", byteSize: 100, assetType: "student_upload" as const,
+    }));
+    await database.db.insert(sourceAssets).values(assets);
+    await database.db.insert(ocrBatchPages).values(assets.map((asset, index) => ({
+      id: randomUUID(), batchId: ids.batch, assetId: asset.id, pageOrder: index + 2,
+    })));
+    const extra = (await database.db.insert(sourceAssets).values({
+      id: randomUUID(), tenantId: ids.tenant, studentId: ids.student, caseId: ids.case,
+      objectKey: "ocr-test/cap-extra", sha256: "c".repeat(64), mimeType: "image/png", byteSize: 100, assetType: "student_upload",
+    }).returning())[0]!;
+    await expect(attachOcrBatchPage(database.db, { batchId: ids.batch, pageId: randomUUID(), asset: extra, idempotencyKey: "ocr-page-cap" }))
+      .rejects.toBeInstanceOf(OcrBatchIntentError);
   });
 });

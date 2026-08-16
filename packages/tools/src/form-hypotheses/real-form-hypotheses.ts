@@ -11,6 +11,7 @@ import {
   readDeepSeekEnvironment,
   type DeepSeekTransport,
 } from "../model/deepseek-structured.ts";
+import { deidentifyLearningText } from "../model/deidentify-learning-text.ts";
 import type { FormHypothesesAdapter } from "./fake-form-hypotheses.ts";
 
 export const REAL_FORM_HYPOTHESES_TOOL_VERSION = "deepseek-real-hypotheses-v1";
@@ -47,14 +48,11 @@ export interface RealDiagnosisContextPack {
 export function buildRealDiagnosisContextPack(items: readonly { prompt: string; studentAnswer?: string }[]): RealDiagnosisContextPack | undefined {
   let redacted = false;
   const redact = (value: string) => {
-    let next = value
-      .replace(new RegExp(EMAIL_PATTERN.source, "g"), () => { redacted = true; return "[email]"; })
-      .replace(new RegExp(PHONE_PATTERN.source, "g"), () => { redacted = true; return "[phone]"; })
-      .replace(new RegExp(ID_CARD_PATTERN.source, "g"), () => { redacted = true; return "[id]"; })
-      .replace(/(?:姓名|学校|班级|学号)\s*[:：]\s*[^\s，,；;]{1,40}/g, () => { redacted = true; return "[personal-field]"; })
+    const deidentified = deidentifyLearningText(value, 2_000);
+    redacted ||= deidentified.redacted;
+    let next = deidentified.text
+      .replace(/(?:学号)\s*[:：]\s*[^\s，,；;]{1,40}/g, () => { redacted = true; return "[学号已隐藏]"; })
       .replace(/(?:ignore|忽略).{0,30}(?:instruction|prompt|指令|提示词)/gi, () => { redacted = true; return "[untrusted-instruction]"; })
-      .replace(/[\u0000-\u001f\u007f]/g, " ")
-      .replace(/\s+/g, " ")
       .trim();
     if (next.length > 600) next = `${next.slice(0, 600)}…`;
     return next;

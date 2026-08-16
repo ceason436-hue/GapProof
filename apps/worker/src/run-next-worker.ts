@@ -30,9 +30,28 @@ export interface RunNextWorkerOptions {
   readonly formHypotheses?: FormHypothesesAdapter;
   readonly realFormHypotheses?: FormHypothesesAdapter;
   readonly buildIntervention?: BuildInterventionAdapter;
+  readonly realBuildIntervention?: BuildInterventionAdapter;
 }
 
 type ConfirmedDiagnosisItem = { prompt: string; studentAnswer?: string };
+
+function selectedHypothesisContext(payload: Record<string, unknown>, hypothesisId: string | null) {
+  if (hypothesisId === null) {
+    return {
+      title: "尚未确认单一原因",
+      explanation: "确认问题没有支持某一个候选原因，只围绕同一知识目标做中性巩固。",
+    };
+  }
+  if (!Array.isArray(payload.candidates)) return undefined;
+  const candidate = payload.candidates.find((value) =>
+    typeof value === "object" && value !== null && !Array.isArray(value) && (value as Record<string, unknown>).id === hypothesisId
+  );
+  if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate)) return undefined;
+  const record = candidate as Record<string, unknown>;
+  return typeof record.title === "string" && typeof record.explanation === "string"
+    ? { title: record.title, explanation: record.explanation }
+    : undefined;
+}
 
 export function diagnosisModeForEvidence(input: {
   synthetic: boolean;
@@ -43,6 +62,18 @@ export function diagnosisModeForEvidence(input: {
   if (input.synthetic && input.simulation && input.extractionSourceType === "fake_ocr" && input.confirmationSourceType === "student_confirmation") return "synthetic";
   if (!input.synthetic && !input.simulation && input.extractionSourceType === "real_alibaba_ocr" && input.confirmationSourceType === "student_confirmation") return "real";
   return "invalid";
+}
+
+export function interventionAdapterForCase(input: {
+  isRealCase: boolean;
+  syntheticAdapter: BuildInterventionAdapter;
+  realAdapter?: BuildInterventionAdapter | undefined;
+}): BuildInterventionAdapter {
+  if (!input.isRealCase) return input.syntheticAdapter;
+  if (input.realAdapter === undefined) {
+    throw new Error("REAL_INTERVENTION_PROVIDER_NOT_CONFIGURED");
+  }
+  return input.realAdapter;
 }
 
 export function reconstructConfirmedDiagnosisItems(
@@ -113,6 +144,7 @@ export function createRunNextWorker(options: RunNextWorkerOptions) {
   const realFormHypotheses = options.realFormHypotheses;
   const buildIntervention =
     options.buildIntervention ?? new FakeBuildInterventionAdapter();
+  const realBuildIntervention = options.realBuildIntervention;
   let workerId: string | undefined;
 
   return {
@@ -178,18 +210,58 @@ export function createRunNextWorker(options: RunNextWorkerOptions) {
             throw new Error("INVALID_PROBE_EVALUATION_EVENT");
           }
 
-          const toolResult = await buildIntervention.execute({
+          const isSyntheticCase = caseRow.synthetic && caseRow.simulation;
+          const isRealCase = !caseRow.synthetic && !caseRow.simulation;
+          if (!isSyntheticCase && !isRealCase) throw new Error("INTERVENTION_CASE_SOURCE_INVALID");
+          const extractionEvent = isRealCase
+            ? await findLatestCaseEvidenceEventByType(options.database, caseRow.id, "evidence_ingested")
+            : undefined;
+          const confirmationEvent = isRealCase
+            ? await findLatestCaseEvidenceEventByType(options.database, caseRow.id, "recognition_confirmed")
+            : undefined;
+          const hypothesesEvent = isRealCase
+            ? await findLatestCaseEvidenceEventByType(options.database, caseRow.id, "hypotheses_generated")
+            : undefined;
+          if (
+            isRealCase && (
+              extractionEvent?.sourceType !== "real_alibaba_ocr" ||
+              confirmationEvent?.sourceType !== "student_confirmation" ||
+              hypothesesEvent?.sourceType !== "deepseek_diagnosis"
+            )
+          ) {
+            throw new Error("REAL_INTERVENTION_EVIDENCE_INVALID");
+          }
+          const confirmedItems = isRealCase
+            ? reconstructConfirmedDiagnosisItems(extractionEvent!.payload, confirmationEvent!.payload)
+            : undefined;
+          const selectedHypothesis = isRealCase
+            ? selectedHypothesisContext(hypothesesEvent!.payload, evaluationResult.selectedHypothesisId)
+            : undefined;
+          if (isRealCase && (confirmedItems === undefined || selectedHypothesis === undefined)) {
+            throw new Error("REAL_INTERVENTION_CONTEXT_NOT_AVAILABLE");
+          }
+          const selectedInterventionAdapter = interventionAdapterForCase({
+            isRealCase,
+            syntheticAdapter: buildIntervention,
+            realAdapter: realBuildIntervention,
+          });
+
+          const toolResult = await selectedInterventionAdapter.execute({
             toolCallId: `build-intervention:${job.id}`,
             caseId: caseRow.id,
             studentId: caseRow.studentId,
             traceId: job.data.traceId,
             input: {
+              contentSource: isRealCase ? "confirmed_real_material" : "synthetic_fixture",
               probeEvaluationEventId: probeEvaluationEvent.id,
               selectedHypothesisId:
                 evaluationResult.selectedHypothesisId,
               probePassed: evaluationResult.passed,
+              ...(confirmedItems === undefined ? {} : { confirmedItems: [...confirmedItems] }),
+              ...(selectedHypothesis === undefined ? {} : { selectedHypothesis }),
+              ...(replanStrategy === null ? {} : { replanStrategy }),
             },
-            policyVersion: "demo-intervention-policy-v1",
+            policyVersion: isRealCase ? "real-intervention-policy-v1" : "demo-intervention-policy-v1",
           });
           if (
             toolResult.status !== "succeeded" ||
@@ -200,9 +272,15 @@ export function createRunNextWorker(options: RunNextWorkerOptions) {
             );
           }
           const stepIds = toolResult.data.steps.map(({ id }) => id);
+          const validRetest = (item: typeof toolResult.data.retests.d1) =>
+            item.choices.some(choice => choice.id === item.expectedChoiceId) &&
+            new Set(item.choices.map(choice => choice.id)).size === item.choices.length;
           if (
             toolResult.data.steps.length < 3 ||
             new Set(stepIds).size !== stepIds.length ||
+            !validRetest(toolResult.data.retests.d1) ||
+            !validRetest(toolResult.data.retests.d7) ||
+            toolResult.data.retests.d1.prompt === toolResult.data.retests.d7.prompt ||
             !toolResult.evidenceRefs.includes(probeEvaluationEvent.id)
           ) {
             throw new Error("INVALID_INTERVENTION_TOOL_RESULT");
@@ -239,13 +317,15 @@ export function createRunNextWorker(options: RunNextWorkerOptions) {
                 studentId: caseRow.studentId,
                 caseId: caseRow.id,
                 eventType: event.type,
-                sourceType: "fake_intervention",
+                sourceType: isRealCase ? "deepseek_intervention" : "fake_intervention",
                 sourceRef: toolResult.toolVersion,
                 payload: {
                   taskId,
                   probeEvaluationEventId: probeEvaluationEvent.id,
                   ...(replanStrategy === null ? {} : { replanStrategy }),
                   toolVersion: toolResult.toolVersion,
+                  contentSource: isRealCase ? "confirmed_real_material" : "synthetic_fixture",
+                  knowledgeTarget: toolResult.data.knowledgeTarget,
                   warnings: [...toolResult.warnings],
                 },
                 confidence: toolResult.confidence?.toFixed(4),
@@ -259,20 +339,23 @@ export function createRunNextWorker(options: RunNextWorkerOptions) {
                 caseId: caseRow.id,
                 taskType: "guided_intervention",
                 status: "ready",
-                title: replanStrategy === "alternate_explanation_and_practice"
+                title: !isRealCase && replanStrategy === "alternate_explanation_and_practice"
                   ? "换一种讲解与练习方式"
-                  : replanStrategy === "prerequisite_skill_with_example"
+                  : !isRealCase && replanStrategy === "prerequisite_skill_with_example"
                     ? "回到前置技能并结合示例"
                     : toolResult.data.title,
                 estimatedMinutes: toolResult.data.estimatedMinutes,
                 scheduledFor: occurredAt,
                 payload: {
-                  rationale: replanStrategy === "alternate_explanation_and_practice"
+                  rationale: !isRealCase && replanStrategy === "alternate_explanation_and_practice"
                     ? "规则化合成骨架：更换讲解表达与练习形式。"
-                    : replanStrategy === "prerequisite_skill_with_example"
+                    : !isRealCase && replanStrategy === "prerequisite_skill_with_example"
                       ? "规则化合成骨架：下探一个前置技能并加入示例。"
                       : toolResult.data.rationale,
+                  contentSource: isRealCase ? "confirmed_real_material" : "synthetic_fixture",
+                  knowledgeTarget: toolResult.data.knowledgeTarget,
                   steps: toolResult.data.steps,
+                  retests: toolResult.data.retests,
                   ...(replanStrategy === null ? {} : { replanStrategy }),
                   warnings: [...toolResult.warnings],
                   toolVersion: toolResult.toolVersion,

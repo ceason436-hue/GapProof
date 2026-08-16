@@ -21,4 +21,46 @@ describe("student progress and fact report projection", () => {
     expect(result.reports.reports).toEqual([]);
     expect(result.progress.timeline).toEqual([]);
   });
+
+  it("does not present legacy synthetic retests as real-material learning evidence", () => {
+    const realCase = { ...baseCase, synthetic: false, simulation: false };
+    const evidence = [
+      { id: "0198b111-1111-7000-8000-000000000020", caseId: realCase.id, eventType: "retest_evaluated" as const, payload: { kind: "d1", passed: true, privateEvidence: { itemSource: "synthetic_fixture" } }, occurredAt: new Date("2026-08-11T00:00:00Z") },
+      { id: "0198b111-1111-7000-8000-000000000021", caseId: realCase.id, eventType: "retest_evaluated" as const, payload: { kind: "d7", passed: true, privateEvidence: { itemSource: "synthetic_fixture" } }, occurredAt: new Date("2026-08-16T00:00:00Z") },
+    ];
+    const result = projectStudentProgress({ studentId, timeZone: "Asia/Shanghai", cases: [realCase], tasks: [], evidence });
+    expect(result.progress.goals[0]?.stage).toBe("needs_follow_up");
+    expect(result.progress.timeline).toEqual([]);
+    expect(result.reports.reports).toEqual([]);
+  });
+
+  it("accepts a real report only when D1 and D7 share verified content provenance", () => {
+    const realCase = { ...baseCase, synthetic: false, simulation: false };
+    const privateEvidence = { itemSource: "confirmed_real_material", knowledgeTarget: "present-perfect-participle", contentBasisEventId: "event-intervention-1" };
+    const evidence = [
+      { id: "0198b111-1111-7000-8000-000000000030", caseId: realCase.id, eventType: "retest_evaluated" as const, payload: { kind: "d1", passed: true, privateEvidence }, occurredAt: new Date("2026-08-11T00:00:00Z") },
+      { id: "0198b111-1111-7000-8000-000000000031", caseId: realCase.id, eventType: "retest_evaluated" as const, payload: { kind: "d7", passed: true, privateEvidence }, occurredAt: new Date("2026-08-16T00:00:00Z") },
+    ];
+    const result = projectStudentProgress({ studentId, timeZone: "Asia/Shanghai", cases: [realCase], tasks: [], evidence });
+    expect(result.progress.goals[0]?.stage).toBe("repair_verified");
+    expect(result.reports.reports).toEqual([expect.objectContaining({ source: "real_material", d1Result: "passed", d7Result: "passed" })]);
+
+    const mismatched = projectStudentProgress({
+      studentId,
+      timeZone: "Asia/Shanghai",
+      cases: [realCase],
+      tasks: [],
+      evidence: [evidence[0]!, { ...evidence[1]!, payload: { ...evidence[1]!.payload, privateEvidence: { ...privateEvidence, knowledgeTarget: "different-target" } } }],
+    });
+    expect(mismatched.reports.reports).toEqual([]);
+
+    const mismatchedBasis = projectStudentProgress({
+      studentId,
+      timeZone: "Asia/Shanghai",
+      cases: [realCase],
+      tasks: [],
+      evidence: [evidence[0]!, { ...evidence[1]!, payload: { ...evidence[1]!.payload, privateEvidence: { ...privateEvidence, contentBasisEventId: "different-basis-event" } } }],
+    });
+    expect(mismatchedBasis.reports.reports).toEqual([]);
+  });
 });

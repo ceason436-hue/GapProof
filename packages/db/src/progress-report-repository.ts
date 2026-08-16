@@ -52,8 +52,41 @@ function timelineKind(row: EvidenceProjectionRow): ProgressTimelineKind | null {
   }
 }
 
-function retestResult(events: readonly EvidenceProjectionRow[], kind: "d1" | "d7") {
-  const event = events.find((row) => row.eventType === "retest_evaluated" && row.payload.kind === kind && typeof row.payload.passed === "boolean");
+type ContentEvidence = { contentSource: "confirmed_real_material" | "synthetic_fixture"; knowledgeTarget: string; contentBasisEventId: string };
+
+function contentEvidence(row: EvidenceProjectionRow): ContentEvidence | undefined {
+  const value = row.payload.privateEvidence;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  const evidence = value as Record<string, unknown>;
+  const contentSource = evidence.contentSource ?? evidence.itemSource;
+  return (contentSource === "confirmed_real_material" || contentSource === "synthetic_fixture") &&
+    typeof evidence.knowledgeTarget === "string" && evidence.knowledgeTarget.trim().length > 0 &&
+    typeof evidence.contentBasisEventId === "string"
+    ? { contentSource, knowledgeTarget: evidence.knowledgeTarget, contentBasisEventId: evidence.contentBasisEventId }
+    : undefined;
+}
+
+function realRetestProof(events: readonly EvidenceProjectionRow[]) {
+  const retests = events.flatMap(row => {
+    const evidence = contentEvidence(row);
+    return row.eventType === "retest_evaluated" && (row.payload.kind === "d1" || row.payload.kind === "d7") &&
+      typeof row.payload.passed === "boolean" && evidence?.contentSource === "confirmed_real_material"
+      ? [{ row, evidence, kind: row.payload.kind }]
+      : [];
+  });
+  for (const d7 of retests.filter(item => item.kind === "d7")) {
+    const d1 = retests.find(item => item.kind === "d1" &&
+      item.evidence.knowledgeTarget === d7.evidence.knowledgeTarget &&
+      item.evidence.contentBasisEventId === d7.evidence.contentBasisEventId);
+    if (d1 !== undefined) return { d1: d1.row, d7: d7.row, ...d7.evidence };
+  }
+  return undefined;
+}
+
+function retestResult(events: readonly EvidenceProjectionRow[], kind: "d1" | "d7", proof?: ReturnType<typeof realRetestProof>) {
+  const event = proof === undefined
+    ? events.find((row) => row.eventType === "retest_evaluated" && row.payload.kind === kind && typeof row.payload.passed === "boolean")
+    : proof[kind];
   if (event === undefined) return "not_recorded" as const;
   return event.payload.passed === true ? "passed" as const : "needs_follow_up" as const;
 }
@@ -73,12 +106,16 @@ export function projectStudentProgress(input: {
 
   const goals = input.cases.map((row) => {
     const caseTasks = tasksByCase.get(row.id) ?? [];
+    const caseEvidence = evidenceByCase.get(row.id) ?? [];
+    const realProof = recordSource(row) === "real_material" ? realRetestProof(caseEvidence) : undefined;
     const next = caseTasks.find((task) => task.status === "ready") ?? caseTasks.find((task) => task.status === "scheduled");
     return {
       caseId: row.id,
       title: row.title?.trim() || "一项学习目标",
       source: recordSource(row),
-      stage: progressStage(row.state),
+      stage: recordSource(row) === "real_material" && (row.state === "repair_verified" || row.state === "support_required") && realProof === undefined
+        ? "needs_follow_up"
+        : progressStage(row.state),
       updatedAt: row.updatedAt.toISOString(),
       completedTaskCount: caseTasks.filter((task) => task.status === "completed").length,
       nextTask: next === undefined ? null : {
@@ -93,7 +130,12 @@ export function projectStudentProgress(input: {
   const timeline = input.evidence.flatMap((row) => {
     const kind = timelineKind(row);
     const caseRow = casesById.get(row.caseId);
-    return kind === null || caseRow === undefined ? [] : [{
+    const realLearningFactRequiresBoundContent = kind !== null && (kind === "practice_completed" || kind.startsWith("d1_") || kind.startsWith("d7_"));
+    if (
+      kind === null || caseRow === undefined ||
+      (recordSource(caseRow) === "real_material" && realLearningFactRequiresBoundContent && contentEvidence(row)?.contentSource !== "confirmed_real_material")
+    ) return [];
+    return [{
       eventId: row.id,
       caseId: row.caseId,
       source: recordSource(caseRow),
@@ -106,14 +148,16 @@ export function projectStudentProgress(input: {
     if (row.state !== "repair_verified" && row.state !== "support_required") return [];
     const caseTasks = tasksByCase.get(row.id) ?? [];
     const caseEvidence = evidenceByCase.get(row.id) ?? [];
+    const realProof = recordSource(row) === "real_material" ? realRetestProof(caseEvidence) : undefined;
+    if (recordSource(row) === "real_material" && realProof === undefined) return [];
     const evidenceThrough = caseEvidence[0]?.occurredAt ?? row.updatedAt;
     return [{
       caseId: row.id,
       title: row.title?.trim() || "一项学习目标",
       source: recordSource(row),
       conclusion: row.state,
-      d1Result: retestResult(caseEvidence, "d1"),
-      d7Result: retestResult(caseEvidence, "d7"),
+      d1Result: retestResult(caseEvidence, "d1", realProof),
+      d7Result: retestResult(caseEvidence, "d7", realProof),
       completedTaskCount: caseTasks.filter((task) => task.status === "completed").length,
       evidenceThrough: evidenceThrough.toISOString(),
     }];
