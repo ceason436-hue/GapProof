@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.65"
+version: "0.1.66"
 status: "ACTIVE"
-current_stage: "PUSH-050 已发布：Today 完成态按当日权威完成记录刷新；学生真实闭环继续推进，完整集中门禁与真实学生验收仍 deferred"
+current_stage: "PUSH-051 已发布：多图上传成功后使用真实进度链接并统一学生可读限制文案；学生真实闭环继续推进，完整集中门禁与真实学生验收仍 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -2122,6 +2122,10 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.66 — 2026-08-16
+
+- 多图上传选择器将工程单位改为“每张不超过 10 MB”；识别启动成功后的“查看识别进度”改为真实链接，可直接打开同一 Case 核对页。
 
 ### v0.1.65 — 2026-08-16
 
