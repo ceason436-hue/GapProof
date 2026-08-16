@@ -140,7 +140,11 @@ export function RetestCard({
     : retest.status === "completed"
       ? "这次复习已经完成。"
       : "现在可以作答，完成后会保存本次结果。";
-  const actionLabel = retest.taskType === "d7_retest" ? "开始巩固" : "开始复习";
+  const actionLabel = retest.status === "scheduled"
+    ? "查看安排"
+    : retest.status === "completed"
+      ? "回顾记录"
+      : retest.taskType === "d7_retest" ? "开始巩固" : "开始复习";
 
   return <article className="retest-card" data-task-status={retest.status} data-task-type={retest.taskType}>
     <header>
@@ -149,9 +153,7 @@ export function RetestCard({
     </header>
     <TaskDates scheduledFor={retest.scheduledFor} dueAt={retest.dueAt} timeZone={timeZone}/>
     <p>{note} 预计约 {retest.estimatedMinutes} 分钟。</p>
-    {retest.status === "ready"
-      ? <Link className="retest-action" href={`/student/today?source=api&task=${encodeURIComponent(retest.id)}`}>{actionLabel}</Link>
-      : null}
+    <Link className="retest-action" href={`/student/tasks/${encodeURIComponent(retest.id)}`}>{actionLabel}</Link>
   </article>;
 }
 
