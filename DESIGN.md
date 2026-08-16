@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.74"
+version: "0.2.75"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "PUSH-069 已发布：正式检查入口统一要求学生确认学习范围；比赛功能落地优先，测试与审查 deferred"
+current_design_stage: "PUSH-070 已发布：学生任务页直接读取权威单任务记录；比赛功能落地优先，测试与审查 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -1782,6 +1782,12 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 ---
 
 ## 22. 版本记录
+
+### v0.2.75 — 2026-08-16
+
+- 从 7 日计划或错题本打开旧任务时，任务页直接读取该任务本身，不会因为它不在 Today 当前列表中而显示“没有找到”。
+- 等待任务继续只读查看安排，完成任务继续只读回顾，可开始任务才显示既有作答或引导控件。
+- 按比赛功能落地优先要求，本批测试、视觉、浏览器及真实学生验收继续 deferred。
 
 ### v0.2.74 — 2026-08-16
 
