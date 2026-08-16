@@ -93,9 +93,10 @@ export function TodayOverviewPanel({ overview, recoverableBatches = [] }: { over
   </section>;
 }
 
-export function FirstUseToday({ recoverableBatches = [] }: { recoverableBatches?: readonly RecoverableOcrBatchView[] }) {
+export function FirstUseToday({ studentId, recoverableBatches = [] }: { studentId: string; recoverableBatches?: readonly RecoverableOcrBatchView[] }) {
   return <AppShell actionHref="/diagnose" actionLabel="开始第一次检查"><section className="today-page" data-first-use-today>
     <div className="title-row"><div><h1>从一次小检查开始</h1><p>上传一张或多张错题、作业图片，或先用 3 道题找到适合你的起点。</p></div></div>
+    <SyntheticQuickCheckStatus studentId={studentId}/>
     <OcrBatchRecovery batches={recoverableBatches}/>
     <div className="onboarding-grid">
       <article className="onboarding-main"><span className="eyebrow">推荐路径</span><h2>三步完成第一次检查</h2><ol><li><span className="step-number">1</span><div><strong>选择开始方式</strong><span>上传错题，或先做 3 道快速练习题。</span></div></li><li><span className="step-number">2</span><div><strong>核对题目内容</strong><span>逐项检查题干，发现问题可以自己修改。</span></div></li><li><span className="step-number">3</span><div><strong>开始针对性练习</strong><span>完成检查后，继续今天的练习和后续巩固。</span></div></li></ol><div className="button-row"><Link className="primary-blue" href="/materials/new">上传错题或作业</Link><Link className="ghost-link" href="/diagnose/quick-check">没有材料，先做 3 道题</Link></div></article>
@@ -349,7 +350,7 @@ export async function LiveToday({ selectedRetestId }: { selectedRetestId?: strin
     const recoverableBatches = recoveryResponse.data.batches;
     const model = toTodayReadModel(response.data, selectedRetestId);
     if (!model.profile.completed) return <ProfileSetupRequired profile={model.profile} recoverableBatches={recoverableBatches}/>;
-    if (!model.overview.hasStartedJourney) return <FirstUseToday recoverableBatches={recoverableBatches}/>;
+    if (!model.overview.hasStartedJourney) return <FirstUseToday studentId={model.studentId} recoverableBatches={recoverableBatches}/>;
     const completedToday = model.overview.activityDays.at(-1)?.completedTaskCount ?? 0;
     const completed = model.current.kind === "none" && completedToday > 0;
     if (completed) return <AppShell actionHref="/diagnose" actionLabel="开始新的检查"><TodayDashboard
