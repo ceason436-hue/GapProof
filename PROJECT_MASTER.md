@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.67"
+version: "0.1.68"
 status: "ACTIVE"
-current_stage: "PUSH-052 已发布：错题重做网络未知时停止重放并引导读取权威状态；学生真实闭环继续推进，完整集中门禁与真实学生验收仍 deferred"
+current_stage: "PUSH-053 已发布：发起错题重做网络未知时停止重放并返回错题本恢复；学生真实闭环继续推进，完整集中门禁与真实学生验收仍 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -2122,6 +2122,10 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.68 — 2026-08-16
+
+- 发起错题重做的结果网络未知时隐藏再次发起按钮，改为返回错题本读取同题已存在的未完成任务，避免学生重复操作。
 
 ### v0.1.67 — 2026-08-16
 
