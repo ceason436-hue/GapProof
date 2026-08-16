@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.68"
+version: "0.1.69"
 status: "ACTIVE"
-current_stage: "PUSH-053 已发布：发起错题重做网络未知时停止重放并返回错题本恢复；学生真实闭环继续推进，完整集中门禁与真实学生验收仍 deferred"
+current_stage: "PUSH-054 已发布：导师备用规则轮次明确披露，不冒充真实 DeepSeek 输出；学生真实闭环继续推进，完整集中门禁与真实学生验收仍 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -2122,6 +2122,10 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.69 — 2026-08-16
+
+- 导师对话在公开状态为 `fallback` 时显示“本轮使用备用引导”；问题仍可继续使用，但不将规则降级表述为真实 DeepSeek 回答。
 
 ### v0.1.68 — 2026-08-16
 
