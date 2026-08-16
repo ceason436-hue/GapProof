@@ -19,7 +19,7 @@ const passed = (status: PageStatus) => status === "passed";
 function safeError(error: unknown) {
   if (error instanceof ApiClientError && error.response.error.retryable) return "这张图片暂时没有处理完成，可以重试。";
   if (error instanceof ApiClientError) return "这张图片暂时无法完成，请重新选择或稍后重试。";
-  return "处理结果暂时未知，请确认网络后重试。";
+  return "处理结果暂时未知，请检查网络后再试。";
 }
 
 export function SourceUpload({ studentId, recoverableBatches = [], initialBatch }: { studentId: string; recoverableBatches?: readonly RecoverableOcrBatchView[]; initialBatch?: RecoverableOcrBatchView }) {
@@ -36,7 +36,7 @@ export function SourceUpload({ studentId, recoverableBatches = [], initialBatch 
       ? "识别内容已经准备好，请进入核对页面逐题确认。"
       : initialBatch?.resumeKind === "retry"
         ? "上次识别没有完成。重新确认处理说明后可以重试。"
-        : "选择一张或多张图片后，再开始安全上传。每张图片都要通过基础检查。");
+        : "选择一张或多张图片后，再开始上传。我们会先检查图片是否清晰。");
   const [guardianConfirmed, setGuardianConfirmed] = useState(false);
   const [noticeAccepted, setNoticeAccepted] = useState(false);
   const [startStatus, setStartStatus] = useState<"idle" | "starting" | "success" | "unknown" | "error">("idle");
@@ -151,7 +151,7 @@ export function SourceUpload({ studentId, recoverableBatches = [], initialBatch 
     const eligible = itemsRef.current.filter(item => ["waiting", "retryable_error"].includes(item.status)); if (!eligible.length) return;
     abortRef.current?.abort(); const controller = new AbortController(); abortRef.current = controller;
     setMessage("正在逐张上传并检查图片；识别尚未开始。");
-    try { const batch = await ensureBatch(controller.signal); for (const item of eligible) await runPage(item.clientId, batch.batchId, controller.signal); setMessage(itemsRef.current.every(item => passed(item.status)) ? "所有图片均已通过基础检查。确认后才会将图片发送给识别服务。" : "有图片尚未通过检查；请处理每张图片后再开始识别。"); }
+    try { const batch = await ensureBatch(controller.signal); for (const item of eligible) await runPage(item.clientId, batch.batchId, controller.signal); setMessage(itemsRef.current.every(item => passed(item.status)) ? "所有图片都准备好了。确认后才会开始图片识别。" : "有图片还没准备好，请按提示处理后再开始。"); }
     catch (error) { if (!controller.signal.aborted) setMessage(safeError(error)); }
     finally { if (abortRef.current === controller) abortRef.current = null; }
   };
@@ -184,7 +184,7 @@ export function SourceUpload({ studentId, recoverableBatches = [], initialBatch 
   const anyBusy = items.some(item => busy(item.status));
   const editable = startStatus === "idle" || startStatus === "error";
   const lockedForRecognition = initialBatch?.resumeKind === "wait" || initialBatch?.resumeKind === "review" || initialBatch?.resumeKind === "retry";
-  return <AppShell actionDisabled actionLabel={anyBusy ? "正在处理" : "上传学习材料"}><section className="upload-page" aria-labelledby="source-upload-title"><div className="title-row"><div><h1 id="source-upload-title">上传错题、作业或试卷</h1><p>可一次添加多张同一份材料的图片。每张图片通过检查并由你确认后，才会开始真实识别。</p></div></div>{recoverableBatches.length > 0 ? <OcrBatchRecovery batches={recoverableBatches} compact/> : null}<div className="upload-layout"><article className="upload-card">
+  return <AppShell actionDisabled actionLabel={anyBusy ? "正在处理" : "上传学习材料"}><section className="upload-page" aria-labelledby="source-upload-title"><div className="title-row"><div><h1 id="source-upload-title">上传错题、作业或试卷</h1><p>可一次添加多张同一份材料的图片。每张图片通过检查并由你确认后，才会开始图片识别。</p></div></div>{recoverableBatches.length > 0 ? <OcrBatchRecovery batches={recoverableBatches} compact/> : null}<div className="upload-layout"><article className="upload-card">
     <input ref={inputRef} id="source-upload-input" name="source-upload" type="file" multiple disabled={lockedForRecognition} accept={ACCEPTED_SOURCE_UPLOAD_TYPES.join(",")} tabIndex={-1} onChange={event => addFiles(event.currentTarget.files)} aria-describedby={items.length === 0 && !lockedForRecognition ? "source-upload-help" : undefined} />
     {items.length === 0 && !lockedForRecognition ? <div className="upload-picker-panel" data-upload-picker><button type="button" className="upload-picker" onClick={openPicker}><span className="upload-picker-title">{initialBatch ? "继续添加图片" : "选择图片"}</span><span className="upload-picker-detail">可多选 JPG、PNG、WebP · 每张 1B–10MiB</span></button><p id="source-upload-help" className="upload-help">{initialBatch ? `这份材料已有 ${initialBatch.pageCount} 张图片；这里只显示本次新选的图片。` : "上传前请遮盖姓名、学校、班级等不必要的个人信息。"}</p></div> : items.length > 0 ? <><div className="upload-queue-heading"><strong>已添加 {items.length} 张图片</strong>{editable ? <button type="button" className="secondary-button compact-upload-button" onClick={openPicker}>继续添加</button> : null}</div><ol className="upload-queue" aria-label="图片队列">{items.map((item, index) => <li key={item.clientId} className="upload-queue-item" data-page-status={item.status}><img src={item.previewUrl} alt={`第 ${index + 1} 张学习材料预览`} /><div className="upload-queue-copy"><strong>第 {index + 1} 张</strong><span>{item.message}</span></div>{editable && !busy(item.status) ? <div className="queue-item-actions"><label className="queue-action">替换<input className="visually-hidden" type="file" accept={ACCEPTED_SOURCE_UPLOAD_TYPES.join(",")} onChange={event => replaceItem(item.clientId, event.currentTarget.files?.[0])}/></label><button type="button" className="queue-action" onClick={() => void removeItem(item.clientId)}>移除</button>{item.status === "retryable_error" ? <button type="button" className="queue-action" onClick={() => void retryPage(item.clientId)}>重试</button> : null}</div> : null}</li>)}</ol></> : null}
     <p className="upload-status-message" aria-live="polite" data-recognition-start-status={startStatus === "error" ? "error" : undefined}>{message}</p>{items.length > 0 && editable ? <div className="upload-actions"><button className="primary-blue" type="button" onClick={() => void uploadAll()} disabled={anyBusy || items.every(item => item.status === "passed" || item.status === "failed")}>{anyBusy ? "正在处理" : "上传并检查图片"}</button></div> : null}
