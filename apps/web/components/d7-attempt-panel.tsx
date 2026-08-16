@@ -176,6 +176,9 @@ export function D7AttemptPanel({ task }: { task: D7RetestTaskView }) {
       <div className="guided-task-result-actions">
         <Link className="primary-blue" href="/student/today?source=api">返回今日查看安排</Link>
         <Link className="secondary-button" href="/student/progress">查看我的进步</Link>
+        {state.state === "repair_verified" || state.state === "support_required"
+          ? <Link className="secondary-button" href="/student/report">查看学习报告</Link>
+          : <Link className="secondary-button" href="/student/plan">查看后续计划</Link>}
       </div>
     </article>;
   }
