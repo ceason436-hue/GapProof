@@ -11,6 +11,10 @@ type PanelState = "restoring" | "idle" | "sending" | "waiting" | "ready" | "erro
 
 export type TutorPanelError = { code: string; message: string; retryable: boolean; unknownWriteResult: boolean };
 
+export function tutorRecoveryLocked(error: TutorPanelError | null): boolean {
+  return error?.unknownWriteResult === true || error?.code === "TURN_ALREADY_PENDING" || error?.code === "POLL_TIMEOUT";
+}
+
 export function toTutorPanelError(error: unknown): TutorPanelError {
   if (error instanceof ApiClientError) {
     const code = error.response.error.code;
@@ -116,7 +120,11 @@ export function SocraticTutorPanel({ task, expectedVersion }: { task: GuidedInte
   const applySession = useCallback((nextSession: TutorSessionView, attempt: number) => {
     setSession(nextSession);
     const nextTurn = nextSession.turns.at(-1);
-    if (nextTurn === undefined) return false;
+    if (nextTurn === undefined) {
+      setPanelError(null);
+      setState("idle");
+      return false;
+    }
     return applyTurn(nextTurn, attempt);
   }, [applyTurn]);
 
@@ -164,7 +172,7 @@ export function SocraticTutorPanel({ task, expectedVersion }: { task: GuidedInte
   }, [clearPoll, readSession, task.id, task.steps]);
 
   async function submit() {
-    if (!selectedStep || expectedVersion === null || learnerText.trim().length === 0 || state === "sending" || state === "waiting" || panelError?.unknownWriteResult) return;
+    if (!selectedStep || expectedVersion === null || learnerText.trim().length === 0 || state === "sending" || state === "waiting" || tutorRecoveryLocked(panelError)) return;
     clearPoll();
     setState("sending");
     setPanelError(null);
@@ -189,7 +197,7 @@ export function SocraticTutorPanel({ task, expectedVersion }: { task: GuidedInte
   }
 
   const busy = state === "restoring" || state === "sending" || state === "waiting";
-  const inputLocked = busy || state === "ready" || panelError?.unknownWriteResult === true;
+  const inputLocked = busy || state === "ready" || tutorRecoveryLocked(panelError);
 
   return <section className="socratic-tutor" aria-labelledby={`tutor-${task.id}`} aria-busy={busy}>
     <div className="socratic-tutor-heading"><div><span className="task-kind">想一想</span><h3 id={`tutor-${task.id}`}>把你的思路说出来</h3></div><span className="socratic-tutor-count">每次只问一个问题</span></div>
@@ -208,7 +216,7 @@ export function SocraticTutorPanel({ task, expectedVersion }: { task: GuidedInte
     <label className="socratic-tutor-input-label" htmlFor={`tutor-input-${task.id}`}>告诉导师你做到哪里、哪里不明白</label>
     <textarea id={`tutor-input-${task.id}`} ref={textareaRef} value={learnerText} onChange={event => setLearnerText(event.target.value.slice(0, 800))} maxLength={800} placeholder="例如：我找到了 yesterday，但不知道动词该怎么变。" disabled={inputLocked} aria-label="写下你对当前步骤的思路" aria-describedby={`tutor-note-${task.id}`} />
     <span id={`tutor-note-${task.id}`} className="visually-hidden">不要填写姓名、联系方式或其他个人信息。</span>
-    <div className="socratic-tutor-actions"><button type="button" className="secondary-button" onClick={() => void submit()} disabled={expectedVersion === null || learnerText.trim().length === 0 || busy || panelError?.unknownWriteResult === true}>{state === "restoring" ? "正在恢复" : state === "sending" ? "正在发送" : state === "waiting" ? "正在准备引导" : "请导师引导我"}</button><span aria-live="polite">{learnerText.length}/800</span></div>
+    <div className="socratic-tutor-actions"><button type="button" className="secondary-button" onClick={() => void submit()} disabled={expectedVersion === null || learnerText.trim().length === 0 || busy || tutorRecoveryLocked(panelError)}>{state === "restoring" ? "正在恢复" : state === "sending" ? "正在发送" : state === "waiting" ? "正在准备引导" : "请导师引导我"}</button><span aria-live="polite">{learnerText.length}/800</span></div>
     <TutorConversationHistory
       turns={session?.turns ?? []}
       activeTurnId={state === "ready" ? latestTurn?.turnId ?? null : null}

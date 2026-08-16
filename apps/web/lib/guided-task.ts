@@ -2,6 +2,7 @@ import { Value } from "@sinclair/typebox/value";
 import {
   CaseViewSchema,
   CompleteTaskRequestSchema,
+  LearningTaskViewSchema,
   TaskCompletionViewSchema,
   type CompleteTaskRequest,
 } from "@gapproof/contracts";
@@ -47,6 +48,9 @@ export function guidedTaskGuards(
 
 export const getCaseForGuidedTask = (caseId: string) =>
   apiGet(`/api/v1/cases/${caseId}`, CaseViewSchema);
+
+export const getGuidedTask = (taskId: string) =>
+  apiGet(`/api/v1/tasks/${taskId}`, LearningTaskViewSchema);
 
 export const submitGuidedTask = (
   taskId: string,

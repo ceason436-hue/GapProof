@@ -1,6 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiClientError, apiGet, apiPost, apiPut } from "./api-client";
+import { ApiClientError, apiGet, apiPost, apiPostOnce, apiPut } from "./api-client";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -32,6 +32,13 @@ describe("api client", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[0]?.[1]?.headers["Idempotency-Key"]).toBe("same-key");
     expect(fetchMock.mock.calls[1]?.[1]?.headers["Idempotency-Key"]).toBe("same-key");
+  });
+
+  it("does not retry a mutation when the caller must recover an unknown result first", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError("network"));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(apiPostOnce("/api/v1/write", Type.Object({ ok: Type.Boolean() }), { value: 1 }, "once-key")).rejects.toThrow("network");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("retries once when a same-origin proxy returns a non-JSON unknown result", async () => {

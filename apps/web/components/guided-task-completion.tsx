@@ -9,6 +9,7 @@ import { formatTaskDateTime } from "@/lib/today-adapter";
 import {
   createGuidedTaskIntent,
   getCaseForGuidedTask,
+  getGuidedTask,
   guidedTaskGuards,
   submitGuidedTask,
 } from "@/lib/guided-task";
@@ -20,6 +21,7 @@ type CompletionState =
   | { kind: "submitting" }
   | { kind: "conflict"; requestId?: string }
   | { kind: "success"; scheduledFor: string }
+  | { kind: "recovered_success" }
   | { kind: "case_error"; code: string; requestId?: string; retryable?: boolean }
   | { kind: "error"; code: string; requestId?: string; retryable?: boolean };
 
@@ -69,6 +71,7 @@ export function GuidedTaskCompletion({ task, timeZone }: { task: GuidedIntervent
   const [expectedVersion, setExpectedVersion] = useState<number | null>(null);
   const [completedStepIds, setCompletedStepIds] = useState<string[]>([]);
   const [state, setState] = useState<CompletionState>({ kind: "loading_case" });
+  const [recoveryMessage, setRecoveryMessage] = useState<string | null>(null);
 
   const refreshCase = async () => {
     setState({ kind: "loading_case" });
@@ -132,11 +135,39 @@ export function GuidedTaskCompletion({ task, timeZone }: { task: GuidedIntervent
     }
   };
 
-  if (state.kind === "success") {
+  const recoverUnknownSubmit = async () => {
+    if (state.kind !== "error" || state.code !== "NETWORK_UNKNOWN") return;
+    setState({ kind: "loading_case" });
+    setRecoveryMessage(null);
+    try {
+      const response = await getGuidedTask(task.id);
+      if (response.data.taskType !== "guided_intervention") {
+        setState({ kind: "case_error", code: "TASK_TYPE_CHANGED" });
+        return;
+      }
+      if (response.data.status === "completed") {
+        setState({ kind: "recovered_success" });
+        refreshTodayAfterConfirmedSubmit(router.refresh);
+        return;
+      }
+      if (response.data.status !== "ready") {
+        setState({ kind: "error", code: "INVALID_TASK_STATE" });
+        return;
+      }
+      const latest = await getCaseForGuidedTask(task.caseId);
+      setExpectedVersion(latest.data.stateVersion);
+      setRecoveryMessage("最新状态显示这项任务还没有完成。请再次确认已完成的步骤后提交。");
+      setState({ kind: "idle" });
+    } catch (error) {
+      setState(toCaseErrorState(error));
+    }
+  };
+
+  if (state.kind === "success" || state.kind === "recovered_success") {
     return <article className="guided-task-result" data-guided-result="success" aria-live="polite">
       <span className="task-kind">本次练习已完成</span>
-      <h3>明日复习已安排</h3>
-      <p>下一次检查：{formatTaskDateTime(state.scheduledFor, timeZone)}。</p>
+      <h3>{state.kind === "success" ? "明日复习已安排" : "已读取到完成记录"}</h3>
+      {state.kind === "success" ? <p>下一次检查：{formatTaskDateTime(state.scheduledFor, timeZone)}。</p> : <p>刚才的提交已经生效，请返回今日查看最新安排。</p>}
       <p>完成后续检查前，这不代表已经掌握。</p>
       <div className="guided-task-result-actions">
         <Link className="primary-blue" href="/student/today?source=api">返回今日查看安排</Link>
@@ -161,12 +192,15 @@ export function GuidedTaskCompletion({ task, timeZone }: { task: GuidedIntervent
       </div>
     </fieldset>
     {state.kind === "conflict" ? <p className="guided-task-feedback error" role="alert">任务内容已更新，请再次确认全部步骤后提交。</p> : null}
+    {recoveryMessage ? <p className="guided-task-feedback" role="status">{recoveryMessage}</p> : null}
     {state.kind === "case_error" ? caseErrorMessage(state) : null}
     {state.kind === "error" ? errorMessage(state) : null}
     {state.kind === "case_error"
       ? <button className="guided-task-submit" type="button" onClick={() => { void refreshCase(); }}>重新加载</button>
       : state.kind === "error" && (state.code === "NETWORK_UNKNOWN" || state.code === "INVALID_TASK_STATE")
-      ? <a className="guided-task-submit" href="/student/today">{state.code === "NETWORK_UNKNOWN" ? "请刷新今日" : "返回今日刷新"}</a>
+      ? state.code === "NETWORK_UNKNOWN"
+        ? <button className="guided-task-submit" type="button" onClick={() => { void recoverUnknownSubmit(); }}>读取最新状态</button>
+        : <a className="guided-task-submit" href="/student/today">返回今日刷新</a>
       : <button className="guided-task-submit" type="button" onClick={() => { void submit(); }} disabled={disabled}>
         {state.kind === "loading_case" ? "正在加载最新内容" : state.kind === "submitting" ? "正在提交" : state.kind === "conflict" ? "确认后重新提交" : state.kind === "error" && state.retryable ? "再次确认提交" : "确认完成任务"}
       </button>}

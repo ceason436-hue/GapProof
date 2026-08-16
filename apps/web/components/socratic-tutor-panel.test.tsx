@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { ApiClientError } from "@/lib/api-client";
-import { SocraticTutorPanel, TutorConversationHistory, mergeTutorTurn, sessionContainsRecoveredSubmission, toTutorPanelError, tutorActionLabel } from "./socratic-tutor-panel";
+import { SocraticTutorPanel, TutorConversationHistory, mergeTutorTurn, sessionContainsRecoveredSubmission, toTutorPanelError, tutorActionLabel, tutorRecoveryLocked } from "./socratic-tutor-panel";
 
 const task = {
   id: "0198b111-1111-7000-8000-000000000012",
@@ -70,6 +70,13 @@ describe("SocraticTutorPanel", () => {
     }, 409);
     expect(toTutorPanelError(pending)).toMatchObject({ code: "TURN_ALREADY_PENDING", message: "上一条引导还在准备，请读取最新状态。" });
     expect(toTutorPanelError(conflict)).toMatchObject({ code: "VERSION_CONFLICT", message: "任务内容已经更新，请返回今日查看最新安排。" });
+  });
+
+  it("locks writes while a pending or unknown result must be recovered", () => {
+    expect(tutorRecoveryLocked({ code: "NETWORK_UNKNOWN", message: "", retryable: false, unknownWriteResult: true })).toBe(true);
+    expect(tutorRecoveryLocked({ code: "TURN_ALREADY_PENDING", message: "", retryable: false, unknownWriteResult: false })).toBe(true);
+    expect(tutorRecoveryLocked({ code: "POLL_TIMEOUT", message: "", retryable: false, unknownWriteResult: false })).toBe(true);
+    expect(tutorRecoveryLocked({ code: "INVALID_INPUT", message: "", retryable: false, unknownWriteResult: false })).toBe(false);
   });
 
   it("maps every constrained next action to a student-operable continuation", () => {

@@ -18,6 +18,8 @@ type RequestOptions = {
   headers?: Record<string, string>;
   idempotencyKey?: string;
   cache?: "no-store";
+  /** Disable automatic mutation retries when a network result may be unknown. */
+  retryNetwork?: boolean;
 };
 
 const wait = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve, reject) => {
@@ -33,7 +35,7 @@ export async function apiRequestUrl<S extends TSchema>(
   ensureContractFormats();
   const method = options.method ?? "GET";
   if ((method === "POST" || method === "DELETE") && !options.idempotencyKey) throw new Error(`${method} requests require an Idempotency-Key`);
-  const maxAttempts = method === "GET" ? 3 : 2;
+  const maxAttempts = method === "GET" ? 3 : options.retryNetwork === false ? 1 : 2;
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
@@ -97,6 +99,14 @@ export const apiPost = <S extends TSchema>(
   signal?: AbortSignal,
 ) => apiRequest(path, schema, { method: "POST", body, idempotencyKey, ...(signal ? { signal } : {}) });
 
+export const apiPostOnce = <S extends TSchema>(
+  path: `/api/v1/${string}`,
+  schema: S,
+  body: unknown,
+  idempotencyKey: string,
+  signal?: AbortSignal,
+) => apiRequest(path, schema, { method: "POST", body, idempotencyKey, retryNetwork: false, ...(signal ? { signal } : {}) });
+
 export const apiPut = <S extends TSchema>(
   path: `/api/v1/${string}`,
   schema: S,
@@ -118,5 +128,26 @@ export const apiDelete = <S extends TSchema>(
 ) => apiRequest(path, schema, {
   method: "DELETE",
   idempotencyKey,
+  ...(signal ? { signal } : {}),
+});
+
+export const apiDeleteOnce = <S extends TSchema>(
+  path: `/api/v1/${string}`,
+  schema: S,
+  idempotencyKey: string,
+  signal?: AbortSignal,
+) => apiRequest(path, schema, { method: "DELETE", idempotencyKey, retryNetwork: false, ...(signal ? { signal } : {}) });
+
+export const apiPutOnce = <S extends TSchema>(
+  path: `/api/v1/${string}`,
+  schema: S,
+  body: NonNullable<Parameters<typeof fetch>[1]>["body"],
+  headers: Record<string, string>,
+  signal?: AbortSignal,
+) => apiRequest(path, schema, {
+  method: "PUT",
+  rawBody: body,
+  headers,
+  retryNetwork: false,
   ...(signal ? { signal } : {}),
 });
