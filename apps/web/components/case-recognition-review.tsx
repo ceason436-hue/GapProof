@@ -18,6 +18,7 @@ import {
   createProbeIntent,
   createRunNextIntent,
   deleteCaseOriginalImages,
+  getCaseOriginalImagesStatus,
   getCase,
   getExtraction,
   getHypotheses,
@@ -28,6 +29,8 @@ import {
   submitProbe,
 } from "@/lib/case-review";
 import { isAbortError, runAbortable } from "@/lib/abort-control";
+import { ApiClientError } from "@/lib/api-client";
+import { createBrowserUuidV7 } from "@/lib/browser-uuidv7";
 import { AppShell } from "./app-shell";
 
 export type ReviewState =
@@ -157,7 +160,8 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
   const [attempt, setAttempt] = useState<AttemptView | null>(null);
   const [recoveredCaseVersion, setRecoveredCaseVersion] = useState<number | null>(null);
   const [recoveryBusy, setRecoveryBusy] = useState(false);
-  const [originalImages, setOriginalImages] = useState<"retained" | "deleting" | "deleted" | "error">("retained");
+  const [originalImages, setOriginalImages] = useState<"retained" | "deleting" | "deleted" | "unknown" | "error">("retained");
+  const originalImagesDeleteKeyRef = useRef<string | null>(null);
 
   const safeState = (next: ReviewState, nextMessage = reviewStateMessage(next)) => {
     if (!mountedRef.current) return;
@@ -358,16 +362,36 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
   };
 
   const deleteOriginalImages = async () => {
-    if (!realExtraction || originalImages === "deleting" || originalImages === "deleted") return;
+    if (!realExtraction || originalImages === "deleting" || originalImages === "deleted" || originalImages === "unknown") return;
+    const idempotencyKey = originalImagesDeleteKeyRef.current ?? createBrowserUuidV7();
+    originalImagesDeleteKeyRef.current = idempotencyKey;
     setOriginalImages("deleting");
     await withController(async signal => {
       try {
-        await deleteCaseOriginalImages(caseId, signal);
+        await deleteCaseOriginalImages(caseId, idempotencyKey, signal);
         if (mountedRef.current) setOriginalImages("deleted");
       } catch (error) {
-        if (!isAbortError(signal, error) && mountedRef.current) setOriginalImages("error");
+        if (!isAbortError(signal, error) && mountedRef.current) setOriginalImages(error instanceof ApiClientError ? "error" : "unknown");
       }
     });
+  };
+
+  const recoverOriginalImagesDeletion = async () => {
+    if (originalImages !== "unknown" || recoveryBusy) return;
+    setRecoveryBusy(true);
+    await withController(async signal => {
+      try {
+        const response = await getCaseOriginalImagesStatus(caseId, signal);
+        if (response.data.originalImagesDeleted) {
+          setOriginalImages("deleted");
+          return;
+        }
+        setOriginalImages("error");
+      } catch (error) {
+        if (!isAbortError(signal, error) && mountedRef.current) setOriginalImages("unknown");
+      }
+    });
+    if (mountedRef.current) setRecoveryBusy(false);
   };
 
   const recoverUnknownWrite = async () => {
@@ -494,7 +518,7 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
         </section>
         : null}
       {state === "confirmed"
-        ? <section className="case-review-state" data-review-confirmed><h2>识别内容已由你确认</h2><p>下一步会准备找原因的确认小题，不代表识别正确或产生学习结论。</p>{realExtraction ? <div className="case-review-feedback" data-original-image-state={originalImages}><p>{originalImages === "deleted" ? "原图已从本机存储删除；已确认的文字内容仍会保留。" : originalImages === "error" ? "原图暂时未能删除，可以再次尝试。" : "原图将在 24 小时后自动删除，也可以现在删除。已确认的文字内容会继续保留。"}</p>{originalImages !== "deleted" ? <button type="button" className="secondary-button" disabled={originalImages === "deleting"} onClick={() => void deleteOriginalImages()}>{originalImages === "deleting" ? "正在删除原图" : originalImages === "error" ? "重新删除原图" : "现在删除原图"}</button> : null}</div> : null}<button type="button" className="primary-blue" onClick={() => void startHypotheses()}>开始找原因</button></section>
+        ? <section className="case-review-state" data-review-confirmed><h2>识别内容已由你确认</h2><p>下一步会准备找原因的确认小题，不代表识别正确或产生学习结论。</p>{realExtraction ? <div className="case-review-feedback" data-original-image-state={originalImages}><p>{originalImages === "deleted" ? "原图已从本机存储删除；已确认的文字内容仍会保留。" : originalImages === "unknown" ? "原图删除结果暂时无法确认。请先读取最新状态，确认前不会再次删除。" : originalImages === "error" ? "原图暂时未能删除，可以再次尝试。" : "原图将在 24 小时后自动删除，也可以现在删除。已确认的文字内容会继续保留。"}</p>{originalImages === "unknown" ? <button type="button" className="secondary-button" disabled={recoveryBusy} onClick={() => void recoverOriginalImagesDeletion()}>{recoveryBusy ? "正在读取状态" : "读取最新状态"}</button> : originalImages !== "deleted" ? <button type="button" className="secondary-button" disabled={originalImages === "deleting"} onClick={() => void deleteOriginalImages()}>{originalImages === "deleting" ? "正在删除原图" : originalImages === "error" ? "重新删除原图" : "现在删除原图"}</button> : null}</div> : null}<button type="button" className="primary-blue" onClick={() => void startHypotheses()}>开始找原因</button></section>
         : null}
       {state === "run_next" || state === "hypotheses_loading" || state === "run_next_error"
         ? <section className="case-review-state"><h2>{state === "run_next_error" ? "找原因没有准备好" : "正在准备找原因"}</h2><p>{message}</p>{state === "run_next_error" ? <button type="button" className="primary-blue" onClick={() => void startHypotheses()}>重新开始找原因</button> : null}</section>

@@ -1,6 +1,7 @@
 import { Value } from "@sinclair/typebox/value";
 import {
   AttemptViewSchema,
+  CaseSourceAssetsStatusViewSchema,
   CaseViewSchema,
   ConfirmExtractionRequestSchema,
   HypothesesViewSchema,
@@ -14,7 +15,7 @@ import {
   type SubmitAttemptRequest,
   type ExtractionView,
 } from "@gapproof/contracts";
-import { ApiClientError, apiDelete, apiGet, apiPost } from "./api-client";
+import { ApiClientError, apiDeleteOnce, apiGet, apiPost } from "./api-client";
 import { createBrowserUuidV7 } from "./browser-uuidv7";
 import { ensureContractFormats } from "./contract-formats";
 
@@ -57,6 +58,7 @@ export const confirmExtractionPath = (caseId: string): `/api/v1/${string}` =>
   `/api/v1/cases/${caseId}/extraction/confirm`;
 export const caseOriginalImagesPath = (caseId: string): `/api/v1/${string}` =>
   `/api/v1/cases/${caseId}/source-assets`;
+
 export const hypothesesPath = (caseId: string): `/api/v1/${string}` =>
   `/api/v1/cases/${caseId}/hypotheses`;
 export const runNextPath = (caseId: string): `/api/v1/${string}` =>
@@ -127,8 +129,11 @@ export const getCase = (caseId: string, signal?: AbortSignal) =>
 export const confirmExtraction = (caseId: string, intent: WriteIntent<ConfirmExtractionRequest>, signal?: AbortSignal) =>
   apiPost(confirmExtractionPath(caseId), CaseViewSchema, intent.body, intent.idempotencyKey, signal);
 
-export const deleteCaseOriginalImages = (caseId: string, signal?: AbortSignal) =>
-  apiDelete(caseOriginalImagesPath(caseId), DeletedCaseSourceAssetsViewSchema, createBrowserUuidV7(), signal);
+export const getCaseOriginalImagesStatus = (caseId: string, signal?: AbortSignal) =>
+  apiGet(caseOriginalImagesPath(caseId), CaseSourceAssetsStatusViewSchema, signal);
+
+export const deleteCaseOriginalImages = (caseId: string, idempotencyKey: string, signal?: AbortSignal) =>
+  apiDeleteOnce(caseOriginalImagesPath(caseId), DeletedCaseSourceAssetsViewSchema, idempotencyKey, signal);
 
 export const queueRunNext = (caseId: string, intent: WriteIntent<{ expectedVersion: number }>, signal?: AbortSignal) =>
   apiPost(runNextPath(caseId), RunNextQueuedSchema, intent.body, intent.idempotencyKey, signal);

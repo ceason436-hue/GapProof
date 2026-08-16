@@ -116,6 +116,8 @@ import {
   type TutorTurnView,
   DeletedCaseSourceAssetsViewSchema,
   type DeletedCaseSourceAssetsView,
+  CaseSourceAssetsStatusViewSchema,
+  type CaseSourceAssetsStatusView,
   StudentProgressViewSchema,
   StudentFactReportsViewSchema,
   QuestionArchiveViewSchema,
@@ -135,6 +137,7 @@ import {
   StudentProfileIdempotencyKeyReusedError,
   StudentProfileVersionConflictError,
   findSourceAssetById,
+  findActiveCaseSourceAssets,
   startSyntheticRecognitionIdempotent,
   findUploadStudentAndCase,
   initiateSourceAssetUpload,
@@ -1121,6 +1124,28 @@ export async function buildApi(options: BuildApiOptions) {
   });
 
   const clock = options.clock ?? new SystemClock();
+
+  api.get<{ Params: CaseIdParams }>(
+    "/v1/cases/:caseId/source-assets",
+    {
+      schema: {
+        params: CaseIdParamsSchema,
+        response: { 200: apiResponseSchema(CaseSourceAssetsStatusViewSchema), "4xx": ApiErrorResponseSchema, 500: ApiErrorResponseSchema },
+      },
+    },
+    async (request) => {
+      const caseRow = await findCaseById(options.database, request.params.caseId);
+      if (caseRow === undefined) throw new ResourceNotFoundError("Case", request.params.caseId);
+      if (caseRow.state === "awaiting_evidence") throw new SourceAssetDeletionNotReadyError();
+      const activeAssets = await findActiveCaseSourceAssets(options.database, caseRow.id);
+      const data: CaseSourceAssetsStatusView = {
+        caseId: caseRow.id,
+        originalImagesDeleted: activeAssets.length === 0,
+        extractedContentRetained: true,
+      };
+      return success(request, data);
+    },
+  );
 
   api.delete<{ Params: CaseIdParams }>(
     "/v1/cases/:caseId/source-assets",

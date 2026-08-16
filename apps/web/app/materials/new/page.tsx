@@ -1,6 +1,7 @@
 import { SourceUpload } from "@/components/source-upload";
 import { AppShell } from "@/components/app-shell";
 import { Icon } from "@/components/icons";
+import Link from "next/link";
 import { parseApiOrigin, WebConfigurationError } from "@/lib/runtime-config";
 import { getCurrentStudentSession, StudentSessionRequiredError } from "@/lib/student-session-server";
 import { StudentSessionBootstrap } from "@/components/student-session-bootstrap";
@@ -18,6 +19,10 @@ function ConfigurationError({ error }: { error: WebConfigurationError }) {
       <article className="state-card"><Icon name="report"/><div>
         <h2>这次没有加载成功</h2>
         <p>请返回今日页，或稍后重新打开上传页面。</p>
+        <div className="button-row">
+          <Link className="primary-blue" href="/student/today?source=api">返回今日</Link>
+          <Link className="ghost-link" href="/materials/new">重新打开上传</Link>
+        </div>
       </div></article>
     </section>
   </AppShell>;

@@ -160,6 +160,16 @@ export const SourceAssetIdParamsSchema = Type.Object({
 
 export type SourceAssetIdParams = Static<typeof SourceAssetIdParamsSchema>;
 
+export const CaseSourceAssetsStatusViewSchema = Type.Object({
+  caseId: Type.String({ format: "uuid" }),
+  originalImagesDeleted: Type.Boolean(),
+  extractedContentRetained: Type.Literal(true),
+}, { additionalProperties: false });
+
+export type CaseSourceAssetsStatusView = Static<
+  typeof CaseSourceAssetsStatusViewSchema
+>;
+
 export const DeletedCaseSourceAssetsViewSchema = Type.Object({
   caseId: Type.String({ format: "uuid" }),
   deletedCount: Type.Integer({ minimum: 0 }),

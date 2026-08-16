@@ -9,8 +9,22 @@ import { Icon } from "./icons";
 
 export function StudentSessionBootstrap() {
   const router = useRouter();
-  const [state, setState] = useState<"idle" | "creating" | "error">("idle");
+  const [state, setState] = useState<"idle" | "creating" | "recovering" | "error" | "unknown">("idle");
   const keyRef = useRef(createBrowserUuidV7());
+
+  async function recoverLatest() {
+    setState("recovering");
+    try {
+      const response = await fetch("/api/v1/device-session", { method: "GET", headers: { Accept: "application/json" }, cache: "no-store" });
+      if (response.ok) {
+        router.refresh();
+        return;
+      }
+      setState(response.status === 401 ? "error" : "unknown");
+    } catch {
+      setState("unknown");
+    }
+  }
 
   async function start() {
     if (state === "creating") return;
@@ -23,7 +37,7 @@ export function StudentSessionBootstrap() {
       if (!response.ok) throw new Error("SESSION_CREATE_FAILED");
       router.refresh();
     } catch {
-      setState("error");
+      await recoverLatest();
     }
   }
 
@@ -38,11 +52,17 @@ export function StudentSessionBootstrap() {
       <article className="state-card">
         <Icon name="today"/>
         <div>
-          <h2>{state === "error" ? "暂时没有准备好" : "从这台设备开始"}</h2>
-          <p>{state === "error" ? "请检查网络后重试。系统没有创建学习记录。" : "开始后先确认年级、学科、学期、地区和目前的学习状态。"}</p>
-          <button className="primary-blue" type="button" onClick={() => void start()} disabled={state === "creating"}>
-            {state === "creating" ? "正在准备" : state === "error" ? "重新准备" : "开始使用"}
-          </button>
+          <h2>{state === "error" || state === "unknown" ? "暂时没有准备好" : "从这台设备开始"}</h2>
+          <p>{state === "error"
+            ? "最新状态显示学习空间还没有准备好。请检查网络后重新准备。"
+            : state === "unknown"
+              ? "暂时无法确认是否已经准备完成。先读取最新状态，不会重复创建。"
+              : "开始后先确认年级、学科、学期、地区和目前的学习状态。"}</p>
+          {state === "unknown"
+            ? <button className="primary-blue" type="button" onClick={() => void recoverLatest()}>读取最新状态</button>
+            : <button className="primary-blue" type="button" onClick={() => void start()} disabled={state === "creating" || state === "recovering"}>
+              {state === "creating" ? "正在准备" : state === "recovering" ? "正在读取" : state === "error" ? "重新准备" : "开始使用"}
+            </button>}
         </div>
       </article>
     </section>
