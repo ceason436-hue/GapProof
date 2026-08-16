@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.73"
+version: "0.1.74"
 status: "ACTIVE"
-current_stage: "PUSH-058 已发布：上传、导师与引导任务写入支持权威状态恢复；比赛落地优先，完整集中门禁与真实学生验收 deferred"
+current_stage: "PUSH-059 已发布：首次设备会话、上传错误页与原图删除形成可操作恢复；比赛落地优先，完整集中门禁与真实学生验收 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -2122,6 +2122,12 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.74 — 2026-08-16
+
+- 首次设备学习空间创建响应未知时先读取当前会话，确认不存在后才允许用同一幂等意图重试；不再错误声称“没有创建学习记录”。
+- 真实 OCR 确认后的原图主动删除使用单次写入；结果未知时锁定重复删除，并通过同一设备/Case 所有权保护的只读接口确认是否仍有原图。接口不返回对象键、文件名、哈希或 Provider 信息。
+- 上传配置失败页增加返回 Today 和重新打开上传的真实动作。本批只完成 workspace/Web TypeScript 与 diff 检查；全量测试、集中审查、Provider smoke、浏览器/视觉及真实学生验收继续 deferred，不提升 OCR 准确率、真实个性化或学习效果状态。
 
 ### v0.1.73 — 2026-08-16
 

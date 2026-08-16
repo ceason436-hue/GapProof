@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.63"
+version: "0.2.64"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "PUSH-058 已发布：上传、导师与引导任务未知写入提供学生可操作恢复；完整浏览器/移动端/真实学生验收仍 deferred"
+current_design_stage: "PUSH-059 已发布：首次学习空间、上传错误页与原图删除提供学生可操作恢复；完整浏览器/移动端/真实学生验收仍 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -1782,6 +1782,12 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 ---
 
 ## 22. 版本记录
+
+### v0.2.64 — 2026-08-16
+
+- 首次设备学习空间创建结果未知时显示“读取最新状态”，不重复创建也不错误宣称没有学习记录；只有权威会话确认不存在后才显示重新准备。
+- 原图主动删除结果未知时按钮变为“读取最新状态”，确认删除前不允许重复点击；确认仍保留后才允许学生明确重试。
+- 上传配置失败页增加“返回今日”和“重新打开上传”两个真实入口，避免错误页成为操作死路。完整浏览器、移动端、视觉和真实学生验收继续 deferred。
 
 ### v0.2.63 — 2026-08-16
 
