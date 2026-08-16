@@ -84,6 +84,7 @@ export async function revokeDeviceSession(database: Database, sessionId: string,
 export type RecoverableOcrBatch = {
   readonly batchId: string;
   readonly caseId: string;
+  readonly title: string;
   readonly status: "collecting" | "ready" | "processing" | "needs_confirmation" | "retryable_error" | "failed";
   readonly pageCount: number;
   readonly resumeKind: "continue_upload" | "wait" | "review" | "retry";
@@ -100,13 +101,12 @@ function resumeKind(status: RecoverableOcrBatch["status"]): RecoverableOcrBatch[
 }
 
 async function recoverableView(database: Pick<Database, "select">, batch: typeof ocrBatches.$inferSelect): Promise<RecoverableOcrBatch | undefined> {
-  if (batch.status === "needs_confirmation") {
-    const [caseRow] = await database.select({ state: cases.state }).from(cases).where(eq(cases.id, batch.caseId)).limit(1);
-    if (caseRow?.state !== "awaiting_confirmation") return undefined;
-  }
+  const [caseRow] = await database.select({ state: cases.state, title: cases.title }).from(cases).where(eq(cases.id, batch.caseId)).limit(1);
+  if (caseRow === undefined || (batch.status === "needs_confirmation" && caseRow.state !== "awaiting_confirmation")) return undefined;
   const pages = await database.select({ id: ocrBatchPages.id }).from(ocrBatchPages).where(eq(ocrBatchPages.batchId, batch.id));
   const status = batch.status as RecoverableOcrBatch["status"];
-  return { batchId: batch.id, caseId: batch.caseId, status, pageCount: pages.length, resumeKind: resumeKind(status), updatedAt: batch.updatedAt };
+  const title = caseRow.title.trim().slice(0, 80) || "上传的学习材料";
+  return { batchId: batch.id, caseId: batch.caseId, title, status, pageCount: pages.length, resumeKind: resumeKind(status), updatedAt: batch.updatedAt };
 }
 
 export async function findRecoverableOcrBatchesForStudent(database: Pick<Database, "select">, studentId: string) {

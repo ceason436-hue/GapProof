@@ -22,12 +22,13 @@ export class OcrBatchIdempotencyError extends Error {
 }
 
 export async function findOcrBatch(database: Pick<Database, "select">, batchId: string) {
-  const [batch] = await database.select().from(ocrBatches).where(eq(ocrBatches.id, batchId)).limit(1);
-  if (batch === undefined) return undefined;
+  const [result] = await database.select({ batch: ocrBatches, caseTitle: cases.title }).from(ocrBatches)
+    .innerJoin(cases, eq(ocrBatches.caseId, cases.id)).where(eq(ocrBatches.id, batchId)).limit(1);
+  if (result === undefined) return undefined;
   const pages = await database.select({ page: ocrBatchPages, asset: sourceAssets })
     .from(ocrBatchPages).innerJoin(sourceAssets, eq(ocrBatchPages.assetId, sourceAssets.id))
     .where(eq(ocrBatchPages.batchId, batchId)).orderBy(asc(ocrBatchPages.pageOrder));
-  return { batch, pages };
+  return { batch: result.batch, caseTitle: result.caseTitle, pages };
 }
 
 async function idempotentRecord(database: Pick<Database, "select">, scope: string, key: string) {
@@ -36,11 +37,11 @@ async function idempotentRecord(database: Pick<Database, "select">, scope: strin
   return record;
 }
 
-export async function createRealOcrBatch(database: Database, input: { idempotencyKey: string; batchId: string; caseId: string; studentId: string; }): Promise<{ batch: typeof ocrBatches.$inferSelect; replayed: boolean }> {
+export async function createRealOcrBatch(database: Database, input: { idempotencyKey: string; batchId: string; caseId: string; studentId: string; title: string; }): Promise<{ batch: typeof ocrBatches.$inferSelect; replayed: boolean }> {
   const existing = await idempotentRecord(database, CREATE_SCOPE, input.idempotencyKey);
   if (existing?.resourceId !== undefined && existing?.resourceId !== null) {
     const result = await findOcrBatch(database, existing.resourceId);
-    if (result === undefined || result.batch.studentId !== input.studentId) throw new OcrBatchIdempotencyError();
+    if (result === undefined || result.batch.studentId !== input.studentId || result.caseTitle !== input.title) throw new OcrBatchIdempotencyError();
     return { batch: result.batch, replayed: true };
   }
   try {
@@ -48,14 +49,14 @@ export async function createRealOcrBatch(database: Database, input: { idempotenc
       const record = await idempotentRecord(tx, CREATE_SCOPE, input.idempotencyKey);
       if (record?.resourceId !== undefined && record?.resourceId !== null) {
         const result = await findOcrBatch(tx, record.resourceId);
-        if (result === undefined || result.batch.studentId !== input.studentId) throw new OcrBatchIdempotencyError();
+        if (result === undefined || result.batch.studentId !== input.studentId || result.caseTitle !== input.title) throw new OcrBatchIdempotencyError();
         return { batch: result.batch, replayed: true };
       }
       const [student] = await tx.select().from(students).where(eq(students.id, input.studentId)).for("update").limit(1);
       if (student === undefined || student.deletedAt !== null || student.status !== "active") throw new ResourceNotFoundError("Student", input.studentId);
       const [recentBatches] = await tx.select({ value: count() }).from(ocrBatches).where(and(eq(ocrBatches.studentId, input.studentId), gte(ocrBatches.createdAt, new Date(Date.now() - 24 * 60 * 60 * 1_000))));
       if ((recentBatches?.value ?? 0) >= MAX_REAL_OCR_BATCHES_PER_24H) throw new OcrBatchIntentError(`A student can start at most ${MAX_REAL_OCR_BATCHES_PER_24H} OCR batches in 24 hours.`);
-      const [caseRow] = await tx.insert(cases).values({ id: input.caseId, tenantId: student.tenantId, studentId: student.id, title: "待确认的试卷识别", simulation: false, synthetic: false }).returning();
+      const [caseRow] = await tx.insert(cases).values({ id: input.caseId, tenantId: student.tenantId, studentId: student.id, title: input.title, simulation: false, synthetic: false }).returning();
       if (caseRow === undefined) throw new Error("The OCR Case was not created.");
       const [batch] = await tx.insert(ocrBatches).values({ id: input.batchId, tenantId: student.tenantId, studentId: student.id, caseId: caseRow.id }).returning();
       if (batch === undefined) throw new Error("The OCR batch was not created.");
@@ -67,7 +68,7 @@ export async function createRealOcrBatch(database: Database, input: { idempotenc
     const record = await idempotentRecord(database, CREATE_SCOPE, input.idempotencyKey);
     if (record?.resourceId === null || record?.resourceId === undefined) throw error;
     const result = await findOcrBatch(database, record.resourceId);
-    if (result === undefined || result.batch.studentId !== input.studentId) throw new OcrBatchIdempotencyError();
+    if (result === undefined || result.batch.studentId !== input.studentId || result.caseTitle !== input.title) throw new OcrBatchIdempotencyError();
     return { batch: result.batch, replayed: true };
   }
 }

@@ -3,6 +3,11 @@ import { type Static, Type } from "@sinclair/typebox";
 export const MAX_REAL_OCR_BATCH_PAGES = 50;
 export const REAL_OCR_PROCESSING_NOTICE_VERSION = "real-ocr-processing-v1";
 export const MAX_REAL_OCR_BATCHES_PER_24H = 10;
+export const RealOcrBatchTitleSchema = Type.String({
+  minLength: 1,
+  maxLength: 80,
+  pattern: "^[^\\u0000-\\u001f\\u007f]+$",
+});
 
 export const DeviceSessionViewSchema = Type.Object({
   authenticated: Type.Literal(true),
@@ -17,6 +22,7 @@ export const DeviceSessionClosedViewSchema = Type.Object({
 export const RecoverableOcrBatchViewSchema = Type.Object({
   batchId: Type.String({ format: "uuid" }),
   caseId: Type.String({ format: "uuid" }),
+  title: RealOcrBatchTitleSchema,
   status: Type.Union([
     Type.Literal("collecting"), Type.Literal("ready"), Type.Literal("processing"),
     Type.Literal("needs_confirmation"), Type.Literal("retryable_error"), Type.Literal("failed"),

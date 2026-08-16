@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.80"
+version: "0.2.81"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "PUSH-075 已发布：错题本支持服务端搜索筛选与游标继续加载；比赛功能落地优先，测试与审查 deferred"
+current_design_stage: "PUSH-076 已发布：上传材料名称贯通恢复、错题、计划与报告；比赛功能落地优先，测试与审查 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -1782,6 +1782,13 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 ---
 
 ## 22. 版本记录
+
+### v0.2.81 — 2026-08-16
+
+- 上传卡顶部增加“这份材料叫什么？”单行输入，示例为日期加材料类型；辅助文案说明名称用于错题本搜索，并提醒不要填写姓名、学校或班级。
+- 未填写名称时不能开始上传检查；批次创建或创建结果未知后输入锁定，避免同一材料处理中改名。恢复已有批次时显示原名称。
+- “未完成的材料”列表以学生名称为主标题，状态和下一步放在说明中；错题本、计划、进步及报告继续显示同一 Case 名称。
+- 按比赛功能落地优先要求，本批测试、视觉、浏览器及真实学生验收继续 deferred。
 
 ### v0.2.80 — 2026-08-16
 

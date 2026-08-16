@@ -461,6 +461,7 @@ function realOcrBatchView(result: NonNullable<Awaited<ReturnType<typeof findOcrB
   return {
     batchId: result.batch.id,
     caseId: result.batch.caseId,
+    title: result.caseTitle.trim().slice(0, 80) || "上传的学习材料",
     status: result.batch.status,
     guardianConfirmed: result.batch.guardianConfirmed,
     version: result.batch.version,
@@ -2132,7 +2133,9 @@ export async function buildApi(options: BuildApiOptions) {
     "/v1/ocr-batches",
     { schema: { body: CreateRealOcrBatchRequestSchema, response: { 200: apiResponseSchema(RealOcrBatchViewSchema), 201: apiResponseSchema(RealOcrBatchViewSchema), "4xx": ApiErrorResponseSchema, 500: ApiErrorResponseSchema } } },
     async (request, reply) => {
-      const result = await createRealOcrBatch(options.database, { idempotencyKey: getIdempotencyKey(request), batchId: uuidv7(), caseId: uuidv7(), studentId: request.body.studentId });
+      const title = request.body.title.trim();
+      if (title.length === 0) throw new ApiHttpError(400, "MATERIAL_TITLE_REQUIRED", "A material title is required.", false);
+      const result = await createRealOcrBatch(options.database, { idempotencyKey: getIdempotencyKey(request), batchId: uuidv7(), caseId: uuidv7(), studentId: request.body.studentId, title });
       const batch = await findOcrBatch(options.database, result.batch.id);
       if (batch === undefined) throw new ResourceNotFoundError("OCR batch", result.batch.id);
       return reply.status(result.replayed ? 200 : 201).send(success(request, realOcrBatchView(batch)));

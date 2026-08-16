@@ -22,7 +22,7 @@ export function OcrBatchRecovery({ batches, compact = false }: { batches: readon
     <div className="ocr-recovery-list">{batches.map(batch => {
       const item = copy[batch.resumeKind];
       return <article key={batch.batchId} data-resume-kind={batch.resumeKind}>
-        <div><strong>{batch.status === "failed" ? "这份材料没有识别完成" : item.title}</strong><p>{batch.status === "failed" ? "原批次无法继续处理，请重新上传图片。新图片仍会先检查，再由你确认是否开始识别。" : item.detail}</p><small>{batch.pageCount} 张图片</small></div>
+        <div><strong>{batch.title}</strong><p>{batch.status === "failed" ? "这份材料没有识别完成。原批次无法继续处理，请重新上传图片。" : `${item.title}。${item.detail}`}</p><small>{batch.pageCount} 张图片</small></div>
         <Link className="secondary-button" href={href(batch)}>{batch.status === "failed" ? "重新上传图片" : item.action}</Link>
       </article>;
     })}</div>

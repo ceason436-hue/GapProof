@@ -6,6 +6,7 @@ import {
   HypothesisCandidateSchema,
 } from "./form-hypotheses.ts";
 import { InterventionStepSchema } from "./build-intervention.ts";
+import { RealOcrBatchTitleSchema } from "./device-session.ts";
 
 export function apiResponseSchema<T extends TSchema>(dataSchema: T) {
   return Type.Object({
@@ -195,7 +196,7 @@ export type UploadedSourceAssetView = Static<
 
 export const OcrBatchIdParamsSchema = Type.Object({ batchId: Type.String({ format: "uuid" }) }, { additionalProperties: false });
 export type OcrBatchIdParams = Static<typeof OcrBatchIdParamsSchema>;
-export const CreateRealOcrBatchRequestSchema = Type.Object({ studentId: Type.String({ format: "uuid" }) }, { additionalProperties: false });
+export const CreateRealOcrBatchRequestSchema = Type.Object({ studentId: Type.String({ format: "uuid" }), title: RealOcrBatchTitleSchema }, { additionalProperties: false });
 export type CreateRealOcrBatchRequest = Static<typeof CreateRealOcrBatchRequestSchema>;
 export const RealOcrBatchPageSchema = Type.Object({
   pageId: Type.String({ format: "uuid" }), assetId: Type.String({ format: "uuid" }), order: Type.Integer({ minimum: 1 }),
@@ -204,6 +205,7 @@ export const RealOcrBatchPageSchema = Type.Object({
 }, { additionalProperties: false });
 export const RealOcrBatchViewSchema = Type.Object({
   batchId: Type.String({ format: "uuid" }), caseId: Type.String({ format: "uuid" }),
+  title: RealOcrBatchTitleSchema,
   status: Type.Union([Type.Literal("collecting"), Type.Literal("ready"), Type.Literal("processing"), Type.Literal("needs_confirmation"), Type.Literal("completed"), Type.Literal("retryable_error"), Type.Literal("failed")]),
   guardianConfirmed: Type.Boolean(), version: Type.Integer({ minimum: 0 }), pages: Type.Array(RealOcrBatchPageSchema),
 }, { additionalProperties: false });

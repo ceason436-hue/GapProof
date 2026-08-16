@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.90"
+version: "0.1.91"
 status: "ACTIVE"
-current_stage: "PUSH-075 已发布：错题本支持服务端搜索筛选与游标继续加载；比赛功能落地优先，测试与审查统一 deferred"
+current_stage: "PUSH-076 已发布：上传材料名称贯通恢复、错题、计划与报告；比赛功能落地优先，测试与审查统一 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -2122,6 +2122,12 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.91 — 2026-08-16
+
+- 学生在首次上传前为材料填写最多 80 字名称；批次创建后名称锁定，并作为同一真实 Case 标题贯通识别恢复、错题本、计划、进步和报告。
+- 批次创建幂等意图同时固定学生、名称和操作键；网络结果未知后沿用原名称，不能用同一键静默改名。旧批次继续显示原有 Case 标题。
+- 按比赛功能落地优先要求，本批未运行测试、审查、Provider smoke、浏览器/视觉或真实学生验收，全部继续 deferred；材料名称是学生组织信息，不是 OCR、诊断、个性化或学习效果证据。
 
 ### v0.1.90 — 2026-08-16
 
