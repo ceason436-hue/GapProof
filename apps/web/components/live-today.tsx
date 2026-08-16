@@ -104,7 +104,7 @@ export function FirstUseToday({ recoverableBatches = [] }: { recoverableBatches?
 }
 
 export function ProfileSetupRequired({ profile, recoverableBatches = [] }: { profile: StudentProfileView; recoverableBatches?: readonly RecoverableOcrBatchView[] }) {
-  return <AppShell actionDisabled actionLabel="完成学习范围后开始"><section className="today-page profile-setup-today" data-profile-setup-required>
+  return <AppShell actionHref="#setup-title" actionLabel="完成学习范围"><section className="today-page profile-setup-today" data-profile-setup-required>
     <OcrBatchRecovery batches={recoverableBatches}/>
     <StudentProfileSetup profile={profile} variant="today"/>
   </section></AppShell>;
@@ -305,7 +305,7 @@ export function TodayDashboard({
     <OcrBatchRecovery batches={recoverableBatches}/>
     <div className="today-grid">
       <div className="main-column">
-        <CurrentPanel current={current} timeZone={timeZone} completed={completed}/>
+        <div id="current-learning-task"><CurrentPanel current={current} timeZone={timeZone} completed={completed}/></div>
         <TodayOverviewPanel overview={overview} recoverableBatches={recoverableBatches}/>
       </div>
       <aside className="right-column">
@@ -357,8 +357,13 @@ export async function LiveToday({ selectedRetestId }: { selectedRetestId?: strin
 
     const actionLabel = model.current.kind === "selected"
       ? model.current.task.taskType === "guided_intervention" ? "完成今天的练习" : model.current.task.taskType === "d1_retest" ? "完成明日复习" : model.current.task.taskType === "d7_retest" ? "完成巩固练习" : "完成错题重做"
-      : model.current.kind === "contract_error" ? "当前任务不可用" : "暂无当前任务";
-    return <AppShell actionDisabled actionLabel={actionLabel}>
+      : model.current.kind === "contract_error" ? "刷新今日安排" : "开始新的检查";
+    const actionHref = model.current.kind === "selected"
+      ? "#current-learning-task"
+      : model.current.kind === "contract_error"
+        ? "/student/today?source=api"
+        : "/diagnose";
+    return <AppShell actionHref={actionHref} actionLabel={actionLabel}>
       <TodayDashboard current={model.current} overview={model.overview} retests={model.retests} timeZone={model.timeZone} completed={false} recoverableBatches={recoverableBatches}/>
     </AppShell>;
   } catch (error) {

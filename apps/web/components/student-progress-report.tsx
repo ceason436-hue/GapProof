@@ -14,7 +14,7 @@ const stageCopy: Record<ProgressStage, { label: string; next: string }> = {
   practicing: { label: "正在练习", next: "完成当前针对练习" },
   retesting: { label: "等待后续检查", next: "按安排完成下一次新题" },
   needs_follow_up: { label: "需要再确认", next: "继续下一次调整或检查" },
-  repair_verified: { label: "已有修复验证证据", next: "可以在报告中回看现有记录" },
+  repair_verified: { label: "这轮复习已经完成", next: "可以在报告中回看本次记录" },
   support_required: { label: "需要协助", next: "请老师或家长一起看看" },
 };
 
