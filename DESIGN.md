@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.77"
+version: "0.2.78"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "PUSH-072 已发布：完成任务可只读回顾导师对话历史；比赛功能落地优先，测试与审查 deferred"
+current_design_stage: "PUSH-073 已发布：多图材料可在识别前调整并保存真实页序；比赛功能落地优先，测试与审查 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -1782,6 +1782,13 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 ---
 
 ## 22. 版本记录
+
+### v0.2.78 — 2026-08-16
+
+- 上传队列与恢复材料的每张图片提供上移、下移，首尾动作禁用；继续添加、替换、移除与排序保留在同一紧凑操作区。
+- 未上传图片调整本地顺序；已有服务端页面时保存整份材料的权威顺序。部分上传、处理中、识别开始后或顺序结果未知时不允许继续排序。
+- 页序写入结果未知时显示“刷新材料状态”，只读取权威顺序；确认完成前不允许开始识别。
+- 按比赛功能落地优先要求，本批测试、视觉、浏览器及真实学生验收继续 deferred。
 
 ### v0.2.77 — 2026-08-16
 

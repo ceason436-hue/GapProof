@@ -9,6 +9,7 @@ const CREATE_SCOPE = "real_ocr_batch_create";
 const PAGE_SCOPE = "real_ocr_batch_page";
 const START_SCOPE = "real_ocr_batch_start";
 const REMOVE_PAGE_SCOPE = "real_ocr_batch_page_remove";
+const REORDER_PAGE_SCOPE = "real_ocr_batch_page_reorder";
 
 export class OcrBatchIntentError extends Error {
   readonly code = "OCR_BATCH_INTENT_INVALID";
@@ -119,6 +120,52 @@ export async function removeOcrBatchPage(database: Database, input: { batchId: s
     await transaction.insert(apiIdempotencyRecords).values({
       id: randomUUID(),
       scope: REMOVE_PAGE_SCOPE,
+      idempotencyKey: input.idempotencyKey,
+      resourceId: input.batchId,
+    });
+    return { replayed: false } as const;
+  });
+}
+
+export async function reorderOcrBatchPages(database: Database, input: { batchId: string; pageIds: readonly string[]; idempotencyKey: string }) {
+  return database.transaction(async (transaction) => {
+    const replay = await idempotentRecord(transaction, REORDER_PAGE_SCOPE, input.idempotencyKey);
+    if (replay !== undefined) {
+      if (replay.resourceId !== input.batchId) throw new OcrBatchIdempotencyError();
+      return { replayed: true } as const;
+    }
+
+    const [batch] = await transaction.select().from(ocrBatches).where(eq(ocrBatches.id, input.batchId)).for("update").limit(1);
+    if (batch === undefined) throw new ResourceNotFoundError("OCR batch", input.batchId);
+    if (batch.status !== "collecting" && batch.status !== "ready") throw new OcrBatchIntentError("Pages can only be reordered before recognition starts.");
+
+    const pages = await transaction.select({ id: ocrBatchPages.id }).from(ocrBatchPages).where(eq(ocrBatchPages.batchId, input.batchId));
+    const pageIdSet = new Set(input.pageIds);
+    const currentPageIds = new Set(pages.map((page) => page.id));
+    if (
+      input.pageIds.length !== pages.length ||
+      pageIdSet.size !== input.pageIds.length ||
+      pageIdSet.size !== currentPageIds.size ||
+      [...pageIdSet].some((pageId) => !currentPageIds.has(pageId))
+    ) {
+      throw new OcrBatchIntentError("The page order must contain every current page exactly once.");
+    }
+
+    const updatedAt = new Date();
+    if (pages.length > 0) {
+      const temporaryOffset = pages.length + 1;
+      await transaction.update(ocrBatchPages)
+        .set({ pageOrder: sql`${ocrBatchPages.pageOrder} + ${temporaryOffset}`, updatedAt })
+        .where(eq(ocrBatchPages.batchId, input.batchId));
+      for (const [index, pageId] of input.pageIds.entries()) {
+        await transaction.update(ocrBatchPages)
+          .set({ pageOrder: index + 1, updatedAt })
+          .where(and(eq(ocrBatchPages.batchId, input.batchId), eq(ocrBatchPages.id, pageId)));
+      }
+    }
+    await transaction.insert(apiIdempotencyRecords).values({
+      id: randomUUID(),
+      scope: REORDER_PAGE_SCOPE,
       idempotencyKey: input.idempotencyKey,
       resourceId: input.batchId,
     });

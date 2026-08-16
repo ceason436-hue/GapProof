@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.87"
+version: "0.1.88"
 status: "ACTIVE"
-current_stage: "PUSH-072 已发布：完成任务可只读回顾导师对话历史；比赛功能落地优先，测试与审查统一 deferred"
+current_stage: "PUSH-073 已发布：多图材料可在识别前调整并保存真实页序；比赛功能落地优先，测试与审查统一 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -2122,6 +2122,12 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.88 — 2026-08-16
+
+- 多图材料在首次上传前及跨刷新恢复后均可上移、下移；上传后的顺序写入当前 OCR 批次，识别按学生确认的权威页序处理。
+- 页序更新只允许在识别开始前进行，完整校验当前页面集合并使用稳定幂等意图；网络结果未知时只读取最新顺序，不自动重复写入，确认前锁定识别。
+- 按比赛功能落地优先要求，本批未运行测试、审查、Provider smoke、浏览器/视觉或真实学生验收，全部继续 deferred；该能力不证明 OCR 准确率、可靠自动逐题切分、真实个性化或学习效果。
 
 ### v0.1.87 — 2026-08-16
 

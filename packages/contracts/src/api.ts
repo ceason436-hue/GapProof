@@ -217,6 +217,10 @@ export const OcrBatchPageParamsSchema = Type.Object({ batchId: Type.String({ for
 export type OcrBatchPageParams = Static<typeof OcrBatchPageParamsSchema>;
 export const AddedRealOcrBatchPageViewSchema = Type.Object({ page: RealOcrBatchPageSchema, upload: SourceAssetUploadTargetSchema }, { additionalProperties: false });
 export type AddedRealOcrBatchPageView = Static<typeof AddedRealOcrBatchPageViewSchema>;
+export const ReorderRealOcrBatchPagesRequestSchema = Type.Object({
+  pageIds: Type.Array(Type.String({ format: "uuid" })),
+}, { additionalProperties: false });
+export type ReorderRealOcrBatchPagesRequest = Static<typeof ReorderRealOcrBatchPagesRequestSchema>;
 export const StartRealOcrBatchRequestSchema = Type.Object({ guardianConfirmed: Type.Literal(true), processingNoticeAccepted: Type.Literal(true) }, { additionalProperties: false });
 export type StartRealOcrBatchRequest = Static<typeof StartRealOcrBatchRequestSchema>;
 export const StartRealOcrBatchViewSchema = Type.Object({ batchId: Type.String({ format: "uuid" }), caseId: Type.String({ format: "uuid" }), status: Type.Literal("processing"), processingNoticeAccepted: Type.Literal(true) }, { additionalProperties: false });

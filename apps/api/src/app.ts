@@ -101,6 +101,8 @@ import {
   type OcrBatchPageParams,
   AddedRealOcrBatchPageViewSchema,
   type AddedRealOcrBatchPageView,
+  ReorderRealOcrBatchPagesRequestSchema,
+  type ReorderRealOcrBatchPagesRequest,
   StartRealOcrBatchRequestSchema,
   type StartRealOcrBatchRequest,
   StartRealOcrBatchViewSchema,
@@ -171,6 +173,7 @@ import {
   OcrBatchIntentError,
   OcrBatchIdempotencyError,
   removeOcrBatchPage,
+  reorderOcrBatchPages,
   replaceOcrBatchPage,
   findLatestTutorTurn,
   findTutorSessionHistory,
@@ -2131,6 +2134,31 @@ export async function buildApi(options: BuildApiOptions) {
         idempotencyKey: key,
       });
       if (asset !== undefined) await markSourceAssetDeleted(options.database, asset.id, new Date());
+      const batch = await findOcrBatch(options.database, request.params.batchId);
+      if (batch === undefined) throw new ResourceNotFoundError("OCR batch", request.params.batchId);
+      return success(request, realOcrBatchView(batch));
+    },
+  );
+
+  api.post<{ Params: OcrBatchIdParams; Body: ReorderRealOcrBatchPagesRequest }>(
+    "/v1/ocr-batches/:batchId/commands/reorder-pages",
+    {
+      schema: {
+        params: OcrBatchIdParamsSchema,
+        body: ReorderRealOcrBatchPagesRequestSchema,
+        response: {
+          200: apiResponseSchema(RealOcrBatchViewSchema),
+          "4xx": ApiErrorResponseSchema,
+          500: ApiErrorResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      await reorderOcrBatchPages(options.database, {
+        batchId: request.params.batchId,
+        pageIds: request.body.pageIds,
+        idempotencyKey: getIdempotencyKey(request),
+      });
       const batch = await findOcrBatch(options.database, request.params.batchId);
       if (batch === undefined) throw new ResourceNotFoundError("OCR batch", request.params.batchId);
       return success(request, realOcrBatchView(batch));
