@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ApiClientError } from "@/lib/api-client";
 import { archiveTaskAction, findArchiveItem, selectArchiveTask, taskKindLabel } from "@/lib/mistake-book";
 import { fetchCurrentStudentQuestionArchive } from "@/lib/question-archive-server";
-import { fetchCurrentStudentToday } from "@/lib/today-server";
+import { fetchCurrentStudentTask } from "@/lib/student-task-server";
 import { StudentSessionRequiredError } from "@/lib/student-session-server";
 import { getCurrentStudentSession } from "@/lib/student-session-server";
 import { formatTaskDateTime } from "@/lib/today-adapter";
@@ -84,12 +84,10 @@ function TaskContent({ task, timeZone }: { task: LearningTaskView; timeZone: str
 
 export async function StudentTask({ taskId }: { taskId: string }) {
   try {
-    const response = await fetchCurrentStudentToday();
-    const task = response.data.tasks.find(candidate => candidate.id === taskId);
-    if (task === undefined) return <ErrorState missing/>;
+    const { task, timeZone } = await fetchCurrentStudentTask(taskId);
     const returnHref = task.taskType === "mistake_review" ? "/student/mistakes" : "/student/today?source=api";
     const returnLabel = task.taskType === "mistake_review" ? "返回错题本" : "返回今日";
-    return <AppShell actionHref={returnHref} actionLabel={returnLabel}><section className="mistake-task-page" data-student-task={task.id}><Link className="back-link" href={returnHref}>← {returnLabel}</Link><header><span className="task-kind">{taskKindLabel(task)} · {statusCopy(task.status)}</span><h1>{task.title}</h1><p>{task.rationale}</p></header><article className="mistake-task-panel"><TaskContent task={task} timeZone={response.data.timeZone}/></article>{task.status === "completed" ? <p className="mistake-truth-note">这项任务已有完成记录。当前页面只供回顾，不会重复写入结果或改变学习进度。</p> : task.status === "scheduled" ? <p className="mistake-truth-note">还没到复习时间。到期后这里会开放作答。</p> : null}</section></AppShell>;
+    return <AppShell actionHref={returnHref} actionLabel={returnLabel}><section className="mistake-task-page" data-student-task={task.id}><Link className="back-link" href={returnHref}>← {returnLabel}</Link><header><span className="task-kind">{taskKindLabel(task)} · {statusCopy(task.status)}</span><h1>{task.title}</h1><p>{task.rationale}</p></header><article className="mistake-task-panel"><TaskContent task={task} timeZone={timeZone}/></article>{task.status === "completed" ? <p className="mistake-truth-note">这项任务已有完成记录。当前页面只供回顾，不会重复写入结果或改变学习进度。</p> : task.status === "scheduled" ? <p className="mistake-truth-note">还没到复习时间。到期后这里会开放作答。</p> : null}</section></AppShell>;
   } catch (error) {
     if (error instanceof StudentSessionRequiredError) return <StudentSessionBootstrap/>;
     if (error instanceof ApiClientError && error.response.error.code === "RESOURCE_NOT_FOUND") return <ErrorState missing/>;
