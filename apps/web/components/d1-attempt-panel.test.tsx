@@ -1,5 +1,7 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { d1AttemptResultCopy, refreshTodayAfterConfirmedD1Submit } from "./d1-attempt-panel";
+import { D1UnknownAttemptRecovery, d1AttemptResultCopy, refreshAuthoritativeTodayAfterUnknownD1, refreshTodayAfterConfirmedD1Submit } from "./d1-attempt-panel";
 
 describe("D1 attempt result mapping", () => {
   it("maps support_required to bounded human-help copy without a learning claim", () => {
@@ -23,5 +25,23 @@ describe("D1 attempt result mapping", () => {
     const refresh = vi.fn();
     refreshTodayAfterConfirmedD1Submit(refresh);
     expect(refresh).toHaveBeenCalledOnce();
+  });
+
+  it("reloads authoritative Today after an unknown result without submitting again", () => {
+    const replace = vi.fn();
+    const refresh = vi.fn();
+    refreshAuthoritativeTodayAfterUnknownD1(replace, refresh);
+    expect(replace).toHaveBeenCalledOnce();
+    expect(replace).toHaveBeenCalledWith("/student/today?source=api");
+    expect(refresh).toHaveBeenCalledOnce();
+  });
+
+  it("renders an unknown-result recovery without a completion or resubmit claim", () => {
+    const html = renderToStaticMarkup(createElement(D1UnknownAttemptRecovery, { onRefresh: vi.fn() }));
+    expect(html).toContain('data-attempt-recovery="network-unknown"');
+    expect(html).toContain("不会再次提交");
+    expect(html).toContain("重新读取今日状态");
+    expect(html).toContain('href="/student/today?source=api"');
+    expect(html).not.toMatch(/已保存|已完成|提交本次选择/);
   });
 });

@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.36"
+version: "0.2.37"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "PUSH-031 待发布：真实多图上传、逐页状态与阿里云 OCR 核对已接学生路径；真实诊断、导师与完整学生数据页仍待实现"
+current_design_stage: "PUSH-032 待发布：确认后的真实 OCR 文本已生成受守卫错因候选，关键网络未知状态可只读恢复；导师、身份与完整学生数据页仍待实现"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -1780,6 +1780,11 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 ---
 
 ## 22. 版本记录
+
+### v0.2.37 — 2026-08-16
+
+- 真实 OCR 核对后只展示 DeepSeek 生成且经本地守卫的“可能卡住的地方”和一道确认问题，不显示分数、正确答案、模型内部推理或确诊结论；未确认 OCR 项不进入模型上下文。
+- OCR 启动、确认、找原因、确认小题、任务准备及 D1/D7 的未知写入均显示“读取最新状态/返回今日”，只执行 GET 恢复，不自动重复提交。苏格拉底导师、身份、跨刷新批次列表、错题本及计划/进步/报告仍未实现；同步 PROJECT_MASTER v0.1.47、PRD v0.1.39、TDD v0.3.40 与 PUSH-032。
 
 ### v0.2.36 — 2026-08-16
 

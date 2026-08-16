@@ -2,6 +2,7 @@
 
 import {
   type AttemptView,
+  type CaseStatus,
   type HypothesesView,
   type ExtractionView,
 } from "@gapproof/contracts";
@@ -112,6 +113,24 @@ export function reviewStateMessage(state: ReviewState): string {
   }
 }
 
+type UnknownWriteState = "confirm_unknown" | "run_next_unknown" | "probe_unknown" | "intervention_unknown";
+export type UnknownRecoveryOutcome = "retry_confirm" | "confirmed" | "retry_run_next" | "probe_ready" | "retry_probe" | "intervention_ready" | "retry_intervention" | "return_today";
+
+export function classifyUnknownRecovery(writeState: UnknownWriteState, caseState: CaseStatus): UnknownRecoveryOutcome {
+  if (writeState === "confirm_unknown") {
+    if (caseState === "awaiting_confirmation") return "retry_confirm";
+    if (caseState === "ready_for_diagnosis") return "confirmed";
+    return "return_today";
+  }
+  if (writeState === "run_next_unknown") {
+    return caseState === "ready_for_diagnosis" ? "retry_run_next" : caseState === "probe_required" ? "probe_ready" : "return_today";
+  }
+  if (writeState === "probe_unknown") {
+    return caseState === "probe_required" ? "retry_probe" : caseState === "intervention_ready" ? "intervention_ready" : "return_today";
+  }
+  return caseState === "intervention_ready" ? "retry_intervention" : "return_today";
+}
+
 function isAlertState(state: ReviewState) {
   return ["confirm_error", "confirm_unknown", "run_next_error", "run_next_unknown", "probe_error", "probe_unknown", "intervention_error", "intervention_unknown", "error"].includes(state);
 }
@@ -127,6 +146,8 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
   const [hypotheses, setHypotheses] = useState<HypothesesView | null>(null);
   const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
   const [attempt, setAttempt] = useState<AttemptView | null>(null);
+  const [recoveredCaseVersion, setRecoveredCaseVersion] = useState<number | null>(null);
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
 
   const safeState = (next: ReviewState, nextMessage = reviewStateMessage(next)) => {
     if (!mountedRef.current) return;
@@ -309,9 +330,58 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
     });
   };
 
+  const recoverUnknownWrite = async () => {
+    if (!["confirm_unknown", "run_next_unknown", "probe_unknown", "intervention_unknown"].includes(state) || recoveryBusy) return;
+    const unknownState = state as UnknownWriteState;
+    setRecoveryBusy(true);
+    await withController(async signal => {
+      try {
+        if (unknownState === "run_next_unknown") {
+          try {
+            const response = await getHypotheses(caseId, signal);
+            setHypotheses(response.data);
+            safeState("hypotheses", "已读取最新状态，请继续完成确认小题。");
+            return;
+          } catch (error) {
+            if (isAbort(signal, error)) return;
+            if (apiErrorCode(error) !== "RESOURCE_NOT_FOUND") throw error;
+          }
+        }
+        const latest = await getCase(caseId, signal);
+        setRecoveredCaseVersion(latest.data.stateVersion);
+        const outcome = classifyUnknownRecovery(unknownState, latest.data.state);
+        if (outcome === "retry_confirm") {
+          setExtraction(current => current ? { ...current, stateVersion: latest.data.stateVersion } : current);
+          safeState("confirm_error", "最新状态显示确认尚未保存。请再次核对后重新提交。");
+        } else if (outcome === "confirmed") {
+          setExtraction(current => current ? { ...current, stateVersion: latest.data.stateVersion } : current);
+          safeState("confirmed", "已从最新状态确认：识别内容已保存。");
+        } else if (outcome === "retry_run_next") {
+          setExtraction(current => current ? { ...current, stateVersion: latest.data.stateVersion } : current);
+          safeState("run_next_error", "最新状态显示找原因内容尚未开始；请明确重新开始。");
+        } else if (outcome === "probe_ready") {
+          await readHypotheses(true);
+        } else if (outcome === "retry_probe") {
+          setHypotheses(current => current ? { ...current, stateVersion: latest.data.stateVersion } : current);
+          safeState("probe_error", "最新状态显示确认小题尚未保存；你的选择仍保留，可以重新提交。");
+        } else if (outcome === "intervention_ready") {
+          safeState("probe_success", "已从最新状态确认：本次选择已保存，可以继续准备引导任务。");
+        } else if (outcome === "retry_intervention") {
+          safeState("intervention_error", "最新状态显示引导任务尚未开始；请明确重新开始。");
+        } else {
+          safeState(unknownState, "最新状态已读取。请返回今日页查看当前可继续的任务。");
+        }
+      } catch (error) {
+        if (!isAbort(signal, error)) safeState(unknownState, reviewErrorMessage(error, "暂时无法读取最新状态，请返回今日页稍后查看。"));
+      }
+    });
+    if (mountedRef.current) setRecoveryBusy(false);
+  };
+
   const acceptIntervention = async () => {
-    if (!attempt || !reviewSuccessIsInterventionReady(attempt.state) || (state !== "probe_success" && state !== "intervention_error")) return;
-    const intent = createRunNextIntent(attempt.stateVersion);
+    const stateVersion = attempt && reviewSuccessIsInterventionReady(attempt.state) ? attempt.stateVersion : recoveredCaseVersion;
+    if (stateVersion === null || (state !== "probe_success" && state !== "intervention_error")) return;
+    const intent = createRunNextIntent(stateVersion);
     safeState("run_next");
     await withController(async signal => {
       try {
@@ -322,7 +392,8 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
         if (apiErrorCode(error) === "VERSION_CONFLICT") {
           try {
             const latest = await getCase(caseId, signal);
-            setAttempt(current => current ? { ...current, stateVersion: latest.data.stateVersion } : current);
+          setAttempt(current => current ? { ...current, stateVersion: latest.data.stateVersion } : current);
+          setRecoveredCaseVersion(latest.data.stateVersion);
             safeState("probe_success", "内容已更新，请重新确认后开始准备引导练习。");
           } catch (refreshError) {
             safeState("run_next_error", reviewErrorMessage(refreshError, reviewStateMessage("run_next_error")));
@@ -365,7 +436,7 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
             })}
           </div>
           <button type="button" className="primary-blue" onClick={() => void submitExtraction()} disabled={!allConfirmed || !promptsValid || controlsLocked}>{state === "confirming" ? "正在保存" : state === "confirm_conflict" ? "确认后重新提交" : "确认识别内容"}</button>
-          {state === "confirm_unknown" ? <p className="case-review-feedback error" role="alert">暂时无法确认是否保存成功，请返回今日页稍后查看。</p> : null}
+          {state === "confirm_unknown" ? <div className="case-review-feedback error" role="alert"><p>暂时无法确认是否保存成功。先读取最新状态，不会重复提交。</p><button type="button" className="secondary-button" disabled={recoveryBusy} onClick={() => void recoverUnknownWrite()}>{recoveryBusy ? "正在读取" : "读取最新状态"}</button><a href="/student/today">返回今日</a></div> : null}
         </section>
         : null}
       {state === "confirmed"
@@ -373,6 +444,9 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
         : null}
       {state === "run_next" || state === "hypotheses_loading" || state === "run_next_error"
         ? <section className="case-review-state"><h2>{state === "run_next_error" ? "找原因没有准备好" : "正在准备找原因"}</h2><p>{message}</p>{state === "run_next_error" ? <button type="button" className="primary-blue" onClick={() => void startHypotheses()}>重新开始找原因</button> : null}</section>
+        : null}
+      {state === "run_next_unknown"
+        ? <section className="case-review-state case-review-state-error" data-unknown-recovery="run-next"><h2>下一步状态需要确认</h2><p>{message}</p><button type="button" className="primary-blue" disabled={recoveryBusy} onClick={() => void recoverUnknownWrite()}>{recoveryBusy ? "正在读取" : "读取最新状态"}</button><a className="secondary-button" href="/student/today">返回今日</a></section>
         : null}
       {hypotheses && ["hypotheses", "probe_submitting", "probe_conflict", "probe_error", "probe_unknown"].includes(state)
         ? <section className="case-review-panel" aria-labelledby="hypotheses-title">
@@ -383,7 +457,10 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
         </section>
         : null}
       {state === "probe_success"
-        ? <section className="case-review-state" data-probe-result><h2>已收到，正在准备下一步</h2><p>本次选择已保存。这里只给出下一步提示，不会显示答案或分数。</p>{attempt && reviewSuccessIsInterventionReady(attempt.state) ? <button type="button" className="primary-blue" onClick={() => void acceptIntervention()}>开始准备引导任务</button> : null}</section>
+        ? <section className="case-review-state" data-probe-result><h2>已收到，正在准备下一步</h2><p>本次选择已保存。这里只给出下一步提示，不会显示答案或分数。</p>{attempt && reviewSuccessIsInterventionReady(attempt.state) || recoveredCaseVersion !== null ? <button type="button" className="primary-blue" onClick={() => void acceptIntervention()}>开始准备引导任务</button> : null}</section>
+        : null}
+      {state === "probe_unknown" || state === "intervention_unknown"
+        ? <section className="case-review-state case-review-state-error" data-unknown-recovery={state === "probe_unknown" ? "probe" : "intervention"}><h2>{state === "probe_unknown" ? "提交状态需要确认" : "任务准备状态需要确认"}</h2><p>{message}</p><button type="button" className="primary-blue" disabled={recoveryBusy} onClick={() => void recoverUnknownWrite()}>{recoveryBusy ? "正在读取" : "读取最新状态"}</button><a className="secondary-button" href="/student/today">返回今日</a></section>
         : null}
       {state === "intervention_error"
         ? <section className="case-review-state case-review-state-error"><h2>引导任务准备没有完成</h2><p>{message}</p><button type="button" className="primary-blue" onClick={() => void acceptIntervention()}>重新开始准备引导任务</button></section>

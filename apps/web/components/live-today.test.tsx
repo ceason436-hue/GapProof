@@ -162,7 +162,9 @@ describe("FirstUseToday", () => {
     const html = renderToStaticMarkup(createElement(FirstUseToday));
     expect(html).toContain("上传错题或作业");
     expect(html).toContain("没有材料，先做 3 道题");
-    expect(html).toContain("当前上传流程使用演示识别内容");
+    expect(html).toContain("图片通过检查并由你确认后");
+    expect(html).toContain("一张或多张");
+    expect(html).not.toContain("当前上传流程使用演示识别内容");
     expect(html).toContain("不保存为正式学习记录");
     expect(html).not.toContain("第一次使用");
     expect(html).not.toContain("服务端返回空任务列表");

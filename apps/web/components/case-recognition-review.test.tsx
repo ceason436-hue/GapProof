@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { CaseRecognitionReview, reviewBoundaryCopy, reviewStateMessage, type ReviewState } from "./case-recognition-review";
+import { CaseRecognitionReview, classifyUnknownRecovery, reviewBoundaryCopy, reviewStateMessage, type ReviewState } from "./case-recognition-review";
 
 vi.mock("next/image", () => ({
   default: ({ alt }: { alt: string }) => createElement("img", { alt }),
@@ -33,5 +33,15 @@ describe("CaseRecognitionReview component", () => {
       expect(reviewStateMessage(state)).toBeTruthy();
       expect(reviewStateMessage(state)).not.toMatch(/answer key|答案键|confidence|置信度|report ready/i);
     }
+  });
+
+  it("maps unknown writes only from authoritative case states", () => {
+    expect(classifyUnknownRecovery("confirm_unknown", "awaiting_confirmation")).toBe("retry_confirm");
+    expect(classifyUnknownRecovery("confirm_unknown", "ready_for_diagnosis")).toBe("confirmed");
+    expect(classifyUnknownRecovery("run_next_unknown", "probe_required")).toBe("probe_ready");
+    expect(classifyUnknownRecovery("probe_unknown", "probe_required")).toBe("retry_probe");
+    expect(classifyUnknownRecovery("probe_unknown", "intervention_ready")).toBe("intervention_ready");
+    expect(classifyUnknownRecovery("intervention_unknown", "intervention_ready")).toBe("retry_intervention");
+    expect(classifyUnknownRecovery("intervention_unknown", "intervention_active")).toBe("return_today");
   });
 });

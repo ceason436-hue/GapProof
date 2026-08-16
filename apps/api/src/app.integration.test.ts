@@ -45,6 +45,7 @@ import {
   tasks,
 } from "@gapproof/db";
 import { FixedClock } from "@gapproof/domain";
+import { RealFormHypothesesAdapter } from "../../../packages/tools/src/form-hypotheses/real-form-hypotheses.ts";
 import {
   createJobQueue,
   REPLAN_QUEUE,
@@ -296,7 +297,33 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     await queue.boss.deleteAllJobs(REPLAN_QUEUE);
     await queue.boss.deleteAllJobs(RUN_NEXT_QUEUE);
     await queue.boss.deleteAllJobs(SOURCE_ASSET_QUALITY_CHECK_QUEUE);
-    worker = createRunNextWorker({ database: database.db, queue });
+    worker = createRunNextWorker({
+      database: database.db,
+      queue,
+      realFormHypotheses: new RealFormHypothesesAdapter({
+        enabled: true,
+        transport: {
+          execute: async () => ({
+            status: 200,
+            payload: {
+              content: JSON.stringify({
+                candidates: [
+                  { title: "可能遗漏题目条件", explanation: "需要确认当时是否完整读取了条件。" },
+                  { title: "可能混淆相关规则", explanation: "需要确认规则适用范围是否清楚。" },
+                ],
+                question: "哪一种情况更接近你当时的思考？",
+                choices: [
+                  { label: "我漏看了一个条件", hypothesisIndex: 0 },
+                  { label: "我不确定该用哪条规则", hypothesisIndex: 1 },
+                  { label: "都不是", hypothesisIndex: null },
+                ],
+              }),
+              model: "integration-fixture",
+            },
+          }),
+        },
+      }),
+    });
     await worker.start();
     retestDueWorker = createRetestDueWorker({
       database: database.db,
@@ -1474,6 +1501,57 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     expect(
       events.filter((event) => event.eventType === "hypotheses_generated"),
     ).toHaveLength(1);
+  }, 15_000);
+
+  it("uses confirmed real OCR evidence for diagnosis without falling back to the Mina fixture", async () => {
+    const tenantId = uuidv7();
+    const studentId = uuidv7();
+    const caseId = uuidv7();
+    const occurredAt = new Date(fixedNow);
+    await database.db.insert(students).values({ id: studentId, tenantId, anonymousKey: `real-diagnosis-${studentId}` });
+    await database.db.insert(cases).values({
+      id: caseId,
+      tenantId,
+      studentId,
+      state: "ready_for_diagnosis",
+      stateVersion: 2,
+      title: "已确认学习材料",
+      simulation: false,
+      synthetic: false,
+    });
+    await database.db.insert(learningEvidenceEvents).values([
+      {
+        id: uuidv7(), tenantId, studentId, caseId,
+        eventType: "evidence_ingested", sourceType: "real_alibaba_ocr", sourceRef: "integration-real-batch",
+        payload: { extraction: { items: [{ itemId: "real-item-1", prompt: "原识别题干" }] }, recognitionSource: "real_alibaba", uploadedAssetUsedForRecognition: true },
+        confidence: null, occurredAt, idempotencyKey: `real-evidence:${caseId}`,
+      },
+      {
+        id: uuidv7(), tenantId, studentId, caseId,
+        eventType: "recognition_confirmed", sourceType: "student_confirmation", sourceRef: null,
+        payload: { confirmedItemIds: ["real-item-1"], corrections: [{ itemId: "real-item-1", field: "prompt", value: "学生确认后的真实题干" }] },
+        confidence: null, occurredAt, idempotencyKey: `real-confirmation:${caseId}`,
+      },
+    ]);
+
+    const queued = await api.inject({
+      method: "POST",
+      url: `/v1/cases/${caseId}/commands/run-next`,
+      headers: { "idempotency-key": `real-diagnosis-run:${caseId}` },
+      payload: { expectedVersion: 2 },
+    });
+    expect(queued.statusCode).toBe(202);
+    const caseView = await waitForState(api, caseId, "probe_required");
+    expect(caseView).toMatchObject({ synthetic: false, simulation: false, stateVersion: 3 });
+
+    const hypothesesResponse = await api.inject({ method: "GET", url: `/v1/cases/${caseId}/hypotheses` });
+    expect(hypothesesResponse.statusCode).toBe(200);
+    const hypotheses = hypothesesResponse.json<ApiResponse<HypothesesView>>();
+    expect(JSON.stringify(hypotheses.data)).not.toMatch(/Mina|saving water|学生确认后的真实题干/);
+    const events = await database.db.select().from(learningEvidenceEvents).where(eq(learningEvidenceEvents.caseId, caseId));
+    const generated = events.find((event) => event.eventType === "hypotheses_generated");
+    expect(generated?.sourceType).toBe("deepseek_diagnosis");
+    expect(JSON.stringify(generated?.payload)).not.toMatch(/Mina|saving water|学生确认后的真实题干|integration-fixture/);
   }, 15_000);
 
   it("scores an attempt deterministically and advances to intervention_ready", async () => {

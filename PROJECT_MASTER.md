@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.46"
+version: "0.1.47"
 status: "ACTIVE"
-current_stage: "PUSH-031 待发布：真实多图上传与阿里云教育 OCR 已接学生路径并强制逐页人工核对；真实材料诊断、DeepSeek 导师、身份恢复、错题本、计划/进步/报告仍待后续纵向切片"
+current_stage: "PUSH-032 待发布：真实 OCR 确认文本已驱动受约束 DeepSeek 错因候选，关键未知写入具备只读恢复；苏格拉底导师、真实身份/跨刷新批次恢复、错题本、计划/进步/报告仍待实现"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -2122,6 +2122,11 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.47 — 2026-08-16
+
+- 非合成 Case 只在 `real_alibaba_ocr` 与学生确认事件同时存在时，使用确认后的题干/作答调用 DeepSeek 生成待确认错因候选；未确认项目被排除，真实路径禁止回退固定 Mina Fixture。模型不能写库、评分或直接转换 Case，学生可见输出通过 Schema、PII/答案/确诊措辞和可区分性本地守卫。
+- OCR 启动、确认、诊断、确认小题、干预、D1/D7 的 `NETWORK_UNKNOWN` 均提供只读权威恢复且不自动重放写入。真实 DeepSeek synthetic smoke 成功，但苏格拉底导师会话仍未实现；同步 PRD v0.1.39、TDD v0.3.40、DESIGN v0.2.37 与 PUSH-032。
 
 ### v0.1.46 — 2026-08-16
 

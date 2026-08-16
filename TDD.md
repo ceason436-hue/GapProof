@@ -2,15 +2,15 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.39"
+version: "0.3.40"
 status: "DRAFT_FOR_IMPLEMENTATION"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.46"
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.38"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.47"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.39"
 ---
 
 # 知隙 GapProof 技术设计文档（TDD）
@@ -1614,6 +1614,7 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 
 | Push ID | 日期 | 分支 | 状态 | 提交摘要 | 主要内容 | 验证 |
 |---|---|---|---|---|---|---|
+| PUSH-032 | 2026-08-16 | `main` | `pushed` | `feat: diagnose confirmed OCR evidence safely` | 新增 server-only DeepSeek 真实错因候选 adapter；真实 Case 必须同时具备 `real_alibaba_ocr` 与 `student_confirmation`，按学生修正重建最多 8 项/4000 字去标识 ContextPack，禁止回退 Fake/Mina。输出经 Schema、PII/答案/确诊措辞、重复项和至少两假设可区分性守卫；模型不写库、不评分、不直接转换 Case。OCR 启动、确认、run-next、probe、intervention、D1/D7 的 `NETWORK_UNKNOWN` 均新增只读权威恢复且不自动重放写入 | 207 fast、117 Web、50 PostgreSQL/API/Worker、27 focused、workspace TypeScript、Next production build、DeepSeek synthetic 真实 smoke（845 ms、281 tokens）、`git diff --check` 与凭据/隐私扫描通过；真实学生材料未发送 DeepSeek，授权测试材料、`.env` 与本地 agent 文件未纳入暂存 |
 | PUSH-031 | 2026-08-16 | `main` | `pushed` | `feat: connect real multi-page OCR review` | 新增有序 OCR 批次/页面迁移、幂等添加/移除/替换/启动/重试、服务端真实字节校验和阿里云教育 OCR Worker；学生端支持多选、继续添加、逐页状态/替换/移除/重试、处理同意与监护确认。真实来源写入非合成同一 Case，页面级文本强制人工核对；不存储或公开 Provider 原始响应、凭据、内部 ID 或精确置信度。真实材料诊断、DeepSeek 导师、身份恢复、错题本、计划/进步/报告和学习效果未提升 | 200 fast、112 Web、62 PostgreSQL/API/Worker、workspace 与 Web TypeScript、Next production build、`git diff --check`、迁移顺序/schema 集成、真实 OCR 产品 smoke 与凭据/隐私扫描通过；Drizzle `check` 因本地版本兼容检查未执行成功，桌面内置浏览器因 URL 安全策略未能重载 localhost，不计为通过；授权测试材料、`.env`、`next-env.d.ts` 与本地 agent 文件未纳入暂存 |
 | PUSH-030 | 2026-08-16 | `main` | `pushed` | `feat: add explicit student setup and actionable retests` | 新增版本化学生粗分档案与 `/setup` 五项明确选择，Today 未完成时只引导设置范围；ready D1/D7 通过重新读取的同一 API 响应安全打开作答，scheduled/completed 不再呈现伪按钮；顶栏移除无行为的案例/角色切换。真实 OCR、DeepSeek、计划、错题本、报告和学习效果未提升 | 196 fast、111 Web、档案 API 幂等/冲突集成、schema 集成、workspace TypeScript、Next production build、`git diff --check`、运行中 Today→/setup 浏览器核验通过；实现提交 `2fc6753` 已推送至 `origin/main` |
 | PUSH-029 | 2026-08-16 | `main` | `pushed` | `fix: match live Today to Stitch details` | 按 `today-final.stitch.html/png` 精确复原真实 API Today 的学习足迹与今日概览：移除额外目标卡并把目标摘要放回页头，恢复单层今日描边/标签、40px 视觉间距、16px 标题间距、160px 双卡和原图标装饰；真实数值仍来自 API，不复制 Mock 学习事实 | 105 apps/web、workspace/web TypeScript、Next production build、`git diff --check`、6 状态 × 4 视口真实 API 精确 DOM Token/几何/横向溢出/截图门禁及实时页面核验通过；`.env` 与授权 `reference/test-materials/` 未纳入暂存；同轮推送并核对本地、`origin/main` 与 GitHub refs 一致 |
@@ -1647,6 +1648,11 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-026 | 2026-08-16 | `main` | `pushed` | `fix: decouple demo readiness from product copy` | Demo 栈 Web readiness 从已移除的“真实 API 模式”可见文案改为稳定 `today-page` 页面结构信号，防止产品文案治理后 90 秒误判并停止 API/Worker/Web 子进程 | root typecheck、`git diff --check`、Web 200、API Today 200 且含 overview、Demo 父进程持续存活、3000/4000 监听及生成残留精确清理通过；同轮推送后核对本地/远端 SHA 一致 |
 
 ## 27. 变更日志
+
+### v0.3.40 — 2026-08-16
+
+- Worker 对非合成 Case 验证真实 OCR 与学生确认事件，按确认项及修正重建去标识 ContextPack，再调用受约束 DeepSeek adapter；Fake 诊断继续仅用于 synthetic Case，真实路径配置/Provider/Schema/守卫失败时停留在可恢复的 `ready_for_diagnosis`。
+- DeepSeek 输出仅作为待确认候选和确认问题，IDs、证据引用、评分结构与 Case 转换均由本地程序生成；新增 PII、提示注入、答案披露、确诊/保证措辞和选项可区分性守卫。同步 PROJECT_MASTER v0.1.47、PRD v0.1.39、DESIGN v0.2.37 与 PUSH-032；苏格拉底导师仍未接 API/Worker/UI。
 
 ### v0.3.39 — 2026-08-16
 

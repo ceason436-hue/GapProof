@@ -13,6 +13,7 @@ import { transitionCase } from "@gapproof/domain";
 import type { JobQueue } from "@gapproof/jobs";
 import {
   FakeFormHypothesesAdapter,
+  buildRealDiagnosisContextPack,
   type FormHypothesesAdapter,
   FakeBuildInterventionAdapter,
   type BuildInterventionAdapter,
@@ -27,7 +28,52 @@ export interface RunNextWorkerOptions {
   readonly queue: JobQueue;
   readonly parsePaper?: ParsePaperAdapter;
   readonly formHypotheses?: FormHypothesesAdapter;
+  readonly realFormHypotheses?: FormHypothesesAdapter;
   readonly buildIntervention?: BuildInterventionAdapter;
+}
+
+type ConfirmedDiagnosisItem = { prompt: string; studentAnswer?: string };
+
+export function diagnosisModeForEvidence(input: {
+  synthetic: boolean;
+  simulation: boolean;
+  extractionSourceType: string;
+  confirmationSourceType: string;
+}): "synthetic" | "real" | "invalid" {
+  if (input.synthetic && input.simulation && input.extractionSourceType === "fake_ocr" && input.confirmationSourceType === "student_confirmation") return "synthetic";
+  if (!input.synthetic && !input.simulation && input.extractionSourceType === "real_alibaba_ocr" && input.confirmationSourceType === "student_confirmation") return "real";
+  return "invalid";
+}
+
+export function reconstructConfirmedDiagnosisItems(
+  extractionPayload: Record<string, unknown>,
+  confirmationPayload: Record<string, unknown>,
+): readonly ConfirmedDiagnosisItem[] | undefined {
+  const extraction = typeof extractionPayload.extraction === "object" && extractionPayload.extraction !== null ? extractionPayload.extraction as Record<string, unknown> : undefined;
+  if (!Array.isArray(extraction?.items) || !Array.isArray(confirmationPayload.confirmedItemIds) || !Array.isArray(confirmationPayload.corrections)) return undefined;
+  const confirmedIds = new Set(confirmationPayload.confirmedItemIds.filter((value): value is string => typeof value === "string"));
+  const corrections = new Map<string, { prompt?: string; studentAnswer?: string }>();
+  for (const raw of confirmationPayload.corrections) {
+    if (typeof raw !== "object" || raw === null) return undefined;
+    const correction = raw as Record<string, unknown>;
+    if (typeof correction.itemId !== "string" || typeof correction.value !== "string" || (correction.field !== "prompt" && correction.field !== "student_answer")) return undefined;
+    const value = corrections.get(correction.itemId) ?? {};
+    if (correction.field === "prompt") value.prompt = correction.value;
+    else value.studentAnswer = correction.value;
+    corrections.set(correction.itemId, value);
+  }
+  const result: ConfirmedDiagnosisItem[] = [];
+  for (const raw of extraction.items) {
+    if (typeof raw !== "object" || raw === null) return undefined;
+    const item = raw as Record<string, unknown>;
+    if (typeof item.itemId !== "string" || typeof item.prompt !== "string") return undefined;
+    if (!confirmedIds.has(item.itemId)) continue;
+    const correction = corrections.get(item.itemId);
+    const prompt = correction?.prompt ?? item.prompt;
+    if (prompt.trim().length === 0) return undefined;
+    result.push({ prompt, ...(correction?.studentAnswer === undefined ? {} : { studentAnswer: correction.studentAnswer }) });
+  }
+  return result.length === confirmedIds.size && result.length > 0 ? result : undefined;
 }
 
 export function createRunNextWorker(options: RunNextWorkerOptions) {
@@ -35,6 +81,7 @@ export function createRunNextWorker(options: RunNextWorkerOptions) {
     options.parsePaper ?? new FakeParsePaperAdapter("low_confidence");
   const formHypotheses =
     options.formHypotheses ?? new FakeFormHypothesesAdapter();
+  const realFormHypotheses = options.realFormHypotheses;
   const buildIntervention =
     options.buildIntervention ?? new FakeBuildInterventionAdapter();
   let workerId: string | undefined;
@@ -217,7 +264,7 @@ export function createRunNextWorker(options: RunNextWorkerOptions) {
 
         if (caseRow.state === "ready_for_diagnosis") {
           const [confirmationEvent] = await options.database
-            .select({ id: learningEvidenceEvents.id })
+            .select()
             .from(learningEvidenceEvents)
             .where(
               and(
@@ -234,18 +281,41 @@ export function createRunNextWorker(options: RunNextWorkerOptions) {
             throw new Error("CONFIRMED_EXTRACTION_EVIDENCE_NOT_FOUND");
           }
 
-          const toolResult = await formHypotheses.execute({
+          const extractionEvent = await findLatestCaseEvidenceEventByType(
+            options.database,
+            caseRow.id,
+            "evidence_ingested",
+          );
+          if (extractionEvent === undefined) throw new Error("EXTRACTION_EVIDENCE_NOT_FOUND");
+          const diagnosisMode = diagnosisModeForEvidence({ synthetic: caseRow.synthetic, simulation: caseRow.simulation, extractionSourceType: extractionEvent.sourceType, confirmationSourceType: confirmationEvent.sourceType });
+          if (diagnosisMode === "invalid") {
+            throw new Error("REAL_DIAGNOSIS_EVIDENCE_INVALID");
+          }
+          const isRealDiagnosis = diagnosisMode === "real";
+          const realContext = isRealDiagnosis
+            ? buildRealDiagnosisContextPack(
+                reconstructConfirmedDiagnosisItems(extractionEvent.payload, confirmationEvent.payload) ?? [],
+              )
+            : undefined;
+          if (isRealDiagnosis && realContext === undefined) {
+            throw new Error("REAL_DIAGNOSIS_CONTEXT_NOT_AVAILABLE");
+          }
+          const selectedAdapter = isRealDiagnosis ? realFormHypotheses : formHypotheses;
+          if (selectedAdapter === undefined) throw new Error("REAL_DIAGNOSIS_PROVIDER_NOT_CONFIGURED");
+
+          const toolResult = await selectedAdapter.execute({
             toolCallId: `form-hypotheses:${job.id}`,
             caseId: caseRow.id,
             studentId: caseRow.studentId,
             traceId: job.data.traceId,
             input: {
-              observedPrompt:
-                "Mina has ___ (write) three short notes about saving water this week.",
-              observedAnswer: "wrote",
+              observedPrompt: isRealDiagnosis
+                ? realContext!.text
+                : "Mina has ___ (write) three short notes about saving water this week.",
+              observedAnswer: isRealDiagnosis ? "not_separately_provided" : "wrote",
               confirmedEvidenceRefs: [confirmationEvent.id],
             },
-            policyVersion: "demo-diagnosis-policy-v1",
+            policyVersion: isRealDiagnosis ? "real-diagnosis-policy-v1" : "demo-diagnosis-policy-v1",
           });
 
           if (
@@ -303,7 +373,7 @@ export function createRunNextWorker(options: RunNextWorkerOptions) {
               studentId: caseRow.studentId,
               caseId: caseRow.id,
               eventType: event.type,
-              sourceType: "fake_diagnosis",
+              sourceType: isRealDiagnosis ? "deepseek_diagnosis" : "fake_diagnosis",
               sourceRef: toolResult.toolVersion,
               payload: {
                 candidates: toolResult.data.candidates,

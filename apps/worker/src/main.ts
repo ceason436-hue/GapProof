@@ -1,5 +1,6 @@
 import { createDatabase } from "@gapproof/db";
 import { createJobQueue } from "@gapproof/jobs";
+import { createRealFormHypothesesAdapterFromEnv } from "@gapproof/tools";
 
 import { createRunNextWorker } from "./run-next-worker.ts";
 import { createRetestDueWorker } from "./retest-due-worker.ts";
@@ -21,7 +22,11 @@ queue.boss.on("error", (error) => {
 });
 
 await queue.start();
-const worker = createRunNextWorker({ database: database.db, queue });
+const worker = createRunNextWorker({
+  database: database.db,
+  queue,
+  realFormHypotheses: createRealFormHypothesesAdapterFromEnv(process.env),
+});
 const retestDueWorker = createRetestDueWorker({
   database: database.db,
   queue,

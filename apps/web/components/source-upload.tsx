@@ -3,7 +3,7 @@
 import { AddedRealOcrBatchPageViewSchema, RealOcrBatchViewSchema, SourceAssetPrepareViewSchema, StartRealOcrBatchViewSchema, UploadedSourceAssetViewSchema, type SourceAssetProcessingView } from "@gapproof/contracts";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiDelete, apiPost, apiPut, ApiClientError } from "@/lib/api-client";
+import { apiDelete, apiGet, apiPost, apiPut, ApiClientError } from "@/lib/api-client";
 import { createBrowserUuidV7 } from "@/lib/browser-uuidv7";
 import { ACCEPTED_SOURCE_UPLOAD_TYPES, buildSourceAssetPrepareRequest, sha256Hex, validateSourceUploadFile } from "@/lib/source-upload";
 import { isTerminalSourceInspectionStatus, pollSourceAssetInspection, sourceInspectionMessage } from "@/lib/source-inspection";
@@ -34,6 +34,7 @@ export function SourceUpload({ studentId }: { studentId: string }) {
   const [noticeAccepted, setNoticeAccepted] = useState(false);
   const [startStatus, setStartStatus] = useState<"idle" | "starting" | "success" | "unknown" | "error">("idle");
   const [caseId, setCaseId] = useState<string | null>(null);
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
   const updateItems = (update: (current: QueueItem[]) => QueueItem[]) => {
     const next = update(itemsRef.current); itemsRef.current = next;
     if (mountedRef.current) setItems(next);
@@ -148,6 +149,20 @@ export function SourceUpload({ studentId }: { studentId: string }) {
     catch (error) { if (!controller.signal.aborted) { if (error instanceof TypeError) { setStartStatus("unknown"); setMessage("提交结果暂时未知，请刷新后查看材料状态，不要重复提交。"); } else { setStartStatus("error"); setMessage(safeError(error)); } } }
     finally { if (abortRef.current === controller) abortRef.current = null; }
   };
+  const recoverRecognitionStart = async () => {
+    const batch = batchRef.current;
+    if (!batch || recoveryBusy) return;
+    const controller = new AbortController(); abortRef.current?.abort("REPLACED"); abortRef.current = controller; setRecoveryBusy(true);
+    try {
+      const response = await apiGet(`/api/v1/ocr-batches/${batch.batchId}`, RealOcrBatchViewSchema, controller.signal);
+      if (response.data.status === "collecting" || response.data.status === "ready") {
+        setStartStatus("error"); setMessage("最新状态显示识别尚未开始。请重新确认后再开始。");
+      } else {
+        setCaseId(response.data.caseId); setStartStatus("success"); setMessage("已读取最新状态。请进入识别内容页面查看处理进度或核对结果。");
+      }
+    } catch (error) { if (!controller.signal.aborted) setMessage(safeError(error)); }
+    finally { if (mountedRef.current) setRecoveryBusy(false); if (abortRef.current === controller) abortRef.current = null; }
+  };
   const allPassed = items.length > 0 && items.every(item => passed(item.status));
   const anyBusy = items.some(item => busy(item.status));
   const editable = startStatus === "idle" || startStatus === "error";
@@ -156,6 +171,7 @@ export function SourceUpload({ studentId }: { studentId: string }) {
     {items.length === 0 ? <div className="upload-picker-panel" data-upload-picker><label className="upload-picker" htmlFor="source-upload-input" role="button" tabIndex={0}><span className="upload-picker-title">选择图片</span><span className="upload-picker-detail">可多选 JPG、PNG、WebP · 每张 1B–10MiB</span></label><p id="source-upload-help" className="upload-help">上传前请遮盖姓名、学校、班级等不必要的个人信息。</p></div> : <><div className="upload-queue-heading"><strong>已添加 {items.length} 张图片</strong>{editable ? <button type="button" className="secondary-button compact-upload-button" onClick={openPicker}>继续添加</button> : null}</div><ol className="upload-queue" aria-label="图片队列">{items.map((item, index) => <li key={item.clientId} className="upload-queue-item" data-page-status={item.status}><img src={item.previewUrl} alt={`第 ${index + 1} 张学习材料预览`} /><div className="upload-queue-copy"><strong>第 {index + 1} 张</strong><span>{item.message}</span></div>{editable && !busy(item.status) ? <div className="queue-item-actions"><label className="queue-action">替换<input className="visually-hidden" type="file" accept={ACCEPTED_SOURCE_UPLOAD_TYPES.join(",")} onChange={event => replaceItem(item.clientId, event.currentTarget.files?.[0])}/></label><button type="button" className="queue-action" onClick={() => void removeItem(item.clientId)}>移除</button>{item.status === "retryable_error" ? <button type="button" className="queue-action" onClick={() => void retryPage(item.clientId)}>重试</button> : null}</div> : null}</li>)}</ol></>}
     <p className="upload-status-message" aria-live="polite">{message}</p>{items.length > 0 && editable ? <div className="upload-actions"><button className="primary-blue" type="button" onClick={() => void uploadAll()} disabled={anyBusy || items.every(item => item.status === "passed" || item.status === "failed")}>{anyBusy ? "正在处理" : "上传并检查图片"}</button></div> : null}
     {allPassed && startStatus !== "success" ? <section className="recognition-start-card" data-real-recognition-start aria-labelledby="recognition-start-title"><h2 id="recognition-start-title">确认后开始识别</h2><p>确认后，图片会被发送给教育场景识别服务处理。识别结果仍需你核对；它不是学习结论或学习效果证明。</p><label className="recognition-guardian-confirmation"><input type="checkbox" checked={noticeAccepted} disabled={startStatus === "starting"} onChange={event => setNoticeAccepted(event.currentTarget.checked)} /><span>我已阅读并同意本次图片处理说明</span></label><label className="recognition-guardian-confirmation"><input type="checkbox" checked={guardianConfirmed} disabled={startStatus === "starting"} onChange={event => setGuardianConfirmed(event.currentTarget.checked)} /><span>我已获得监护人确认（未满 18 岁时必需）</span></label><button className="primary-blue" type="button" onClick={() => void startRecognition()} disabled={!guardianConfirmed || !noticeAccepted || startStatus === "starting"}>{startStatus === "starting" ? "正在开始识别" : "开始识别"}</button></section> : null}
+    {startStatus === "unknown" ? <div className="upload-success" data-recognition-unknown><strong>识别状态需要确认</strong><span>先读取最新状态，不会重复提交识别请求。</span><button type="button" className="secondary-button" disabled={recoveryBusy} onClick={() => void recoverRecognitionStart()}>{recoveryBusy ? "正在读取" : "读取最新状态"}</button><a href="/student/today">返回今日</a></div> : null}
     {startStatus === "success" && caseId ? <div className="upload-success"><strong>识别正在处理</strong><span>识别完成后请先确认题目内容。</span><button type="button" className="secondary-button recognition-review-link" onClick={() => router.push(`/materials/${caseId}/review`)}>查看识别进度</button></div> : null}
   </article><aside className="upload-guidance"><h2>上传前看一眼</h2><ul><li>按试卷或作业的顺序添加图片。</li><li>尽量让题目和批改痕迹完整清晰。</li><li>识别后的题目仍需要你确认。</li></ul><p>图片只用于本次材料识别与后续确认。</p></aside></div></section></AppShell>;
 }

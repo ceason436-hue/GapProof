@@ -26,6 +26,22 @@ export function refreshTodayAfterConfirmedD7Submit(refresh: () => void) {
   refresh();
 }
 
+export function refreshAuthoritativeTodayAfterUnknownD7(
+  replace: (href: string) => void,
+  refresh: () => void,
+) {
+  replace("/student/today?source=api");
+  refresh();
+}
+
+export function D7UnknownAttemptRecovery({ onRefresh }: { onRefresh: () => void }) {
+  return <div className="attempt-recovery" data-attempt-recovery="network-unknown">
+    <p className="read-only-note">这里不会再次提交你的答案。请重新读取今日页，以服务端返回的最新任务状态为准。</p>
+    <button type="button" onClick={onRefresh}>重新读取今日状态</button>
+    <a className="hero-secondary-link" href="/student/today?source=api">返回今日</a>
+  </div>;
+}
+
 export function d7AttemptResultCopy(state: D7AttemptResultState) {
   if (state === "repair_verified") {
     return {
@@ -182,8 +198,10 @@ export function D7AttemptPanel({ task }: { task: D7RetestTaskView }) {
     {state.kind === "error" ? errorCopy(state) : null}
     {state.kind === "case_error"
       ? <button type="button" onClick={() => { void refreshCase(); }}>重新加载</button>
-      : <button type="button" onClick={() => { void submit(); }} disabled={disabled}>
-        {state.kind === "loading_case" ? "正在加载最新内容" : state.kind === "submitting" ? "正在提交" : resultUnconfirmed ? "请先确认任务状态" : state.kind === "conflict" ? "确认后重新提交" : "提交本次选择"}
-      </button>}
+      : resultUnconfirmed
+        ? <D7UnknownAttemptRecovery onRefresh={() => refreshAuthoritativeTodayAfterUnknownD7(router.replace, router.refresh)}/>
+        : <button type="button" onClick={() => { void submit(); }} disabled={disabled}>
+          {state.kind === "loading_case" ? "正在加载最新内容" : state.kind === "submitting" ? "正在提交" : state.kind === "conflict" ? "确认后重新提交" : "提交本次选择"}
+        </button>}
   </div>;
 }
