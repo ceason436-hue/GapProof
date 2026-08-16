@@ -1,6 +1,7 @@
 "use client";
 
 import type { MistakeReviewTaskView } from "@gapproof/contracts";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ApiClientError } from "@/lib/api-client";
@@ -26,12 +27,19 @@ export function MistakeReviewTask({ task }: { task: MistakeReviewTaskView }) {
       setErrorCode(error instanceof ApiClientError ? error.response.error.code : "NETWORK_UNKNOWN");
     }
   };
-  if (completed) return <article className="guided-task-result" data-mistake-review-result="completed" aria-live="polite">
+  if (completed) {
+    const recordedResponse = task.submittedResponse ?? responseText.trim();
+    return <article className="guided-task-result" data-mistake-review-result="completed" aria-live="polite">
     <span className="task-kind">这次复习已记录</span>
     <h3>你已经写下了自己的思路</h3>
-    {task.submittedResponse ? <p>你的记录：{task.submittedResponse}</p> : null}
+    {recordedResponse ? <p>你的记录：{recordedResponse}</p> : null}
     <p>可以回到错题本，对照原来的作答继续整理。记录本身不代表已经掌握。</p>
+    <div className="guided-task-result-actions">
+      <Link className="primary-blue" href="/student/mistakes">返回错题本</Link>
+      <Link className="secondary-button" href="/student/today?source=api">查看今日安排</Link>
+    </div>
   </article>;
+  }
   return <div className="guided-task-panel" data-mistake-review-state={state}>
     <p className="guided-task-note">先独立想一遍，再写下你的判断。这里不会直接告诉你答案。</p>
     <article className="mistake-review-question"><h2>{task.prompt}</h2>{task.originalAnswer ? <p>你当时的作答：{task.originalAnswer}</p> : null}</article>
