@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.82"
+version: "0.2.83"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "PUSH-077 已发布：学生可从我的材料回看真实上传材料并继续各阶段动作；比赛功能落地优先，测试与审查 deferred"
+current_design_stage: "PUSH-078 已发布：学生可在我的材料安全改名并贯通同一 Case；比赛功能落地优先，测试与审查 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -1782,6 +1782,12 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 ---
 
 ## 22. 版本记录
+
+### v0.2.83 — 2026-08-16
+
+- 每张“我的材料”卡增加轻量“修改名称”入口；展开后在原卡内编辑并保存，不跳离当前材料列表，名称仍限制 1–80 字并提示使用可辨认名称。
+- 保存中锁定表单；成功刷新卡片，版本冲突或网络未知显示“读取最新名称”，避免把未确认结果误写成成功。编辑区在桌面与手机保持稳定换行，不改变材料主动作优先级。
+- 改名只改变材料显示名称，不代表重新识别、重新诊断、个性化或学习效果；本批视觉与浏览器验收 deferred。
 
 ### v0.2.82 — 2026-08-16
 

@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { AppShell } from "@/components/app-shell";
 import { Icon } from "@/components/icons";
+import { MaterialTitleEditor } from "@/components/material-title-editor";
 import { StudentSessionBootstrap } from "@/components/student-session-bootstrap";
 import { apiServerGet } from "@/lib/api-server";
 import { getCurrentStudentSession, StudentSessionRequiredError } from "@/lib/student-session-server";
@@ -66,7 +67,7 @@ function MaterialCard({ item }: { item: StudentMaterialArchiveItem }) {
   return <article className="material-archive-item" data-batch-status={item.batchStatus} data-case-state={item.caseState}>
     <div className={`material-archive-icon ${presentation.tone}`}><Icon name="materials"/></div>
     <div className="material-archive-copy">
-      <div className="material-archive-heading"><h2>{item.title}</h2><span className={`material-archive-status ${presentation.tone}`}>{presentation.statusLabel}</span></div>
+      <div className="material-archive-heading"><h2>{item.title}</h2><span className={`material-archive-status ${presentation.tone}`}>{presentation.statusLabel}</span><MaterialTitleEditor batchId={item.batchId} initialTitle={item.title} initialVersion={item.version}/></div>
       <p>{presentation.detail}</p>
       <div className="material-archive-meta"><span>{item.pageCount} 张图片</span><span>更新于 {formatUpdatedAt(item.updatedAt)}</span></div>
     </div>

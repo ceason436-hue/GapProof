@@ -198,6 +198,11 @@ export const OcrBatchIdParamsSchema = Type.Object({ batchId: Type.String({ forma
 export type OcrBatchIdParams = Static<typeof OcrBatchIdParamsSchema>;
 export const CreateRealOcrBatchRequestSchema = Type.Object({ studentId: Type.String({ format: "uuid" }), title: RealOcrBatchTitleSchema }, { additionalProperties: false });
 export type CreateRealOcrBatchRequest = Static<typeof CreateRealOcrBatchRequestSchema>;
+export const RenameRealOcrBatchRequestSchema = Type.Object({
+  expectedVersion: Type.Integer({ minimum: 0 }),
+  title: RealOcrBatchTitleSchema,
+}, { additionalProperties: false });
+export type RenameRealOcrBatchRequest = Static<typeof RenameRealOcrBatchRequestSchema>;
 export const RealOcrBatchPageSchema = Type.Object({
   pageId: Type.String({ format: "uuid" }), assetId: Type.String({ format: "uuid" }), order: Type.Integer({ minimum: 1 }),
   status: Type.Union([Type.Literal("pending_upload"), Type.Literal("uploaded"), Type.Literal("queued"), Type.Literal("processing"), Type.Literal("needs_confirmation"), Type.Literal("succeeded"), Type.Literal("retryable_error"), Type.Literal("failed")]),
@@ -220,6 +225,7 @@ export const StudentMaterialArchiveItemSchema = Type.Object({
   caseId: Type.String({ format: "uuid" }),
   title: RealOcrBatchTitleSchema,
   batchStatus: RealOcrBatchStatusSchema,
+  version: Type.Integer({ minimum: 0 }),
   caseState: CaseStatusSchema,
   pageCount: Type.Integer({ minimum: 0 }),
   updatedAt: Type.String({ format: "date-time" }),

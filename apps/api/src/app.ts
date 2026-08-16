@@ -93,6 +93,8 @@ import {
   type OcrBatchIdParams,
   CreateRealOcrBatchRequestSchema,
   type CreateRealOcrBatchRequest,
+  RenameRealOcrBatchRequestSchema,
+  type RenameRealOcrBatchRequest,
   RealOcrBatchViewSchema,
   type RealOcrBatchView,
   StudentMaterialArchiveViewSchema,
@@ -183,6 +185,7 @@ import {
   OcrBatchIntentError,
   OcrBatchIdempotencyError,
   removeOcrBatchPage,
+  renameRealOcrBatch,
   reorderOcrBatchPages,
   replaceOcrBatchPage,
   findLatestTutorTurn,
@@ -2172,6 +2175,34 @@ export async function buildApi(options: BuildApiOptions) {
     async (request) => {
       const batch = await findOcrBatch(options.database, request.params.batchId);
       if (batch === undefined) throw new ResourceNotFoundError("OCR batch", request.params.batchId);
+      return success(request, realOcrBatchView(batch));
+    },
+  );
+
+  api.post<{ Params: OcrBatchIdParams; Body: RenameRealOcrBatchRequest }>(
+    "/v1/ocr-batches/:batchId/commands/rename",
+    {
+      schema: {
+        params: OcrBatchIdParamsSchema,
+        body: RenameRealOcrBatchRequestSchema,
+        response: {
+          200: apiResponseSchema(RealOcrBatchViewSchema),
+          "4xx": ApiErrorResponseSchema,
+          500: ApiErrorResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      const title = request.body.title.trim();
+      if (title.length === 0) throw new ApiHttpError(400, "MATERIAL_TITLE_REQUIRED", "A material title is required.", false);
+      const result = await renameRealOcrBatch(options.database, {
+        batchId: request.params.batchId,
+        expectedVersion: request.body.expectedVersion,
+        title,
+        idempotencyKey: getIdempotencyKey(request),
+      });
+      const batch = await findOcrBatch(options.database, result.batch.id);
+      if (batch === undefined) throw new ResourceNotFoundError("OCR batch", result.batch.id);
       return success(request, realOcrBatchView(batch));
     },
   );

@@ -1,8 +1,9 @@
 import { and, asc, count, desc, eq, gt, gte, isNull, sql } from "drizzle-orm";
 import { MAX_REAL_OCR_BATCHES_PER_24H, MAX_REAL_OCR_BATCH_PAGES, REAL_OCR_PROCESSING_NOTICE_VERSION, type StudentMaterialArchiveView } from "@gapproof/contracts";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Database } from "./client.ts";
 import { ResourceNotFoundError, isPostgresUniqueViolation } from "./case-repository.ts";
+import { VersionConflictError } from "./persist-case-transition.ts";
 import { apiIdempotencyRecords, cases, ocrBatches, ocrBatchPages, sourceAssets, students, type SourceAssetRow } from "./schema.ts";
 
 const CREATE_SCOPE = "real_ocr_batch_create";
@@ -10,6 +11,7 @@ const PAGE_SCOPE = "real_ocr_batch_page";
 const START_SCOPE = "real_ocr_batch_start";
 const REMOVE_PAGE_SCOPE = "real_ocr_batch_page_remove";
 const REORDER_PAGE_SCOPE = "real_ocr_batch_page_reorder";
+const RENAME_SCOPE = "real_ocr_batch_rename";
 
 export class OcrBatchIntentError extends Error {
   readonly code = "OCR_BATCH_INTENT_INVALID";
@@ -53,6 +55,7 @@ export async function findStudentMaterialArchive(
       caseId: ocrBatches.caseId,
       title: cases.title,
       batchStatus: ocrBatches.status,
+      version: ocrBatches.version,
       caseState: cases.state,
       pageCount: count(ocrBatchPages.id),
       updatedAt: ocrBatches.updatedAt,
@@ -73,6 +76,7 @@ export async function findStudentMaterialArchive(
       caseId: row.caseId,
       title: archiveTitle(row.title),
       batchStatus: row.batchStatus,
+      version: row.version,
       caseState: row.caseState,
       pageCount: row.pageCount,
       updatedAt: row.updatedAt.toISOString(),
@@ -85,6 +89,64 @@ async function idempotentRecord(database: Pick<Database, "select">, scope: strin
   const [record] = await database.select().from(apiIdempotencyRecords)
     .where(and(eq(apiIdempotencyRecords.scope, scope), eq(apiIdempotencyRecords.idempotencyKey, key))).limit(1);
   return record;
+}
+
+function renameRequestFingerprint(input: { batchId: string; expectedVersion: number; title: string }): string {
+  const hex = createHash("sha256").update(JSON.stringify(input)).digest("hex").slice(0, 32);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+export async function renameRealOcrBatch(
+  database: Database,
+  input: { batchId: string; expectedVersion: number; title: string; idempotencyKey: string },
+): Promise<{ batch: typeof ocrBatches.$inferSelect; replayed: boolean }> {
+  return database.transaction(async (transaction) => {
+    const [batch] = await transaction.select().from(ocrBatches)
+      .where(eq(ocrBatches.id, input.batchId)).for("update").limit(1);
+    if (batch === undefined) throw new ResourceNotFoundError("OCR batch", input.batchId);
+
+    const [caseRow] = await transaction.select().from(cases)
+      .where(eq(cases.id, batch.caseId)).for("update").limit(1);
+    if (
+      caseRow === undefined ||
+      caseRow.studentId !== batch.studentId ||
+      caseRow.tenantId !== batch.tenantId ||
+      caseRow.synthetic ||
+      caseRow.simulation ||
+      caseRow.deletedAt !== null
+    ) {
+      throw new ResourceNotFoundError("OCR batch", input.batchId);
+    }
+
+    const fingerprint = renameRequestFingerprint({
+      batchId: input.batchId,
+      expectedVersion: input.expectedVersion,
+      title: input.title,
+    });
+    const replay = await idempotentRecord(transaction, RENAME_SCOPE, input.idempotencyKey);
+    if (replay !== undefined) {
+      if (replay.resourceId !== batch.id || replay.jobId !== fingerprint) throw new OcrBatchIdempotencyError();
+      return { batch, replayed: true };
+    }
+    if (batch.version !== input.expectedVersion) throw new VersionConflictError(batch.caseId, input.expectedVersion);
+
+    const updatedAt = new Date();
+    await transaction.update(cases).set({ title: input.title, updatedAt })
+      .where(eq(cases.id, caseRow.id));
+    const [updatedBatch] = await transaction.update(ocrBatches)
+      .set({ version: input.expectedVersion + 1, updatedAt })
+      .where(and(eq(ocrBatches.id, batch.id), eq(ocrBatches.version, input.expectedVersion)))
+      .returning();
+    if (updatedBatch === undefined) throw new VersionConflictError(batch.caseId, input.expectedVersion);
+    await transaction.insert(apiIdempotencyRecords).values({
+      id: randomUUID(),
+      scope: RENAME_SCOPE,
+      idempotencyKey: input.idempotencyKey,
+      resourceId: batch.id,
+      jobId: fingerprint,
+    });
+    return { batch: updatedBatch, replayed: false };
+  });
 }
 
 export async function createRealOcrBatch(database: Database, input: { idempotencyKey: string; batchId: string; caseId: string; studentId: string; title: string; }): Promise<{ batch: typeof ocrBatches.$inferSelect; replayed: boolean }> {
