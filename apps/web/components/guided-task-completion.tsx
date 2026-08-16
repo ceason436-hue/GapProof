@@ -1,6 +1,7 @@
 "use client";
 
 import type { GuidedInterventionTaskView } from "@gapproof/contracts";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ApiClientError } from "@/lib/api-client";
@@ -137,6 +138,10 @@ export function GuidedTaskCompletion({ task, timeZone }: { task: GuidedIntervent
       <h3>明日复习已安排</h3>
       <p>下一次检查：{formatTaskDateTime(state.scheduledFor, timeZone)}。</p>
       <p>完成后续检查前，这不代表已经掌握。</p>
+      <div className="guided-task-result-actions">
+        <Link className="primary-blue" href="/student/today?source=api">返回今日查看安排</Link>
+        <Link className="secondary-button" href="/student/plan">查看 7 日计划</Link>
+      </div>
     </article>;
   }
 
