@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.77"
+version: "0.1.78"
 status: "ACTIVE"
-current_stage: "PUSH-062 已发布：多图替换未知结果核对新旧资源身份；比赛落地优先，完整集中门禁与真实学生验收 deferred"
+current_stage: "PUSH-063 已发布：恢复中的多图材料可跨刷新管理已有页面；比赛功能落地优先，测试与审查统一 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -2122,6 +2122,12 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.78 — 2026-08-16
+
+- `/materials/new?batch=...` 可恢复当前设备学生拥有的多图材料，展示已有页面的编号与处理状态，并支持继续添加、逐页替换或移除；不返回原图、对象键、哈希或 Provider 内部字段。
+- 恢复页面只有在已有页面均处理完成且本次新增页面均通过检查后才允许开始识别；手机端图片列表改为两列并将操作区独立换行。
+- 按比赛交付优先要求，本批未运行新增测试、全量门禁、集中审查、Provider smoke、浏览器/视觉回归或真实学生验收，全部记录为 deferred；本实现不证明 OCR 准确率、真实个性化或学习效果。
 
 ### v0.1.77 — 2026-08-16
 
