@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.35"
+version: "0.2.36"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "PUSH-030 已发布：首次粗分与真实任务入口已接入学生路径；OCR 与真实性边界不变"
+current_design_stage: "PUSH-031 待发布：真实多图上传、逐页状态与阿里云 OCR 核对已接学生路径；真实诊断、导师与完整学生数据页仍待实现"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -86,11 +86,11 @@ upstream_documents:
 
 ### 0.3.2 当前阶段与下一步
 
-**已完成**：学生端“今日”页桌面视觉结构与 Stitch V1.1 冻结裁切保持不变；默认 API、真实 Today overview、ready guided、D1、D7 安全作答均已通过门禁。服务端 `hasStartedJourney:false` 时显示真实首次使用引导，提供“上传材料”和“三题快速检查”两条入口；上传选择后显示缩略图、类型/大小与五步状态。`/diagnose`、`/diagnose/quick-check` 及 `/student/plan`、`/student/progress`、`/student/report` 已具备正确路由、侧栏选中态和事实空状态，报告明确未开放。`/materials/new` 已完成真实单图选择、上传、基础检查、监护确认与显式创建/绑定同一合成 Case；`/materials/{caseId}/review` 读取、修正和确认同一 Case 的 synthetic extraction，并继续诊断、确认小题、干预与 Today。写入使用权威 Case 版本、共享 contracts、UUIDv7、冲突重新确认和 `NETWORK_UNKNOWN` 锁定；合成 Mock 仅显式启用，独立 `/materials/demo/review` 仍是零网络 Fixture。
+**已完成**：学生端“今日”页桌面视觉结构与 Stitch V1.1 冻结裁切保持不变；默认 API、真实 Today overview、ready guided、D1、D7 安全作答均已通过门禁。服务端 `hasStartedJourney:false` 时显示首次使用引导，提供“上传材料”和“三题快速检查”两条入口。`/materials/new` 现支持首次多选、按序缩略图队列、继续添加、逐页检查/替换/移除/重试；选图后隐藏大面积虚线框。全部页面通过后才显示处理说明、监护确认和“开始识别”。真实阿里云 OCR 结果在 `/materials/{caseId}/review` 按页显示为“来自上传图片”，必须由学生逐页核对；synthetic Mock 与零网络 `/materials/demo/review` 继续独立披露。
 
-**尚未完成**：三题检查仍是无记录的原创合成体验题，不是完整 5–8 题诊断、真实个性化或学习效果；默认关闭的阿里云 OCR 开发态路径虽已用授权脱敏材料完成一次真实 smoke，但结果仍需人工确认，且没有 UI 或生产接线。真实 Provider 页面前仍须冻结服务端 provider mode、处理告知/同意、监护确认、权威状态查询和删除事实；真实模糊度、方向、缺页与恶意文件检查，原图确认后 24h/主动删除、真实图片题目区域展示、学生/家长非空数据页面、Logo 紧裁/SVG/Favicon 与最终品牌规范尚未完成。异步报告本轮 deferred。
+**尚未完成**：三题检查仍是无记录的原创合成体验题；真实 OCR 核对后的诊断仍使用固定合成 Fixture，不能称真实诊断、个性化或学习效果。批次状态尚不能在刷新后按学生恢复，`NETWORK_UNKNOWN` 仍缺权威查询入口；真实身份/会话、原图确认后 24h 删除/主动删除、真实图片题目区域展示、DeepSeek 苏格拉底导师、错题本、计划/进步/报告非空页、全局错误/404、完整键盘和移动端验收尚未完成。
 
-**下一步**：真实 OCR UI 继续保持关闭；先核验 Provider 合同/训练政策并冻结服务端 consent/status/删除契约。DeepSeek structured seam 仅供服务端后续 bounded 接线，当前不在学生页面暴露模型状态。只有事实可审计后，才新增与 synthetic 分离的 Provider 处理告知、处理同意和监护确认界面。任何新字段不得从视觉稿或合成 Fixture 反推业务状态。
+**下一步**：先补真实身份/会话、未完成 OCR 批次与所有 `NETWORK_UNKNOWN` 的跨刷新恢复，并统一真实/体验入口文案；随后以已确认 OCR 文本驱动真实诊断，再接受约束的 DeepSeek 苏格拉底单问脚手架。之后实现错题本/重做、真实计划、进步和事实报告，最后对全部可点击入口、失败态、键盘、移动端和真实 Provider 做集中验收。任何新字段不得从视觉稿或合成 Fixture 反推业务状态。
 
 ### 0.4 设计底线
 
@@ -482,7 +482,7 @@ Tab 规则：
 
 当前 `[PROTOTYPE]` 页面开放单张 JPEG/PNG/WebP、1B–10MiB 的“开始上传”。上传期间锁定重复提交；上传后自动进入基础检查，依次展示 preparing/queued/processing，并在 30 秒内按 1s→2s→3s 读取权威状态；隐藏或离页停止轮询。低分辨率等确定性原因进入需确认，失败/可重试/超时均有中性恢复文案；成功只显示“图片基础检查通过，识别尚未开始，不会自动生成学习结论”。页面不得显示短期 token、对象键、内部 asset/Case ID、服务端文件名、hash、OCR 文本或置信度；显式创建成功后只提供“查看并确认识别内容”导航，Case ID 仅作为内部路由参数。
 
-基础检查成功不得自动创建/绑定 Case 或启动识别。页面先展示处理说明，再由用户显式点击“开始识别并创建案例”；当前该动作已对应独立 UUIDv7、幂等、可审计的 synthetic_demo 意图，要求监护确认并原子绑定同一 Case。它持续说明上传图片字节不会用于 Fake OCR，不能替代真实 OCR。未来真实 OCR 启动前仍必须展示阿里云处理告知、不得用于训练说明与监护确认事实；当前 Provider 与真实处理告知执行尚未实现。
+基础检查成功不得自动创建 Case 或启动识别。页面先展示处理说明，再由用户显式确认本次图片处理和未成年人监护事实后点击“开始识别”；当前动作对应独立 UUIDv7、幂等、可审计的真实 OCR 批次意图，并原子绑定非合成同一 Case。页面只说明识别结果需要核对，不暴露 Provider、凭据或工程字段；synthetic_demo 仅保留在明确体验路径。
 
 **错误文案示例**：
 
@@ -1650,7 +1650,7 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 
 ### 18.0 当前设计基线
 
-- `[PROTOTYPE]` 学生端“今日”页桌面视觉基线已选定，规范见 5.6.1；前端 F0/F1b、F1c ready D1 客户端作答、真实 overview 及受控 HTTP 浏览器 Fixture 已完成对应门禁并合并 `main`。`/materials/new` 已形成真实单图字节上传、异步确定性基础检查和脱敏结果状态；`/materials/demo/review` 只提供零网络、合成标记的本地识别确认演示。两者均有双视口截图与浏览器交互证据，但尚未通过真实 asset↔Case、OCR/识别读取与确认写入形成上传到修复证明的端到端页面证据。
+- `[PROTOTYPE]` 学生端“今日”页桌面视觉基线已选定，规范见 5.6.1；默认 API、真实 overview 及 guided/D1/D7 已完成对应门禁并合并 `main`。`/materials/new` 已形成真实多图字节上传、逐页基础检查、阿里云教育 OCR 和同一 Case 人工核对；`/materials/demo/review` 只提供零网络、合成标记的体验。真实 OCR 后的诊断仍含固定合成 Fixture，因此尚未形成真实材料到修复证明的端到端证据。
 - `[PLANNED]` 其余学生 P0 页面、家长端 P0 页面和评委最小演示页仍需在同一视觉系统下完成设计。
 - 任何后续页面必须沿用：连续白色顶部框架、`#0036FF` 的导航/进度角色、`#B5F800` 的行动/积极变化角色、自然学生用语、单一主操作和轻量立体感。
 
@@ -1780,6 +1780,11 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 ---
 
 ## 22. 版本记录
+
+### v0.2.36 — 2026-08-16
+
+- `/materials/new` 改为真实多图队列：首次多选、选图后收起大虚线框、继续添加、按序预览、逐页状态、替换/移除/重试；全部通过后才允许处理同意、监护确认和真实识别。
+- `/materials/{caseId}/review` 按来源区分真实上传图片与 synthetic 体验，并以页面级完整文本要求人工核对。真实诊断、导师、跨刷新恢复、错题本和计划/进步/报告仍未完成；同步 PROJECT_MASTER v0.1.46、PRD v0.1.38、TDD v0.3.39 与 PUSH-031。
 
 ### v0.2.34 — 2026-08-16
 

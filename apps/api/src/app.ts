@@ -65,6 +65,8 @@ import {
   type StartSyntheticRecognitionView,
   SyntheticExtractionViewSchema,
   type SyntheticExtractionView,
+  ExtractionViewSchema,
+  type ExtractionView,
   SourceAssetPrepareQueuedViewSchema,
   type SourceAssetPrepareQueuedView,
   SourceAssetPrepareViewSchema,
@@ -81,6 +83,22 @@ import {
   TodayTasksViewSchema,
   UploadedSourceAssetViewSchema,
   type UploadedSourceAssetView,
+  OcrBatchIdParamsSchema,
+  type OcrBatchIdParams,
+  CreateRealOcrBatchRequestSchema,
+  type CreateRealOcrBatchRequest,
+  RealOcrBatchViewSchema,
+  type RealOcrBatchView,
+  AddRealOcrBatchPageRequestSchema,
+  type AddRealOcrBatchPageRequest,
+  OcrBatchPageParamsSchema,
+  type OcrBatchPageParams,
+  AddedRealOcrBatchPageViewSchema,
+  type AddedRealOcrBatchPageView,
+  StartRealOcrBatchRequestSchema,
+  type StartRealOcrBatchRequest,
+  StartRealOcrBatchViewSchema,
+  type StartRealOcrBatchView,
 } from "@gapproof/contracts";
 import {
   advanceDemoClock,
@@ -122,6 +140,14 @@ import {
   SyntheticRecognitionNotReadyError,
   SourceAssetNotUploadedError,
   VersionConflictError,
+  createRealOcrBatch,
+  findOcrBatch,
+  attachOcrBatchPage,
+  startRealOcrBatch,
+  OcrBatchIntentError,
+  OcrBatchIdempotencyError,
+  removeOcrBatchPage,
+  replaceOcrBatchPage,
 } from "@gapproof/db";
 import {
   type Clock,
@@ -140,6 +166,7 @@ import {
   enqueueSourceAssetQualityCheckIdempotent,
   enqueueRunNextTransactional,
   SYNTHETIC_PARSE_ASSET_ID,
+  enqueueRealOcrBatchTransactional,
   type JobQueue,
 } from "@gapproof/jobs";
 import {
@@ -311,6 +338,24 @@ function requireValidStudentTimeZone(timeZone: string): string {
     }
     throw error;
   }
+}
+
+function realOcrBatchView(result: NonNullable<Awaited<ReturnType<typeof findOcrBatch>>>): RealOcrBatchView {
+  return {
+    batchId: result.batch.id,
+    caseId: result.batch.caseId,
+    status: result.batch.status,
+    guardianConfirmed: result.batch.guardianConfirmed,
+    version: result.batch.version,
+    pages: result.pages.map(({ page, asset }) => ({
+      pageId: page.id,
+      assetId: asset.id,
+      order: page.pageOrder,
+      status: page.status === "pending_upload" ? asset.processingStatus : page.status,
+      retryable: asset.processingStatus === "retryable_error",
+      needsReview: page.status === "needs_confirmation" || asset.processingStatus === "needs_confirmation",
+    })),
+  };
 }
 
 function studentProfileView(student: Awaited<ReturnType<typeof findStudentProfile>>): StudentProfileView {
@@ -716,6 +761,25 @@ function syntheticExtractionView(
   };
 }
 
+function extractionView(
+  caseRow: CaseRow,
+  event: LearningEvidenceEventRow | undefined,
+): { readonly view: ExtractionView; readonly itemIds: ReadonlySet<string> } {
+  if (event?.sourceType === "fake_ocr") return syntheticExtractionView(caseRow, event);
+  if (
+    caseRow.state !== "awaiting_confirmation" || event === undefined ||
+    event.sourceType !== "real_alibaba_ocr"
+  ) {
+    throw new ApiHttpError(409, "EXTRACTION_NOT_READY", "Extraction is not ready for confirmation.");
+  }
+  const items = readSyntheticExtractionItems(event.payload);
+  if (items === undefined) throw new ApiHttpError(500, "STORED_EVENT_INVALID", "The stored extraction is invalid.");
+  return {
+    view: { caseId: caseRow.id, state: "awaiting_confirmation", stateVersion: caseRow.stateVersion, recognitionSource: "real_alibaba", uploadedAssetUsedForRecognition: true, items: [...items] },
+    itemIds: new Set(items.map(({ itemId }) => itemId)),
+  };
+}
+
 function isSamePayload(
   left: Record<string, unknown>,
   right: Record<string, unknown>,
@@ -767,6 +831,10 @@ export async function buildApi(options: BuildApiOptions) {
       code = error.code;
       message = error.message;
     } else if (error instanceof SourceAssetNotUploadedError) {
+      statusCode = 409;
+      code = error.code;
+      message = error.message;
+    } else if (error instanceof OcrBatchIntentError || error instanceof OcrBatchIdempotencyError) {
       statusCode = 409;
       code = error.code;
       message = error.message;
@@ -1290,7 +1358,7 @@ export async function buildApi(options: BuildApiOptions) {
       schema: {
         params: CaseIdParamsSchema,
         response: {
-          200: apiResponseSchema(SyntheticExtractionViewSchema),
+          200: apiResponseSchema(ExtractionViewSchema),
           "4xx": ApiErrorResponseSchema,
           500: ApiErrorResponseSchema,
         },
@@ -1306,7 +1374,7 @@ export async function buildApi(options: BuildApiOptions) {
         caseRow.id,
         "evidence_ingested",
       );
-      return success(request, syntheticExtractionView(caseRow, event).view);
+      return success(request, extractionView(caseRow, event).view);
     },
   );
 
@@ -1368,7 +1436,7 @@ export async function buildApi(options: BuildApiOptions) {
       }
 
       const extraction = caseRow.state === "awaiting_confirmation"
-        ? syntheticExtractionView(
+        ? extractionView(
             caseRow,
             await findLatestCaseEvidenceEventByType(
               options.database,
@@ -1680,6 +1748,101 @@ export async function buildApi(options: BuildApiOptions) {
       const student = await findStudentProfile(options.database, request.params.studentId);
       if (student === undefined) throw new ResourceNotFoundError("Student", request.params.studentId);
       return success(request, studentProfileView(student));
+    },
+  );
+
+  api.post<{ Body: CreateRealOcrBatchRequest }>(
+    "/v1/ocr-batches",
+    { schema: { body: CreateRealOcrBatchRequestSchema, response: { 200: apiResponseSchema(RealOcrBatchViewSchema), 201: apiResponseSchema(RealOcrBatchViewSchema), "4xx": ApiErrorResponseSchema, 500: ApiErrorResponseSchema } } },
+    async (request, reply) => {
+      const result = await createRealOcrBatch(options.database, { idempotencyKey: getIdempotencyKey(request), batchId: uuidv7(), caseId: uuidv7(), studentId: request.body.studentId });
+      const batch = await findOcrBatch(options.database, result.batch.id);
+      if (batch === undefined) throw new ResourceNotFoundError("OCR batch", result.batch.id);
+      return reply.status(result.replayed ? 200 : 201).send(success(request, realOcrBatchView(batch)));
+    },
+  );
+
+  api.get<{ Params: OcrBatchIdParams }>(
+    "/v1/ocr-batches/:batchId",
+    { schema: { params: OcrBatchIdParamsSchema, response: { 200: apiResponseSchema(RealOcrBatchViewSchema), "4xx": ApiErrorResponseSchema, 500: ApiErrorResponseSchema } } },
+    async (request) => {
+      const batch = await findOcrBatch(options.database, request.params.batchId);
+      if (batch === undefined) throw new ResourceNotFoundError("OCR batch", request.params.batchId);
+      return success(request, realOcrBatchView(batch));
+    },
+  );
+
+  api.post<{ Params: OcrBatchIdParams; Body: AddRealOcrBatchPageRequest }>(
+    "/v1/ocr-batches/:batchId/pages/uploads",
+    { schema: { params: OcrBatchIdParamsSchema, body: AddRealOcrBatchPageRequestSchema, response: { 200: apiResponseSchema(AddedRealOcrBatchPageViewSchema), 201: apiResponseSchema(AddedRealOcrBatchPageViewSchema), "4xx": ApiErrorResponseSchema, 500: ApiErrorResponseSchema } } },
+    async (request, reply) => {
+      const { secret } = requireUploadConfiguration(options);
+      const batch = await findOcrBatch(options.database, request.params.batchId);
+      if (batch === undefined) throw new ResourceNotFoundError("OCR batch", request.params.batchId);
+      const key = getIdempotencyKey(request);
+      const assetResult = await initiateSourceAssetUpload(options.database, {
+        assetId: uuidv7(), idempotencyRecordId: uuidv7(), idempotencyKey: `ocr-page-asset:${key}`,
+        studentId: batch.batch.studentId, caseId: batch.batch.caseId, mimeType: request.body.mimeType, byteSize: request.body.byteSize, sha256: request.body.sha256, tenantId: batch.batch.tenantId,
+      });
+      const pageResult = await attachOcrBatchPage(options.database, { batchId: batch.batch.id, pageId: uuidv7(), asset: assetResult.asset, idempotencyKey: key });
+      const expiresAt = Date.now() + 10 * 60 * 1000;
+      const token = createSourceAssetUploadToken(secret, { assetId: assetResult.asset.id, studentId: batch.batch.studentId, sha256: assetResult.asset.sha256, byteSize: assetResult.asset.byteSize, mimeType: assetResult.asset.mimeType, expiresAt });
+      const data: AddedRealOcrBatchPageView = { page: { pageId: pageResult.page.id, assetId: assetResult.asset.id, order: pageResult.page.pageOrder, status: "pending_upload", retryable: false, needsReview: false }, upload: { method: "PUT", path: `/api/v1/source-assets/${assetResult.asset.id}/content`, token, expiresAt: new Date(expiresAt).toISOString(), mimeType: assetResult.asset.mimeType as AddedRealOcrBatchPageView["upload"]["mimeType"], byteSize: assetResult.asset.byteSize } };
+      return reply.status(assetResult.replayed || pageResult.replayed ? 200 : 201).send(success(request, data));
+    },
+  );
+
+  api.post<{ Params: OcrBatchIdParams; Body: StartRealOcrBatchRequest }>(
+    "/v1/ocr-batches/:batchId/commands/start-recognition",
+    { schema: { params: OcrBatchIdParamsSchema, body: StartRealOcrBatchRequestSchema, response: { 200: apiResponseSchema(StartRealOcrBatchViewSchema), 202: apiResponseSchema(StartRealOcrBatchViewSchema), "4xx": ApiErrorResponseSchema, 500: ApiErrorResponseSchema } } },
+    async (request, reply) => {
+      const result = await startRealOcrBatch(options.database, { batchId: request.params.batchId, idempotencyKey: getIdempotencyKey(request), guardianConfirmed: request.body.guardianConfirmed, enqueue: (transaction) => enqueueRealOcrBatchTransactional(transaction, options.queue, { jobId: uuidv7(), batchId: request.params.batchId, traceId: traceId(request) }) });
+      const data: StartRealOcrBatchView = { batchId: result.batch.id, caseId: result.batch.caseId, status: "processing", processingNoticeAccepted: true };
+      return reply.status(result.replayed ? 200 : 202).send(success(request, data, result.jobId));
+    },
+  );
+
+  api.delete<{ Params: OcrBatchPageParams }>(
+    "/v1/ocr-batches/:batchId/pages/:pageId",
+    { schema: { params: OcrBatchPageParamsSchema, response: { 200: apiResponseSchema(RealOcrBatchViewSchema), "4xx": ApiErrorResponseSchema, 500: ApiErrorResponseSchema } } },
+    async (request) => {
+      await removeOcrBatchPage(options.database, {
+        ...request.params,
+        idempotencyKey: getIdempotencyKey(request),
+      });
+      const batch = await findOcrBatch(options.database, request.params.batchId);
+      if (batch === undefined) throw new ResourceNotFoundError("OCR batch", request.params.batchId);
+      return success(request, realOcrBatchView(batch));
+    },
+  );
+
+  api.post<{ Params: OcrBatchPageParams; Body: AddRealOcrBatchPageRequest }>(
+    "/v1/ocr-batches/:batchId/pages/:pageId/commands/replace",
+    { schema: { params: OcrBatchPageParamsSchema, body: AddRealOcrBatchPageRequestSchema, response: { 200: apiResponseSchema(AddedRealOcrBatchPageViewSchema), 201: apiResponseSchema(AddedRealOcrBatchPageViewSchema), "4xx": ApiErrorResponseSchema, 500: ApiErrorResponseSchema } } },
+    async (request, reply) => {
+      const { secret } = requireUploadConfiguration(options);
+      const batch = await findOcrBatch(options.database, request.params.batchId);
+      if (batch === undefined) throw new ResourceNotFoundError("OCR batch", request.params.batchId);
+      const key = getIdempotencyKey(request);
+      const assetResult = await initiateSourceAssetUpload(options.database, { assetId: uuidv7(), idempotencyRecordId: uuidv7(), idempotencyKey: `ocr-page-replace-asset:${key}`, studentId: batch.batch.studentId, caseId: batch.batch.caseId, mimeType: request.body.mimeType, byteSize: request.body.byteSize, sha256: request.body.sha256, tenantId: batch.batch.tenantId });
+      const page = await replaceOcrBatchPage(options.database, { batchId: batch.batch.id, pageId: request.params.pageId, asset: assetResult.asset });
+      const expiresAt = Date.now() + 10 * 60 * 1000;
+      const token = createSourceAssetUploadToken(secret, { assetId: assetResult.asset.id, studentId: batch.batch.studentId, sha256: assetResult.asset.sha256, byteSize: assetResult.asset.byteSize, mimeType: assetResult.asset.mimeType, expiresAt });
+      const data: AddedRealOcrBatchPageView = { page: { pageId: page.id, assetId: assetResult.asset.id, order: page.pageOrder, status: "pending_upload", retryable: false, needsReview: false }, upload: { method: "PUT", path: `/api/v1/source-assets/${assetResult.asset.id}/content`, token, expiresAt: new Date(expiresAt).toISOString(), mimeType: assetResult.asset.mimeType as AddedRealOcrBatchPageView["upload"]["mimeType"], byteSize: assetResult.asset.byteSize } };
+      return reply.status(assetResult.replayed ? 200 : 201).send(success(request, data));
+    },
+  );
+
+  api.post<{ Params: OcrBatchIdParams; Body: StartRealOcrBatchRequest }>(
+    "/v1/ocr-batches/:batchId/commands/retry-recognition",
+    { schema: { params: OcrBatchIdParamsSchema, body: StartRealOcrBatchRequestSchema, response: { 200: apiResponseSchema(StartRealOcrBatchViewSchema), 202: apiResponseSchema(StartRealOcrBatchViewSchema), "4xx": ApiErrorResponseSchema, 500: ApiErrorResponseSchema } } },
+    async (request, reply) => {
+      const current = await findOcrBatch(options.database, request.params.batchId);
+      if (current === undefined) throw new ResourceNotFoundError("OCR batch", request.params.batchId);
+      if (current.batch.status !== "retryable_error") throw new OcrBatchIntentError("Only a retryable recognition failure can be retried.");
+      const result = await startRealOcrBatch(options.database, { batchId: request.params.batchId, idempotencyKey: getIdempotencyKey(request), guardianConfirmed: request.body.guardianConfirmed, retry: true, enqueue: (transaction) => enqueueRealOcrBatchTransactional(transaction, options.queue, { jobId: uuidv7(), batchId: request.params.batchId, traceId: traceId(request) }) });
+      const data: StartRealOcrBatchView = { batchId: result.batch.id, caseId: result.batch.caseId, status: "processing", processingNoticeAccepted: true };
+      return reply.status(result.replayed ? 200 : 202).send(success(request, data, result.jobId));
     },
   );
 

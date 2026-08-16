@@ -81,7 +81,7 @@ export function transitionCase(
       return advance(
         aggregate,
         event,
-        event.lowConfidenceRegionCount > 0
+        event.requiresConfirmation === true || event.lowConfidenceRegionCount > 0
           ? "awaiting_confirmation"
           : "ready_for_diagnosis",
       );

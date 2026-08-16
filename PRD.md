@@ -7,10 +7,10 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档状态 | Draft v0.1.37 |
+| 文档状态 | Draft v0.1.38 |
 | 产品名称 | 知隙 GapProof |
 | 文档角色 | 产品需求、业务流程、功能范围与验收标准 |
-| 当前阶段 | PUSH-030 已发布：首次粗分、Today 可达性与复习入口已收口；真实 OCR、DeepSeek 导师、错题本、计划和报告仍未实现 |
+| 当前阶段 | PUSH-031 待发布：真实多图上传与阿里云教育 OCR 已接学生路径并强制人工核对；真实材料诊断、DeepSeek 导师、身份恢复、错题本、计划、进步和报告仍未实现 |
 | 产品形态 | Web 应用 |
 | 目标教材 | 上海教育出版社《义务教育教科书（五·四学制）英语 八年级上册》 |
 | 适用版本 | 目标教材以 ISBN、当前 PDF 哈希和内容快照锁定；版权页不可取得，版次、印次和册次保持未知 |
@@ -221,7 +221,7 @@ MVP 基于用户确认且与当前教材 PDF 封底一致的教材 ISBN，并以
 1. 首次进入先明确选择当前支持的年级、学科、学期、学习地区和学习状态；未完成时不能静默预设或进入正式检查。
 2. 无需注册，档案以版本化、幂等修订保存；当前单学生原型不展示学生或角色切换控件。
 3. 完成范围选择后可上传试卷、作业、错题或作文；没有材料时可进入合成三题体验。
-4. 真实 OCR、AI 错因分析和 7 日计划仍未接入，不得将当前合成体验表述为上述能力。
+4. 真实多图 OCR 已接入，但识别文本必须由学生核对；后续 AI 错因分析和 7 日计划仍未接入，不得把 OCR 结果或合成体验表述为真实诊断、个性化或学习效果。
 
 ### 7.2 上传材料流程
 
@@ -448,7 +448,7 @@ MVP 使用原创模拟试卷、预置学生 Case 和合成学习轨迹，不声�
 - 不默认使用儿童输入训练模型；
 - 所有关键模型调用和数据访问可审计。
 
-当前 `[PROTOTYPE]` 已完成阿里云 OCR 的隔离安全 adapter/官方 SDK transport：默认关闭，只允许授权的合成或脱敏输入，不接受真实学生模式，也未接上传、Case、Worker、API 或页面。一次授权测试材料的真实开发态 smoke 已证明二进制上传、鉴权和响应解析可用，但结果为 `needs_confirmation`，仍须人工确认；这不证明识别准确率、生产可用性、真实个性化、真实学生记录或学习效果。
+当前 `[PROTOTYPE]` 已完成阿里云 OCR 官方 SDK 的服务端产品接线：学生可按顺序添加多张授权/脱敏材料，逐页完成上传与质量检查，移除、替换或重试后显式同意处理并启动识别。系统创建非合成 Case，Worker 校验真实存储字节、大小和 SHA-256 后逐页调用 Provider，并把归一化文本写入同一 Case；无论置信情况都必须进入人工核对。Provider 原始响应、凭据、精确置信度和内部 item ID 不进入公开响应。该能力证明真实 OCR 调用链，不证明识别准确率、真实诊断、个性化、学生学习记录质量或学习效果。
 
 ## 11. Demo 方案
 
@@ -499,11 +499,11 @@ Demo 界面或旁白必须明确区分：
 - `[PROTOTYPE]` D+1 ready 任务现可通过共享 `POST /v1/tasks/{taskId}/attempts` 契约提交客观选择并由服务端私有答案确定性评分；通过时创建 D7 调度，失败时事务内入队异步重排。当前题目与重排内容仍为明确标记的合成 Fixture，不是现实题库或真实个性化效果。
 - `[PROTOTYPE]` ready D7 已复用同一 attempts 路由完成跨端安全作答与服务端确定性评分：Today 提交前读取权威 Case 版本，使用 UUIDv7、同 key/body 单次未知重试、冲突重新确认与未知结果锁定；通过进入 `repair_verified`，不会冒充 `report_ready`；失败按持久 `replan_count` 最多自动重排两次，再次失败进入 `support_required` 且不再入队。规则化合成内容不等于真实个性化或真实人工协助。
 - `[PROTOTYPE]` ready guided intervention 已可在 Today 勾选完整步骤并安全提交；使用权威 Case 版本、UUIDv7 幂等意图、冲突重新确认、独立 GET 恢复和网络未知锁定，完成后只声明安排 D+1，不声明掌握。
-- `[PROTOTYPE]` 学生端无参数入口走真实 API，只有显式 `?source=mock` 使用合成首页；Today overview、guided、ready D1/D7 安全作答和同一 Case review 均已通过受控浏览器门禁。写入使用共享 contracts、权威 Case 版本、UUIDv7、同 key/body 一次未知重试、冲突重新确认与 `NETWORK_UNKNOWN` 锁定；项目本身 P0 合成主闭环已完成，但不得称真实 OCR/真实学习闭环。
+- `[PROTOTYPE]` 学生端无参数入口走真实 API，只有显式 `?source=mock` 使用合成首页；Today overview、guided、ready D1/D7 和同一 Case review 已接正式 API。真实多图 OCR 已进入默认上传路径并强制人工核对；核对后的诊断仍使用合成 Fixture，因此不得称完整真实学习闭环。
 - `[PROTOTYPE]` Today 以服务端 `hasStartedJourney` 区分无 Case 的首次使用与已有记录但当前无任务；首次使用页提供上传与三题合成检查双入口，不显示 Mock 任务。找原因、7 日计划、我的进步、学习报告均有真实路由和各自空状态；报告明确未开放。上传选择后显示有效缩略图与五步进度，但不显示本地文件名或内部存储事实。
 - `[PROTOTYPE]` 真实 API Today 的 active、无当前任务和已完成状态必须复用同一冻结视觉骨架：桌面主栏为深色当前任务 Hero 与两张事实概览卡，右栏直接排列学习足迹、稍后继续和独立下次检查，不得增加包裹整列的大白卡、右栏目标子卡或把足迹重复嵌入概览。周目标摘要位于页头；足迹、目标、待确认数和进展仅替换为服务端事实，不复制 Mock 数值。guided、D1、D7 提交仅在服务端确认成功后刷新权威 Today 状态，不得用本地推断伪造完成数、进展或后续任务。
-- `[PROTOTYPE]` 已实现 JPEG/PNG/WebP、1B–10MiB 的真实字节上传与基础检查；通过后页面要求监护确认并由精确“开始识别并创建案例”调用正式 API，原子创建/绑定同一合成 Demo Case并排队受守卫 Fake OCR。`GET /v1/cases/{caseId}/extraction` 与 `/materials/{caseId}/review` 随后读取、修正和确认同一 Case 的 synthetic fixture，并导航到既有诊断/干预。页面持续说明上传字节未用于识别，不返回对象键、token、内部文件名、hash、内部答案键或精确置信度；该能力不是生产 OSS、真实 OCR、真实个性化或学习效果。
-- `[PROTOTYPE]` Fake OCR 只允许 `simulation && synthetic` Demo Case，API 与 Worker 双重拒绝非 Demo 路径；同一 Case 确认写入沿用既有幂等和版本保护。独立 `/materials/demo/review` 仍保留为零网络 Fixture，不创建或推进 Case；真实 OCR Provider、真实图片区域展示和真实识别质量仍未实现。
+- `[PROTOTYPE]` 已实现 JPEG/PNG/WebP、每张 1B–10MiB 的多图真实字节上传与逐页基础检查；页面支持首次多选、继续添加、移除、替换和单页重试。全部页面通过且处理说明/监护确认成立后，正式 API 创建非合成 Case 并排队真实阿里云教育 OCR；结果按页读取、修正和确认。公开响应不返回对象键、token、内部文件名、hash、答案键、Provider 原始错误或精确置信度；本地 StorageAdapter 仍不是生产 OSS。
+- `[PROTOTYPE]` Fake OCR 继续只允许 `simulation && synthetic` Demo Case，独立 `/materials/demo/review` 保留为零网络 Fixture；真实 OCR 来源固定标为 `real_alibaba` 并与体验来源隔离。真实图片题目区域定位、正式 30–50 页准确率/延迟基准、原图确认后 24h 删除和主动删除仍未实现。
 - 因此，以下验收项仍是完整 MVP 的目标，不因后端局部闭环而标记为 `[LIVE]`。
 
 ### 12.1 主流程验收
@@ -658,6 +658,7 @@ PROJECT_MASTER.md
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
+| 0.1.38 | 2026-08-16 | 发布真实多图上传与阿里云教育 OCR 产品路径：逐页检查、移除/替换/重试、显式处理同意与监护确认、非合成 Case、真实字节校验、页面级归一化和强制人工核对。OCR 结果不是诊断或学习效果；真实材料诊断、DeepSeek 导师、身份恢复、错题本、计划/进步/报告继续为后续 P0。同步 PROJECT_MASTER v0.1.46、TDD v0.3.39、DESIGN v0.2.36 与 PUSH-031 |
 | 0.1.36 | 2026-08-16 | 按 Stitch V1.1 原 HTML/PNG 精确复原真实 API Today 学习足迹与今日概览：移除目标子卡、目标摘要回页头，恢复今日标签/单描边、40px 视觉间距、160px 事实卡及原图标装饰。105 Web、双 TypeScript、Next build、6 状态 × 4 视口视觉门禁通过；同步 PROJECT_MASTER v0.1.44、TDD v0.3.37、DESIGN v0.2.34、PUSH-029，不提升 OCR、个性化、学生记录或学习效果状态 |
 | 0.1.35 | 2026-08-16 | 修复真实 API Today 与冻结 Mock 首页的视觉分叉，active/无当前任务/已完成统一为深色 Hero、事实概览及无整列外框右栏；guided/D1/D7 服务端确认成功后刷新权威 Today。105 Web、双 TypeScript、Next build、6 状态 × 4 视口真实 API 视觉门禁通过；同步 PROJECT_MASTER v0.1.43、TDD v0.3.36、DESIGN v0.2.33、PUSH-028，不提升 OCR、个性化、学生记录或学习效果状态 |
 | 0.1.34 | 2026-08-16 | 收口学生端首次使用/上传状态交互与事实空状态文案；新增默认关闭、仅接受 synthetic/desensitized 输入的 DeepSeek structured provider seam 和显式 smoke CLI，未接 API/Worker/UI、未执行真实模型调用。同步 PROJECT_MASTER v0.1.42、TDD v0.3.35、DESIGN v0.2.32、PUSH-027；真实 OCR、真实个性化、学习效果和报告仍 unresolved/deferred |

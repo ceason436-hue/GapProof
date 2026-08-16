@@ -43,6 +43,7 @@ export const CaseEventSchema = Type.Union([
     Type.Object({
       type: Type.Literal("evidence_ingested"),
       lowConfidenceRegionCount: Type.Integer({ minimum: 0 }),
+      requiresConfirmation: Type.Optional(Type.Boolean()),
     }),
   ]),
   Type.Intersect([

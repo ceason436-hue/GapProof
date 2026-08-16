@@ -3,7 +3,7 @@
 import {
   type AttemptView,
   type HypothesesView,
-  type SyntheticExtractionView,
+  type ExtractionView,
 } from "@gapproof/contracts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -51,6 +51,24 @@ export type ReviewState =
   | "error";
 
 const initialMessage = "正在准备识别内容。";
+
+export function reviewBoundaryCopy(source?: ExtractionView["recognitionSource"]) {
+  if (source === "real_alibaba") return {
+    title: "学习材料识别",
+    detail: "题目来自你上传的图片并由识别服务处理；请逐项核对后再继续",
+    tag: "来自上传图片",
+  };
+  if (source === "synthetic_fixture") return {
+    title: "体验识别内容",
+    detail: "本次不会读取上传图片中的文字，也不会保存为正式学习记录",
+    tag: "体验内容",
+  };
+  return {
+    title: "识别内容核对",
+    detail: "正在读取本次材料来源和识别状态",
+    tag: "待确认",
+  };
+}
 
 function wait(milliseconds: number, signal: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
@@ -103,7 +121,7 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
   const activeAbortRef = useRef<AbortController | null>(null);
   const [state, setState] = useState<ReviewState>("loading");
   const [message, setMessage] = useState(initialMessage);
-  const [extraction, setExtraction] = useState<SyntheticExtractionView | null>(null);
+  const [extraction, setExtraction] = useState<ExtractionView | null>(null);
   const [promptValues, setPromptValues] = useState<Record<string, string>>({});
   const [confirmedItemIds, setConfirmedItemIds] = useState<string[]>([]);
   const [hypotheses, setHypotheses] = useState<HypothesesView | null>(null);
@@ -221,6 +239,8 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
   const allConfirmed = Boolean(extraction?.items.length) && extraction?.items.every(item => confirmedItemIds.includes(item.itemId));
   const promptsValid = Boolean(extraction?.items.length) && extraction?.items.every(item => (promptValues[item.itemId] ?? item.prompt).trim().length > 0);
   const controlsLocked = ["confirming", "confirm_unknown", "run_next", "run_next_unknown", "probe_submitting", "probe_unknown", "intervention_unknown", "intervention_accepted"].includes(state);
+  const boundary = reviewBoundaryCopy(extraction?.recognitionSource);
+  const realExtraction = extraction?.recognitionSource === "real_alibaba";
 
   const submitExtraction = async () => {
     if (!extraction || !allConfirmed || controlsLocked) return;
@@ -317,8 +337,8 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
   return <AppShell actionHref="/student/today" actionLabel="返回今日">
     <section className="case-review-page" data-review-state={state} aria-labelledby="case-review-title">
       <div className="case-review-boundary" role="note">
-        <strong>体验识别内容</strong>
-        <span>本次不会读取上传图片中的文字，也不会保存为正式学习记录</span>
+        <strong>{boundary.title}</strong>
+        <span>{boundary.detail}</span>
       </div>
       <header className="case-review-heading">
         <h1 id="case-review-title">查看并确认识别内容</h1>
@@ -333,14 +353,14 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
         : null}
       {extraction && ["ready", "confirming", "confirm_conflict", "confirm_error", "confirm_unknown"].includes(state)
         ? <section className="case-review-panel" aria-labelledby="extraction-title">
-          <div className="case-review-panel-heading"><div><span>待确认内容</span><h2 id="extraction-title">逐项确认题干</h2></div><span className="case-review-tag">体验内容</span></div>
+          <div className="case-review-panel-heading"><div><span>待确认内容</span><h2 id="extraction-title">{realExtraction ? "逐页核对识别内容" : "逐项确认题干"}</h2></div><span className="case-review-tag">{boundary.tag}</span></div>
           <div className="case-review-items">
             {extraction.items.map(item => {
               const checked = confirmedItemIds.includes(item.itemId);
               return <article className="case-review-item" key={item.itemId}>
-                <label htmlFor={`prompt-${item.itemId}`}>题干</label>
+                <label htmlFor={`prompt-${item.itemId}`}>{realExtraction ? "本页识别内容" : "题干"}</label>
                 <textarea id={`prompt-${item.itemId}`} value={promptValues[item.itemId] ?? item.prompt} onChange={event => setPromptValues(previous => ({ ...previous, [item.itemId]: event.currentTarget.value }))} disabled={controlsLocked} rows={3}/>
-                <label className="case-review-confirm-item"><input type="checkbox" checked={checked} onChange={event => { const nextChecked = event.currentTarget.checked; setConfirmedItemIds(previous => nextChecked ? [...previous, item.itemId] : previous.filter(id => id !== item.itemId)); }} disabled={controlsLocked}/><span>我确认这一项题干</span></label>
+                <label className="case-review-confirm-item"><input type="checkbox" checked={checked} onChange={event => { const nextChecked = event.currentTarget.checked; setConfirmedItemIds(previous => nextChecked ? [...previous, item.itemId] : previous.filter(id => id !== item.itemId)); }} disabled={controlsLocked}/><span>{realExtraction ? "我已核对本页识别内容" : "我确认这一项题干"}</span></label>
               </article>;
             })}
           </div>

@@ -6,6 +6,8 @@ import {
   cases,
   demoClocks,
   learningEvidenceEvents,
+  ocrBatchPages,
+  ocrBatches,
   sourceAssets,
   studentProfileRevisions,
   students,
@@ -34,6 +36,8 @@ describeWithDatabase("PostgreSQL evidence ledger", () => {
 
   beforeAll(async () => {
     await database.db.delete(tasks);
+    await database.db.delete(ocrBatchPages);
+    await database.db.delete(ocrBatches);
     await database.db.delete(sourceAssets);
     await database.db.delete(learningEvidenceEvents);
     await database.db.delete(demoClocks);

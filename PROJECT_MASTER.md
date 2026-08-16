@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 项目主文档（Project Master / 单一事实源）"
 document_role: "跨窗口协作、产品规划、技术设计、比赛交付与状态管理的唯一主文档"
-version: "0.1.45"
+version: "0.1.46"
 status: "ACTIVE"
-current_stage: "PUSH-030 已发布：学生首次粗分、Today 可达性与复习入口已完成实现和集中门禁；真实 OCR/DeepSeek/错题本仍待后续纵向切片"
+current_stage: "PUSH-031 待发布：真实多图上传与阿里云教育 OCR 已接学生路径并强制逐页人工核对；真实材料诊断、DeepSeek 导师、身份恢复、错题本、计划/进步/报告仍待后续纵向切片"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 owner: "项目发起人"
@@ -147,7 +147,7 @@ next_action:
 
 `[FACT]` GOAI 无界应用赛道参赛手册列出的初赛截止日期为 2026-08-16；具体当天截止时刻、入口、文件大小及后续通知仍须在官网、提交系统或官方群再次核对。
 
-`[DECISION]` 当前处于：**项目本身 P0 合成纵向闭环已达到比赛验收口径，但 OCR 证据严格限定为醒目标注的 synthetic/fixture 工程 Demo。`bun run demo:stack` 可复现启动 Web、API、Worker、PostgreSQL 与本地上传存储；用户可从真实字节上传/基础检查，显式创建并绑定同一合成 Case，读取、修正和确认该 Case 的合成识别结果，再进入诊断、guided、D1 与 D7。D7 通过仅显示 `repair_verified`，失败最多两次规则化合成重排后进入 `support_required`。上传图片字节不参与 Fake OCR，真实阿里云 OCR 后置。异步报告不属于本轮验收；`report_ready` 仍只表示报告已生成、有权威引用且当前可读**。
+`[DECISION]` 当前处于：**真实多图上传、逐页质量检查、阿里云教育 OCR、同一 Case 识别结果读取和强制人工核对已经接入学生路径。真实上传字节由服务端读取并校验大小与 SHA-256 后发送 Provider；公开响应不含 Provider 原始响应、凭据、对象键、hash、精确置信度或 Provider item ID。OCR 文本只是待学生核对的证据，不是诊断、个性化或学习效果。核对后的后续诊断仍使用合成 Fixture，因此完整真实学习闭环尚未成立；DeepSeek 导师、真实身份/会话、跨刷新恢复、错题本、计划、进步和报告继续为最高优先级。**
 
 ### 1.2 已完成
 
@@ -171,7 +171,7 @@ next_action:
 - `[DECISION]` 教材和试题的完整 Markdown 转换结果仅保存在 `.gitignore` 覆盖的本地私有目录，不进入 Git；公开仓库只保存来源元数据、哈希、处理程序及项目原创/合成内容。
 - `[DECISION]` 答题卡与听力音频不进入 MVP 题库、RAG 或视觉 QA；原文件继续私有留存，不做永久删除。视觉核验只覆盖实际入选 Demo/题库的文件，且入选文件逐份核验，其余材料不要求逐份目视。
 - `[RESULT]` 已初始化 Bun workspace 的 `web`、`contracts`、`domain`、`db`、`jobs` 与 `testkit`；首个原创合成 Case 已保存为可版本化 Fixture。当前组合基线为 190 条快速测试、59 条真实 PostgreSQL/API/Worker 集成测试、98 条 apps/web 测试通过，TypeScript 严格类型检查、Next.js production build 和 migration drift 通过。
-- `[RESULT]` 已实现 `parse_paper` 的 TypeBox/JSON Schema、统一 `ToolResult` 契约与确定性 fake adapter；成功、低置信、超时、权限失败四类 Fixture 已通过 7 条契约测试。尚未接入真实 OCR Provider。
+- `[RESULT]` 已实现 `parse_paper` 的 TypeBox/JSON Schema、确定性 fake adapter 与阿里云官方教育 OCR adapter；真实批次 Worker 只从服务端存储读取并校验图片字节，按页归一化完整文本，真实 Case 固定进入 `awaiting_confirmation`。这证明真实 OCR 产品接线，不证明识别准确率、真实诊断或学习效果。
 - `[RESULT]` 已实现 Case 创建/读取、异步 `run-next`、识别确认和 `GET /v1/cases/{caseId}/hypotheses`。Worker 可从 `ready_for_diagnosis` 生成两条有证据引用的竞争性错因和一条确认小题，以 `hypotheses_generated` 将 Case 推进到 `probe_required`；查询响应不暴露答案键。
 - `[RESULT]` 已实现 `POST /v1/cases/{caseId}/attempts`：服务端从内部评分规则执行 `exact_choice_v1`，以 `probe_evaluated` 原子推进至 `intervention_ready`；答错时映射受支持的竞争性错因，答对时不虚构已确认错因。接口具备 Schema、幂等重放、并发去重、版本冲突和非法状态/选项保护。
 - `[RESULT]` Worker 已在 `intervention_ready` 调用确定性 `FakeBuildInterventionAdapter`，写入 `intervention_generated { taskId }` 证据事件、创建 3 步/8 分钟的 `guided_intervention` 任务，并将 Case 原子推进到 `intervention_active`；公开任务 DTO 不暴露候选错因 ID、答案键、工具 warnings 或内部版本。
@@ -182,7 +182,7 @@ next_action:
 - `[RESULT]` Today contracts 已扩展为服务端学生 `timeZone`、`currentTaskId: uuid | null` 与 guided/D1/D7 判别联合；服务端可选择 ready D1/D7/guided，前端三类任务均已按权威 Case 版本、UUIDv7、冲突重新确认和 `NETWORK_UNKNOWN` 锁定安全提交。
 - `[RESULT]` Today API 现始终返回真实只读 `overview`：学生时区下连续 7 日完成数、明确目标或 `null`、待确认数、最多两条脱敏进展与最早 scheduled D1/D7 检查。显式 API 页面严格消费该投影，缺失时受控报错且不回退 Mock；当前数据库没有权威周目标，因此 API 返回 `weeklyGoal:null`，不得从任务或视觉稿推断。
 - `[RESULT]` Today `overview.hasStartedJourney` 由服务端按学生是否存在未删除 Case 的事实投影。无 Case 时真实 API 页面显示首次使用引导，并提供上传材料与三题原创合成快速检查两条入口；有历史 Case 但无当前任务时显示中性完成状态。`/v1/quick-checks/synthetic` 由真实 API 返回 `synthetic_demo/original_fixture`，服务端私有答案按固定规则评分；结果强制 `learningRecordCreated:false`、`reportReady:false`，不创建 Case、不写学习证据或幂等记录，也不代表真实个性化或学习效果。
-- `[RESULT]` PostgreSQL `app.source_assets` 与 0006/0007 migrations 保存对象键、SHA-256、MIME、大小、所有权/保留期、处理状态、确定性质量结果与更新时间，不保存 OCR 文本或答案。共享上传/prepare/status/start contracts、Fastify 创建/内容 PUT/prepare/读取/显式启动、HMAC 短期授权、受控目录 `StorageAdapter`、质量 Worker 与 `/materials/new` 已形成真实字节上传、基础检查和显式创建/绑定合成 Case 闭环；公开响应不含对象键、token、内部文件名、hash 或 OCR 内容。当前实现是本地 Demo 存储与 `image-header-v1`，不是生产 OSS、完整质量模型或真实 OCR；上传字节不参与 Fake OCR。
+- `[RESULT]` PostgreSQL `app.source_assets` 与 0006/0007 migrations 保存对象键、SHA-256、MIME、大小、所有权/保留期、处理状态、确定性质量结果与更新时间；0011 增加有序真实 OCR 批次和逐页状态。共享 contracts、Fastify API、HMAC 短期授权、受控 `StorageAdapter`、质量 Worker、真实 OCR Worker 与 `/materials/new` 已形成多图上传、检查、真实识别和人工核对路径；公开响应不含对象键、token、内部文件名、hash、Provider 原始响应或精确置信度。当前存储仍是本地 Demo Adapter，非生产 OSS；原图确认后 24h 删除和主动删除尚未实现。
 - `[RESULT]` `run-next` Fake OCR 由 API 入队前与 Worker 执行时双重守卫，只允许 `simulation=true && synthetic=true` 的 Demo Case；非 Demo 返回 `DEMO_CASE_REQUIRED`。Worker 将合成 extraction 持久化到同一 Case 证据；`GET /v1/cases/{caseId}/extraction` 与 `/materials/{caseId}/review` 可读取、修正和确认同一 Case，并继续诊断/干预导航。页面持续披露 `synthetic_fixture`、上传字节未用于识别和真实 Provider 后置；独立 `/materials/demo/review` 仍只是零网络 Fixture。
 
 ### 1.3 尚未完成或尚未验证
@@ -2063,8 +2063,9 @@ review_date:
 | 合成 Case | `[PROTOTYPE]` | 已完成 1 个原创合成 Case 及低置信、复测失败重排、D+7 成功分支；仍需扩充同题同错不同根因与回归集 | 数据 Schema/教材映射 |
 | 学生“今日”页视觉基线 | `[PROTOTYPE]` | 已选定 Stitch 桌面稿；默认 API、真实概览及 guided、ready D1、ready D7 安全作答已通过技术门禁，合成 Mock 仅显式启用；冻结书本越界裁切保持不变 | DESIGN v0.2.23 |
 | 其余学生/家长关键页设计 | `[PLANNED]` | 覆盖主闭环并遵循今日页设计准则 | 视觉基线 |
-| 可点击 Thin Slice | `[PROTOTYPE]` | 真实 API 本地栈已覆盖上传/基础检查、显式创建并绑定同一 Case、合成识别读取/修正/确认、诊断、guided 与 D1/D7；全程披露 synthetic/fixture，上传字节未用于识别 | 真实 OCR Provider、删除策略与真实样本基准 |
-| 学生首次粗分与任务可达性 | `[PROTOTYPE]` | 已持久化明确的年级、学科、学期、地区、学习状态，并使用版本/幂等修订记录；未完成时 Today 仅引导设置范围。顶部无效按钮已移除，ready D1/D7 重新读取 API 后可作答 | 多图真实 OCR、真实导师、计划/错题本/报告 |
+| 可点击 Thin Slice | `[PROTOTYPE]` | 真实 API 本地栈已覆盖多图上传/逐页检查、移除/替换/重试、阿里云教育 OCR、同一 Case 逐页核对；真实来源与 synthetic Fixture 分离，真实 OCR 强制人工确认 | 真实材料诊断、身份与刷新恢复、原图 24h/主动删除、30–50 页基准 |
+| 学生首次粗分与任务可达性 | `[PROTOTYPE]` | 已持久化明确的年级、学科、学期、地区、学习状态，并使用版本/幂等修订记录；未完成时 Today 仅引导设置范围。顶部无效按钮已移除，ready D1/D7 重新读取 API 后可作答 | 真实身份/会话、DeepSeek 导师、计划/错题本/报告 |
+| 真实学生端交付计划 | `[IN PROGRESS]` | P0-A 身份/会话与跨刷新恢复；P0-B 已确认材料驱动的真实诊断；P0-C 受约束 DeepSeek 苏格拉底导师；P0-D 错题本/重做；P0-E 真实计划、进步与事实报告；P0-F 全入口、失败态、键盘/移动端与真实 Provider 集中验收 | 各阶段拆为互不争用 bounded slice 并行实施，协调器独占集中门禁、四文档、Push Log 与发布 |
 | 数据与合规页 | `[PLANNED]` | 类型、来源、授权、脱敏、删除、边界 | 数据选择 |
 | Demo 视频 | `[PLANNED]` | 3–4 分钟、事件回放标识、备用 | 原型稳定 |
 | 一致性审计 | `[PLANNED]` | 简介/PPT/视频/代码状态一致 | 全材料 |
@@ -2121,6 +2122,11 @@ review_date:
 ---
 
 ## 30. 变更日志
+
+### v0.1.46 — 2026-08-16
+
+- 将真实多图上传、逐页质量检查、移除/替换/重试、阿里云教育 OCR、同一 Case 逐页核对和强制人工确认登记为已实现的产品路径；Provider 原始响应、凭据、对象键、hash、精确置信度和内部 ID 不进入学生响应。
+- 明确 OCR 文本仍是待核对证据；后续诊断仍含合成 Fixture，不能表述为真实诊断、个性化或学习效果。下一阶段按身份/恢复、真实材料诊断、DeepSeek 苏格拉底导师、错题本、计划/进步/报告和全路径验收推进；同步 PRD v0.1.38、TDD v0.3.39、DESIGN v0.2.36 与 PUSH-031。
 
 ### v0.1.44 — 2026-08-16
 

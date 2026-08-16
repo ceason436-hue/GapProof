@@ -91,6 +91,20 @@ describe("case state machine", () => {
     expect(next.status).toBe("awaiting_confirmation");
   });
 
+  it("requires confirmation when the evidence source explicitly requests review", () => {
+    const next = transitionCase(
+      createCase("case-1"),
+      event({
+        eventId: "evt-real-review",
+        type: "evidence_ingested",
+        lowConfidenceRegionCount: 0,
+        requiresConfirmation: true,
+      }),
+    );
+
+    expect(next.status).toBe("awaiting_confirmation");
+  });
+
   it("requires at least two competing hypotheses before selecting a probe", () => {
     let aggregate = createCase("case-1");
     aggregate = transitionCase(

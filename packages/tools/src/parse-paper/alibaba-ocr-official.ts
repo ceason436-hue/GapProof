@@ -124,7 +124,7 @@ export function normalizeAlibabaEduPaperResponse(
   const rawWords = Array.isArray(raw.prism_wordsInfo)
     ? raw.prism_wordsInfo
     : [];
-  const items: ParsePaperOutput["items"] = [];
+  const wordItems: ParsePaperOutput["items"] = [];
   for (const rawWord of rawWords) {
     if (!isRecord(rawWord)) continue;
     const prompt =
@@ -144,8 +144,8 @@ export function normalizeAlibabaEduPaperResponse(
     ) {
       continue;
     }
-    items.push({
-      id: `alibaba-word-${items.length + 1}`,
+    wordItems.push({
+      id: `alibaba-word-${wordItems.length + 1}`,
       prompt,
       coordinates: {
         page: 1,
@@ -159,10 +159,19 @@ export function normalizeAlibabaEduPaperResponse(
   }
 
   const confidence =
-    items.length === 0
+    wordItems.length === 0
       ? 0
-      : items.reduce((sum, item) => sum + item.confidence, 0) /
-        items.length;
+      : wordItems.reduce((sum, item) => sum + item.confidence, 0) /
+        wordItems.length;
+  const pageContent = typeof raw.content === "string" ? raw.content.trim() : "";
+  const fallbackContent = wordItems.map(({ prompt }) => prompt).join("\n").trim();
+  const prompt = pageContent.length > 0 ? pageContent : fallbackContent;
+  const items: ParsePaperOutput["items"] = prompt.length === 0 ? [] : [{
+    id: "alibaba-page-1",
+    prompt,
+    coordinates: { page: 1, x: 0, y: 0, width, height },
+    confidence,
+  }];
   return {
     pages: [{ page: 1, width, height }],
     items,

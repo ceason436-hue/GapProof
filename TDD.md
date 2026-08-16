@@ -2,15 +2,15 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.38"
+version: "0.3.39"
 status: "DRAFT_FOR_IMPLEMENTATION"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.45"
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.37"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.46"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.38"
 ---
 
 # 知隙 GapProof 技术设计文档（TDD）
@@ -1209,7 +1209,7 @@ Serverless 很适合短 API 和自动扩容，但 OCR、多轮模型、报告、
 - 新增 `Clock/SystemClock/FixedClock`、`RetestDueJobData { caseId, taskId }`、`app.demo_clocks`、`demo_clock_advanced` 与迁移 `packages/db/drizzle/0004_goofy_vindicator.sql`；虚拟时钟按 Case 隔离、带版本并受环境开关保护。
 - 已实现任务详情、Today `timeZone/currentTaskId/overview` 与 guided/D1/D7 判别联合；`currentTaskId` 选择 ready D1/D7/guided，overview 为真实只读投影。guided、D1、D7 前端均按权威 Case 版本和受控写语义可安全作答。
 - 已实现 guided 安全完成与 D1/D7 `POST /v1/tasks/{taskId}/attempts`：权威 Case 版本、UUIDv7 用户意图、私有 `exact-choice-v1` 评分、D7 144h + 12h 调度、`repair_verified`、持久 `replan_count`、两次策略与 `support_required` 封顶。幂等重放/旧 D1 namespace、并发去重、乐观锁、事务回滚、不再入队与公开响应脱敏均有测试。
-- 已实现 `app.source_assets`、冻结 `asset_type/asset_processing_status` 与 0006/0007 migrations；共享上传/prepare/status/start contracts、幂等 API、HMAC 短期 token、同源内容 PUT、本地目录 StorageAdapter、质量 Worker 与前端 `/materials/new` 已形成真实字节上传、确定性基础检查和显式创建/绑定合成 Case 闭环。上传与检查本身不会自动创建 Case；本地目录适配器与 `image-header-v1` 不是生产 OSS、完整图片质量模型或真实 OCR。
+- 已实现 `app.source_assets`、`app.ocr_batches`、`app.ocr_batch_pages` 与 0006/0007/0011 migrations；共享上传/prepare/status/真实批次 contracts、幂等 API、HMAC 短期 token、同源内容 PUT、本地 StorageAdapter、质量 Worker、真实 OCR Worker 与 `/materials/new` 已形成多图上传、逐页确定性基础检查、显式处理同意/监护确认、非合成 Case 和人工核对路径。上传与检查本身不会自动启动识别；本地目录适配器与 `image-header-v1` 不是生产 OSS 或完整图片质量模型。
 - 遗留 `run-next` Fake OCR 现只允许 `simulation=true && synthetic=true` 的 Demo Case：API 在入队前拒绝，Worker 在执行前再次拒绝；非 Demo 返回 `DEMO_CASE_REQUIRED` 且不入队、不写证据。该路径仍是固定合成 asset 的 `fake_ocr` / `fake-parse-paper-v1`，不是 OCR Provider。
 - `/materials/demo/review` 是独立无网络合成页面，所有修改和“演示确认”只留在浏览器组件状态；受控 Fixture 断言零 `/api/v1` 请求并覆盖确认、空态、错误态和敏感内部字段缺席。它不消费上传 asset、不创建/推进 Case，与已实现的同一 Case `/materials/{caseId}/review` 严格分离。
 - 已冻结 `SyntheticExtractionView` 与 `GET /v1/cases/{caseId}/extraction`：只允许同一 Case 的 `awaiting_confirmation` 合成证据，返回 `stateVersion`、`recognitionSource:synthetic_fixture`、`uploadedAssetUsedForRecognition:false` 与公开题干，不暴露工具 warnings、答案键或内部置信度。确认仍使用既有 authoritative version、UUIDv7 幂等键、修正项越界校验与冲突保护。
@@ -1224,7 +1224,7 @@ Serverless 很适合短 API 和自动扩容，但 OCR、多轮模型、报告、
 - `findLatestCaseEvidenceEventByType` 以 `occurred_at DESC, created_at DESC, UUIDv7 id DESC` 确定性选择最新证据，避免两次复测共享业务时钟时第二次 replan 误读第一次事件。
 - 当前证据为 190 条快速测试、55 条 tools focused、59 条真实 PostgreSQL/API/Worker 集成测试、98 条 apps/web 测试、migration drift、双 TypeScript 严格类型检查、Next.js production build、真实栈 smoke 和四张更新截图复核通过。上传与首次使用/三题检查 Playwright 在当前 Desktop 环境的浏览器进程启动握手阶段超时，页面未执行，不计为通过；既有已发布浏览器基线不因此改写。DeepSeek seam 默认关闭，仅接受 synthetic/desensitized 输入，未接 API/Worker/UI，真实模型 smoke 未执行；官方 OCR 开发路径同样没有生产路由。
 
-该快照不等于真实 OCR Phase A 完成：真实图片字节可上传到受控本地目录，前端可经监护确认显式创建/绑定同一合成 Case、读取/确认该 Case 的 synthetic extraction 并继续规则化学习路径；但真实 OCR、真实 AI 干预、真实题库、通知、报告与真实模型 Provider 仍未实现。上传字节不参与 Fake OCR；合成确认页与重排仅是规则化工程骨架，不是现实识别或个性化内容。
+当前真实 OCR Phase A 已形成产品路径：`ocr_batches/ocr_batch_pages` 保存有序多页批次与独立页面状态；API 支持创建、查询、添加、移除、替换、启动与重试；Worker 从服务端存储读取并校验字节、大小和 SHA-256 后调用阿里云教育 OCR，只持久化归一化页面文本和安全错误类。真实 Case 固定 `simulation:false/synthetic:false`，`evidence_ingested.requiresConfirmation:true` 保证进入 `awaiting_confirmation`。Provider 原始响应、凭据、Provider item ID 与精确置信度不持久化或公开。真实诊断、DeepSeek 干预、真实题库、身份服务、通知、计划/进步/报告仍未实现。
 
 ### 21.1 Phase A：Thin Slice（先证明闭环）
 
@@ -1307,7 +1307,7 @@ LoadCaseContext
 
 | 工具 | 当前开发状态 |
 |---|---|
-| `parse_paper` | TypeBox/JSON Schema、统一 `ToolResult`、确定性 fake adapter 与成功/低置信/超时/权限失败契约测试已实现；真实 OCR Provider 未接入 |
+| `parse_paper` | TypeBox/JSON Schema、确定性 fake adapter 与阿里云官方教育 OCR adapter 已实现；真实多页 Worker 已接上传与同一 Case，页面级归一化并强制人工确认。正式 30–50 页质量基准仍未完成 |
 | `form_hypotheses`、`select_probe` | 已合并为当前确定性 fake 诊断步骤：生成两个有证据引用的竞争性候选并选择一条确认小题；真实模型、课程检索和题库选择未接入 |
 | `redact_pii`、`retrieve_curriculum` | 仍按第一阶段计划完成接口、Schema、fake/mock、错误处理并接入 MVP 主链 |
 | `score_objective`、`update_mastery` | 已有复测确定性评分与受状态机约束的 mastery 状态；真实内容效果仍未验证 |
@@ -1614,6 +1614,7 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 
 | Push ID | 日期 | 分支 | 状态 | 提交摘要 | 主要内容 | 验证 |
 |---|---|---|---|---|---|---|
+| PUSH-031 | 2026-08-16 | `main` | `pushed` | `feat: connect real multi-page OCR review` | 新增有序 OCR 批次/页面迁移、幂等添加/移除/替换/启动/重试、服务端真实字节校验和阿里云教育 OCR Worker；学生端支持多选、继续添加、逐页状态/替换/移除/重试、处理同意与监护确认。真实来源写入非合成同一 Case，页面级文本强制人工核对；不存储或公开 Provider 原始响应、凭据、内部 ID 或精确置信度。真实材料诊断、DeepSeek 导师、身份恢复、错题本、计划/进步/报告和学习效果未提升 | 200 fast、112 Web、62 PostgreSQL/API/Worker、workspace 与 Web TypeScript、Next production build、`git diff --check`、迁移顺序/schema 集成、真实 OCR 产品 smoke 与凭据/隐私扫描通过；Drizzle `check` 因本地版本兼容检查未执行成功，桌面内置浏览器因 URL 安全策略未能重载 localhost，不计为通过；授权测试材料、`.env`、`next-env.d.ts` 与本地 agent 文件未纳入暂存 |
 | PUSH-030 | 2026-08-16 | `main` | `pushed` | `feat: add explicit student setup and actionable retests` | 新增版本化学生粗分档案与 `/setup` 五项明确选择，Today 未完成时只引导设置范围；ready D1/D7 通过重新读取的同一 API 响应安全打开作答，scheduled/completed 不再呈现伪按钮；顶栏移除无行为的案例/角色切换。真实 OCR、DeepSeek、计划、错题本、报告和学习效果未提升 | 196 fast、111 Web、档案 API 幂等/冲突集成、schema 集成、workspace TypeScript、Next production build、`git diff --check`、运行中 Today→/setup 浏览器核验通过；实现提交 `2fc6753` 已推送至 `origin/main` |
 | PUSH-029 | 2026-08-16 | `main` | `pushed` | `fix: match live Today to Stitch details` | 按 `today-final.stitch.html/png` 精确复原真实 API Today 的学习足迹与今日概览：移除额外目标卡并把目标摘要放回页头，恢复单层今日描边/标签、40px 视觉间距、16px 标题间距、160px 双卡和原图标装饰；真实数值仍来自 API，不复制 Mock 学习事实 | 105 apps/web、workspace/web TypeScript、Next production build、`git diff --check`、6 状态 × 4 视口真实 API 精确 DOM Token/几何/横向溢出/截图门禁及实时页面核验通过；`.env` 与授权 `reference/test-materials/` 未纳入暂存；同轮推送并核对本地、`origin/main` 与 GitHub refs 一致 |
 | PUSH-028 | 2026-08-16 | `main` | `pushed` | `fix: reunify live Today with frozen dashboard` | 修复真实 API Today 与已确认 Mock 视觉骨架分叉：active、无当前任务和已完成统一使用深色 Hero、事实概览，以及无整列外框的学习足迹/稍后继续/下次检查右栏；当前 D1/D7 不在“稍后继续”重复展示；guided、D1、D7 仅在服务端确认成功后刷新权威 Today。Fixture 均为 synthetic，不形成真实学生记录；不提升 OCR、个性化或学习效果状态 | 105 apps/web、workspace/web TypeScript、Next production build、`git diff --check`、6 状态 × 4 视口真实 API DOM 几何/横向溢出/截图门禁及桌面/移动人工复核通过；`.env` 与授权 `reference/test-materials/` 未纳入暂存；同轮推送后核对本地、`origin/main` 与 GitHub refs 一致 |
@@ -1646,6 +1647,11 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-026 | 2026-08-16 | `main` | `pushed` | `fix: decouple demo readiness from product copy` | Demo 栈 Web readiness 从已移除的“真实 API 模式”可见文案改为稳定 `today-page` 页面结构信号，防止产品文案治理后 90 秒误判并停止 API/Worker/Web 子进程 | root typecheck、`git diff --check`、Web 200、API Today 200 且含 overview、Demo 父进程持续存活、3000/4000 监听及生成残留精确清理通过；同轮推送后核对本地/远端 SHA 一致 |
 
 ## 27. 变更日志
+
+### v0.3.39 — 2026-08-16
+
+- 新增 `0011_real_ocr_batches`、批次 repository/contracts/API、`ocr.real_batch` Worker 和阿里云官方教育 OCR 产品接线；真实字节经服务端大小/SHA-256 校验，错误分类稳定，重试只处理未解决页。
+- 真实 OCR 写入非合成同一 Case，并通过 `requiresConfirmation:true` 强制进入人工核对；学生公开响应只含 GapProof 页面 ID 和归一化文本，不含 Provider 原始响应、凭据、内部 ID 或精确置信度。同步 PROJECT_MASTER v0.1.46、PRD v0.1.38、DESIGN v0.2.36 与 PUSH-031；真实诊断、DeepSeek 导师及学习效果不提升。
 
 ### v0.3.37 — 2026-08-16
 

@@ -3,3 +3,4 @@ export * from "./replan-worker.ts";
 export * from "./run-next-worker.ts";
 export * from "./run-next-guard.ts";
 export * from "./source-asset-quality-worker.ts";
+export * from "./real-ocr-batch-worker.ts";

@@ -8,6 +8,7 @@ export * from "./run-migrations.ts";
 export * from "./schema.ts";
 export * from "./source-asset-repository.ts";
 export * from "./source-asset-inspection.ts";
+export * from "./ocr-batch-repository.ts";
 export * from "./local-demo-seed.ts";
 export * from "./task-repository.ts";
 export * from "./student-profile-repository.ts";

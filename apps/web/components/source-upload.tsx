@@ -1,491 +1,161 @@
 "use client";
 
-import {
-  InitiatedSourceAssetUploadViewSchema,
-  SourceAssetPrepareViewSchema,
-  UploadedSourceAssetViewSchema,
-  type InitiatedSourceAssetUploadView,
-  type SourceAssetProcessingView,
-} from "@gapproof/contracts";
+import { AddedRealOcrBatchPageViewSchema, RealOcrBatchViewSchema, SourceAssetPrepareViewSchema, StartRealOcrBatchViewSchema, UploadedSourceAssetViewSchema, type SourceAssetProcessingView } from "@gapproof/contracts";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiPost, apiPut, ApiClientError } from "@/lib/api-client";
+import { apiDelete, apiPost, apiPut, ApiClientError } from "@/lib/api-client";
 import { createBrowserUuidV7 } from "@/lib/browser-uuidv7";
-import {
-  ACCEPTED_SOURCE_UPLOAD_TYPES,
-  buildSourceAssetPrepareRequest,
-  buildSourceAssetUploadRequest,
-  sha256Hex,
-  validateSourceUploadFile,
-} from "@/lib/source-upload";
-import {
-  isTerminalSourceInspectionStatus,
-  pollSourceAssetInspection,
-  sourceInspectionMessage,
-} from "@/lib/source-inspection";
-import {
-  SYNTHETIC_RECOGNITION_NOTICE,
-  SYNTHETIC_RECOGNITION_SUCCESS,
-  SYNTHETIC_RECOGNITION_SUCCESS_DETAIL,
-  createSyntheticRecognitionIntent,
-  isSyntheticRecognitionRetryUnknown,
-  startSyntheticRecognition,
-  syntheticRecognitionErrorMessage,
-} from "@/lib/source-recognition";
+import { ACCEPTED_SOURCE_UPLOAD_TYPES, buildSourceAssetPrepareRequest, sha256Hex, validateSourceUploadFile } from "@/lib/source-upload";
+import { isTerminalSourceInspectionStatus, pollSourceAssetInspection, sourceInspectionMessage } from "@/lib/source-inspection";
 import { beginSourceUploadLifecycle } from "@/lib/source-upload-lifecycle";
-import { uploadJourneyPosition } from "@/lib/source-upload-journey";
 import { AppShell } from "./app-shell";
 
-type UploadStatus =
-  | "idle"
-  | "hashing"
-  | "creating"
-  | "uploading"
-  | "preparing"
-  | "queued"
-  | "processing"
-  | "needs_confirmation"
-  | "succeeded"
-  | "retryable_error"
-  | "failed"
-  | "timeout"
-  | "error";
+type PageStatus = "waiting" | "hashing" | "creating" | "uploading" | "checking" | "passed" | "needs_confirmation" | "retryable_error" | "failed";
+type QueueItem = { clientId: string; file: File; previewUrl: string; status: PageStatus; message: string; pageId?: string; assetId?: string | undefined; addKey?: string | undefined; uploaded?: boolean; replacing?: boolean };
+const busy = (status: PageStatus) => ["hashing", "creating", "uploading", "checking"].includes(status);
+const passed = (status: PageStatus) => status === "passed";
 
-type UploadIntent = {
-  file: File;
-  idempotencyKey: string;
-  body: ReturnType<typeof buildSourceAssetUploadRequest>;
-  target?: InitiatedSourceAssetUploadView["upload"];
-  assetId?: string;
-};
-
-type StartRecognitionStatus = "idle" | "starting" | "success" | "error" | "network_unknown";
-
-const uploadJourneyLabels = ["选择图片", "安全上传", "基础检查", "准备内容", "确认题目"] as const;
-
-function formatUploadError(error: unknown): string {
-  if (error instanceof ApiClientError) return "上传或图片检查没有完成，请稍后重试。";
-  if (error instanceof Error && error.message === "UPLOAD_RESPONSE_MISMATCH") {
-    return "文件信息与本次上传不一致，请重新选择图片。";
-  }
-  if (error instanceof Error && error.message === "SOURCE_INSPECTION_ASSET_MISMATCH") {
-    return "图片检查结果与本次上传不一致，请重新选择图片。";
-  }
-  return "上传结果暂时未知，请确认网络后重试。";
-}
-
-function UploadStatusMessage({ status, message }: { status: UploadStatus; message: string }) {
-  const isError = status === "error" || status === "needs_confirmation" || status === "retryable_error" || status === "failed";
-  const isSuccess = status === "succeeded";
-  return <p
-    className={`upload-status-message ${isError ? "error" : isSuccess ? "success" : ""}`}
-    aria-live={isError ? "assertive" : "polite"}
-    role={isError ? "alert" : undefined}
-    data-upload-status={status}
-  >{message}</p>;
+function safeError(error: unknown) {
+  if (error instanceof ApiClientError && error.response.error.retryable) return "这张图片暂时没有处理完成，可以重试。";
+  if (error instanceof ApiClientError) return "这张图片暂时无法完成，请重新选择或稍后重试。";
+  return "处理结果暂时未知，请确认网络后重试。";
 }
 
 export function SourceUpload({ studentId }: { studentId: string }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
-  const intentRef = useRef<UploadIntent | null>(null);
-  const activeAbortRef = useRef<AbortController | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const itemsRef = useRef<QueueItem[]>([]);
+  const batchRef = useRef<{ batchId: string; caseId: string } | null>(null);
   const mountedRef = useRef(true);
-  const [file, setFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [status, setStatus] = useState<UploadStatus>("idle");
-  const [message, setMessage] = useState("请选择一张图片，再开始上传。支持 JPG、PNG 或 WebP，大小 1B–10MiB。");
-  const [qualityPassed, setQualityPassed] = useState(false);
+  const [items, setItems] = useState<QueueItem[]>([]);
+  const [message, setMessage] = useState("选择一张或多张图片后，再开始安全上传。每张图片都要通过基础检查。");
   const [guardianConfirmed, setGuardianConfirmed] = useState(false);
-  const [startRecognitionStatus, setStartRecognitionStatus] = useState<StartRecognitionStatus>("idle");
-  const [startRecognitionMessage, setStartRecognitionMessage] = useState("");
-  const [recognitionCaseId, setRecognitionCaseId] = useState<string | null>(null);
-  const startIntentRef = useRef<ReturnType<typeof createSyntheticRecognitionIntent> | null>(null);
+  const [noticeAccepted, setNoticeAccepted] = useState(false);
+  const [startStatus, setStartStatus] = useState<"idle" | "starting" | "success" | "unknown" | "error">("idle");
+  const [caseId, setCaseId] = useState<string | null>(null);
+  const updateItems = (update: (current: QueueItem[]) => QueueItem[]) => {
+    const next = update(itemsRef.current); itemsRef.current = next;
+    if (mountedRef.current) setItems(next);
+    return next;
+  };
+  const updateItem = (clientId: string, patch: Partial<QueueItem>) => updateItems(current => current.map(item => item.clientId === clientId ? { ...item, ...patch } : item));
 
   useEffect(() => {
     mountedRef.current = true;
-    const cleanupLifecycle = beginSourceUploadLifecycle(mountedRef, () => {
-      activeAbortRef.current?.abort("PAGE_LEFT");
-    });
-    const stopWhenHidden = () => {
-      if (document.visibilityState === "hidden") activeAbortRef.current?.abort("PAGE_HIDDEN");
-    };
-    document.addEventListener("visibilitychange", stopWhenHidden);
-    return () => {
-      cleanupLifecycle();
-      document.removeEventListener("visibilitychange", stopWhenHidden);
-    };
+    const cleanup = beginSourceUploadLifecycle(mountedRef, () => abortRef.current?.abort("PAGE_LEFT"));
+    return () => { cleanup(); for (const item of itemsRef.current) URL.revokeObjectURL(item.previewUrl); };
   }, []);
 
-  useEffect(() => {
-    if (!file) { setPreviewUrl(null); return; }
-    const nextUrl = URL.createObjectURL(file);
-    setPreviewUrl(nextUrl);
-    return () => URL.revokeObjectURL(nextUrl);
-  }, [file]);
-
-  const setSafeState = (nextStatus: UploadStatus, nextMessage: string) => {
-    if (!mountedRef.current) return;
-    setStatus(nextStatus);
-    setMessage(nextMessage);
+  const addFiles = (files: FileList | null) => {
+    if (!files?.length) return;
+    const additions = Array.from(files).map(file => {
+      const valid = validateSourceUploadFile(file);
+      return { clientId: createBrowserUuidV7(), file, previewUrl: URL.createObjectURL(file), status: valid.ok ? "waiting" as const : "failed" as const, message: valid.ok ? "尚未上传。" : valid.message };
+    });
+    updateItems(current => [...current, ...additions]);
+    setMessage("图片已加入队列；开始上传后会逐张检查。识别不会自动开始。");
   };
-
-  const isBusy = status === "hashing" || status === "creating" || status === "uploading" || status === "preparing" || status === "queued" || status === "processing";
-  const currentValidation = file ? validateSourceUploadFile(file) : { ok: false as const, message: "" };
-  const canSubmit = file !== null && currentValidation.ok && !isBusy && status !== "succeeded" && status !== "needs_confirmation" && status !== "failed";
-
-  const chooseFile = (nextFile: File | null) => {
-    intentRef.current = null;
-    startIntentRef.current = null;
-    activeAbortRef.current?.abort("NEW_FILE");
-    setQualityPassed(false);
-    setGuardianConfirmed(false);
-    setStartRecognitionStatus("idle");
-    setStartRecognitionMessage("");
-    setRecognitionCaseId(null);
-    setFile(nextFile);
-    if (!nextFile) {
-      setSafeState("idle", "请选择一张图片，再开始上传。支持 JPG、PNG 或 WebP，大小 1B–10MiB。");
-      return;
-    }
-    const validation = validateSourceUploadFile(nextFile);
-    if (!validation.ok) {
-      setSafeState("error", validation.message);
-      return;
-    }
-    setSafeState("idle", "已选择 1 张图片；点击“开始上传”后才会上传。");
-  };
-
-  const showInspectionView = (view: SourceAssetProcessingView) => {
-    setQualityPassed(view.processingStatus === "succeeded" && view.quality?.status === "passed");
-    switch (view.processingStatus) {
-      case "uploaded":
-        setSafeState("preparing", sourceInspectionMessage(view));
-        break;
-      case "queued":
-        setSafeState("queued", sourceInspectionMessage(view));
-        break;
-      case "processing":
-        setSafeState("processing", sourceInspectionMessage(view));
-        break;
-      case "needs_confirmation":
-        setSafeState("needs_confirmation", sourceInspectionMessage(view));
-        break;
-      case "succeeded":
-        setSafeState("succeeded", sourceInspectionMessage(view));
-        break;
-      case "retryable_error":
-        setSafeState("retryable_error", sourceInspectionMessage(view));
-        break;
-      case "failed":
-        setSafeState("failed", sourceInspectionMessage(view));
-        break;
-    }
-  };
-
-  const startRecognition = async () => {
-    const assetId = intentRef.current?.assetId;
-    if (!assetId || !qualityPassed || !guardianConfirmed || startRecognitionStatus === "starting" || startRecognitionStatus === "success" || startRecognitionStatus === "network_unknown") return;
-
-    const intent = createSyntheticRecognitionIntent();
-    startIntentRef.current = intent;
-    setStartRecognitionStatus("starting");
-    setStartRecognitionMessage("正在准备体验识别内容。本次不会读取上传图片中的文字。");
-    try {
-      const response = await startSyntheticRecognition(assetId, intent);
-      if (response.data.assetId !== assetId) throw new Error("START_RECOGNITION_ASSET_MISMATCH");
-      setRecognitionCaseId(response.data.caseId);
-      setStartRecognitionStatus("success");
-      setStartRecognitionMessage(SYNTHETIC_RECOGNITION_SUCCESS);
-    } catch (error) {
-      if (!mountedRef.current) return;
-      if (isSyntheticRecognitionRetryUnknown(error)) {
-        setStartRecognitionStatus("network_unknown");
-        setStartRecognitionMessage(syntheticRecognitionErrorMessage(error));
+  const openPicker = () => { if (inputRef.current) { inputRef.current.value = ""; inputRef.current.click(); } };
+  const removeItem = async (clientId: string) => {
+    const item = itemsRef.current.find(candidate => candidate.clientId === clientId);
+    if (!item || busy(item.status)) return;
+    const batch = batchRef.current;
+    if (batch && item.pageId) {
+      updateItem(clientId, { status: "creating", message: "正在移除这张图片…" });
+      try {
+        await apiDelete(`/api/v1/ocr-batches/${batch.batchId}/pages/${item.pageId}`, RealOcrBatchViewSchema, createBrowserUuidV7());
+      } catch (error) {
+        updateItem(clientId, { status: "retryable_error", message: safeError(error) });
         return;
       }
-      setStartRecognitionStatus("error");
-      setStartRecognitionMessage(syntheticRecognitionErrorMessage(error));
     }
+    URL.revokeObjectURL(item.previewUrl); updateItems(current => current.filter(candidate => candidate.clientId !== clientId));
   };
-
-  const inspectIntent = async (intent: UploadIntent, signal: AbortSignal) => {
-    if (!intent.assetId) throw new Error("SOURCE_INSPECTION_ASSET_MISSING");
-    setSafeState("processing", "正在检查图片。识别尚未开始。");
-    await pollSourceAssetInspection({
-      assetId: intent.assetId,
-      signal,
-      onView: showInspectionView,
+  const replaceItem = (clientId: string, file: File | undefined) => {
+    if (!file) return;
+    const item = itemsRef.current.find(candidate => candidate.clientId === clientId);
+    if (!item || busy(item.status)) return;
+    const valid = validateSourceUploadFile(file);
+    URL.revokeObjectURL(item.previewUrl);
+    updateItem(clientId, {
+      file,
+      previewUrl: URL.createObjectURL(file),
+      status: valid.ok ? "waiting" : "failed",
+      message: valid.ok ? "新图片尚未上传。" : valid.message,
+      assetId: undefined,
+      addKey: undefined,
+      uploaded: false,
+      replacing: Boolean(item.pageId),
     });
   };
-
-  const runIntent = async (intent: UploadIntent, signal: AbortSignal) => {
+  const showInspection = (clientId: string, view: SourceAssetProcessingView) => {
+    const status: PageStatus = view.processingStatus === "succeeded" && view.quality?.status === "passed" ? "passed" : view.processingStatus === "needs_confirmation" ? "needs_confirmation" : view.processingStatus === "retryable_error" ? "retryable_error" : view.processingStatus === "failed" ? "failed" : "checking";
+    updateItem(clientId, { status, message: status === "passed" ? "图片检查通过，等待开始识别。" : sourceInspectionMessage(view) });
+  };
+  const ensureBatch = async (signal: AbortSignal) => {
+    if (batchRef.current) return batchRef.current;
+    const response = await apiPost("/api/v1/ocr-batches", RealOcrBatchViewSchema, { studentId }, createBrowserUuidV7(), signal);
+    const created = { batchId: response.data.batchId, caseId: response.data.caseId }; batchRef.current = created; return created;
+  };
+  const runPage = async (clientId: string, batchId: string, signal: AbortSignal) => {
+    const initial = itemsRef.current.find(item => item.clientId === clientId);
+    if (!initial || initial.status === "failed" || passed(initial.status)) return;
     try {
-      let target = intent.target;
-      if (!target) {
-        setSafeState("creating", "正在准备上传……");
-        const initiated = await apiPost(
-          "/api/v1/source-assets/uploads",
-          InitiatedSourceAssetUploadViewSchema,
-          intent.body,
-          intent.idempotencyKey,
+      let assetId = initial.assetId;
+      if (!initial.uploaded) {
+        updateItem(clientId, { status: "hashing", message: "正在校验图片…" });
+        const sha256 = await sha256Hex(initial.file);
+        const addKey = initial.addKey ?? createBrowserUuidV7();
+        updateItem(clientId, { status: "creating", message: "正在准备上传…", addKey });
+        const page = await apiPost(
+          initial.replacing && initial.pageId
+            ? `/api/v1/ocr-batches/${batchId}/pages/${initial.pageId}/commands/replace`
+            : `/api/v1/ocr-batches/${batchId}/pages/uploads`,
+          AddedRealOcrBatchPageViewSchema,
+          { fileName: initial.file.name, mimeType: initial.file.type, byteSize: initial.file.size, sha256 },
+          addKey,
           signal,
         );
-        target = initiated.data.upload;
-        if (target.mimeType !== intent.body.mimeType || target.byteSize !== intent.body.byteSize) {
-          throw new Error("UPLOAD_RESPONSE_MISMATCH");
-        }
-        intent.target = target;
+        if (page.data.upload.mimeType !== initial.file.type || page.data.upload.byteSize !== initial.file.size) throw new Error("UPLOAD_RESPONSE_MISMATCH");
+        assetId = page.data.page.assetId;
+        updateItem(clientId, { assetId, pageId: page.data.page.pageId, status: "uploading", message: "正在安全上传，识别尚未开始。" });
+        await apiPut(page.data.upload.path as `/api/v1/${string}`, UploadedSourceAssetViewSchema, initial.file, { "x-gapproof-upload-token": page.data.upload.token, "Content-Type": initial.file.type }, signal);
+        updateItem(clientId, { uploaded: true, replacing: false });
       }
-
-      if (!intent.assetId) {
-        setSafeState("uploading", "正在上传图片；识别尚未开始。");
-        const uploaded = await apiPut(
-          target.path as `/api/v1/${string}`,
-          UploadedSourceAssetViewSchema,
-          intent.file,
-          {
-            "x-gapproof-upload-token": target.token,
-            "Content-Type": intent.file.type,
-          },
-          signal,
-        );
-        if (
-          uploaded.data.mimeType !== intent.body.mimeType ||
-          uploaded.data.byteSize !== intent.body.byteSize ||
-          uploaded.data.sha256 !== intent.body.sha256
-        ) {
-          throw new Error("UPLOAD_RESPONSE_MISMATCH");
-        }
-        intent.assetId = uploaded.data.assetId;
-      }
-
-      setSafeState("preparing", "上传完成，正在准备图片检查。");
-      const prepared = await apiPost(
-        `/api/v1/source-assets/${intent.assetId}/commands/prepare`,
-        SourceAssetPrepareViewSchema,
-        buildSourceAssetPrepareRequest(),
-        intent.idempotencyKey,
-        signal,
-      );
-      if (prepared.data.assetId !== intent.assetId) throw new Error("SOURCE_INSPECTION_ASSET_MISMATCH");
-      if (prepared.data.processingStatus === "queued") {
-        setSafeState("queued", "图片检查已排队，可以稍后回来查看。");
-        await inspectIntent(intent, signal);
-      } else {
-        showInspectionView(prepared.data);
-        if (!isTerminalSourceInspectionStatus(prepared.data.processingStatus)) {
-          await inspectIntent(intent, signal);
-        }
-      }
-    } catch (error) {
-      if (!mountedRef.current) return;
-      if (signal.aborted) {
-        if (signal.reason === "NEW_FILE" || signal.reason === "RESET" || signal.reason === "REPLACED") return;
-        setSafeState("timeout", "图片检查已暂停，可以稍后刷新。");
-        return;
-      }
-      if (error instanceof Error && error.message === "SOURCE_INSPECTION_TIMEOUT") {
-        setSafeState("timeout", "图片检查仍在处理中，可以稍后刷新。");
-        return;
-      }
-      setSafeState("error", formatUploadError(error));
-    }
+      if (!assetId) throw new Error("SOURCE_ASSET_ID_MISSING");
+      updateItem(clientId, { assetId, status: "checking", message: "正在检查图片。" });
+      const prepared = await apiPost(`/api/v1/source-assets/${assetId}/commands/prepare`, SourceAssetPrepareViewSchema, buildSourceAssetPrepareRequest(), createBrowserUuidV7(), signal);
+      if ("assetId" in prepared.data && prepared.data.assetId !== assetId) throw new Error("SOURCE_INSPECTION_ASSET_MISMATCH");
+      if ("quality" in prepared.data) showInspection(clientId, prepared.data);
+      if (!("processingStatus" in prepared.data) || !isTerminalSourceInspectionStatus(prepared.data.processingStatus)) await pollSourceAssetInspection({ assetId, signal, onView: view => showInspection(clientId, view) });
+    } catch (error) { if (!signal.aborted) updateItem(clientId, { status: "retryable_error", message: safeError(error) }); }
   };
-
-  const startIntent = async (intent: UploadIntent) => {
-    activeAbortRef.current?.abort("REPLACED");
-    const controller = new AbortController();
-    activeAbortRef.current = controller;
-    try {
-      await runIntent(intent, controller.signal);
-    } finally {
-      if (activeAbortRef.current === controller) activeAbortRef.current = null;
-    }
+  const uploadAll = async () => {
+    const eligible = itemsRef.current.filter(item => ["waiting", "retryable_error"].includes(item.status)); if (!eligible.length) return;
+    abortRef.current?.abort("REPLACED"); const controller = new AbortController(); abortRef.current = controller;
+    setMessage("正在逐张上传并检查图片；识别尚未开始。");
+    try { const batch = await ensureBatch(controller.signal); for (const item of eligible) await runPage(item.clientId, batch.batchId, controller.signal); setMessage(itemsRef.current.every(item => passed(item.status)) ? "所有图片均已通过基础检查。确认后才会将图片发送给识别服务。" : "有图片尚未通过检查；请处理每张图片后再开始识别。"); }
+    catch (error) { if (!controller.signal.aborted) setMessage(safeError(error)); }
+    finally { if (abortRef.current === controller) abortRef.current = null; }
   };
-
-  const refreshInspection = async () => {
-    const intent = intentRef.current;
-    if (!intent?.assetId) return;
-    activeAbortRef.current?.abort("REPLACED");
-    const controller = new AbortController();
-    activeAbortRef.current = controller;
-    try {
-      setSafeState("processing", "正在检查图片。识别尚未开始。");
-      await pollSourceAssetInspection({
-        assetId: intent.assetId,
-        signal: controller.signal,
-        onView: showInspectionView,
-      });
-    } catch (error) {
-      if (!mountedRef.current) return;
-      if (controller.signal.aborted && (controller.signal.reason === "REPLACED" || controller.signal.reason === "RESET" || controller.signal.reason === "NEW_FILE")) return;
-      if (controller.signal.aborted || (error instanceof Error && error.message === "SOURCE_INSPECTION_TIMEOUT")) {
-        setSafeState("timeout", "图片检查仍在处理中，可以稍后刷新。");
-      } else {
-        setSafeState("error", formatUploadError(error));
-      }
-    } finally {
-      if (activeAbortRef.current === controller) activeAbortRef.current = null;
-    }
+  const retryPage = async (clientId: string) => { const batch = batchRef.current; if (!batch) return void uploadAll(); const controller = new AbortController(); abortRef.current?.abort("REPLACED"); abortRef.current = controller; await runPage(clientId, batch.batchId, controller.signal); if (abortRef.current === controller) abortRef.current = null; };
+  const startRecognition = async () => {
+    const batch = batchRef.current;
+    if (!batch || !guardianConfirmed || !noticeAccepted || !itemsRef.current.every(item => passed(item.status))) return;
+    const controller = new AbortController(); abortRef.current = controller; setStartStatus("starting"); setMessage("正在提交识别请求…");
+    try { const response = await apiPost(`/api/v1/ocr-batches/${batch.batchId}/commands/start-recognition`, StartRealOcrBatchViewSchema, { guardianConfirmed: true, processingNoticeAccepted: true }, createBrowserUuidV7(), controller.signal); setCaseId(response.data.caseId); setStartStatus("success"); setMessage("识别已开始。完成后请核对识别出的题目内容；系统不会自动生成学习结论。"); }
+    catch (error) { if (!controller.signal.aborted) { if (error instanceof TypeError) { setStartStatus("unknown"); setMessage("提交结果暂时未知，请刷新后查看材料状态，不要重复提交。"); } else { setStartStatus("error"); setMessage(safeError(error)); } } }
+    finally { if (abortRef.current === controller) abortRef.current = null; }
   };
-
-  const startUpload = async () => {
-    if (!file) {
-      setSafeState("error", "请先选择一张图片。");
-      return;
-    }
-    const validation = validateSourceUploadFile(file);
-    if (!validation.ok) {
-      setSafeState("error", validation.message);
-      return;
-    }
-
-    let intent = intentRef.current;
-    if (intent?.assetId && (status === "timeout" || status === "retryable_error")) {
-      await refreshInspection();
-      return;
-    }
-    if (!intent || intent.file !== file) {
-      try {
-        setSafeState("hashing", "正在检查图片，请稍候……");
-        const sha256 = await sha256Hex(file);
-        intent = {
-          file,
-          idempotencyKey: createBrowserUuidV7(),
-          body: buildSourceAssetUploadRequest(studentId, file, sha256),
-        };
-        intentRef.current = intent;
-      } catch {
-        setSafeState("error", "图片校验失败，请重新选择后再试。");
-        return;
-      }
-    }
-    await startIntent(intent);
-  };
-
-  const openFilePicker = () => {
-    if (!inputRef.current) return;
-    inputRef.current.value = "";
-    inputRef.current.click();
-  };
-
-  const primaryLabel = status === "error" && intentRef.current?.assetId
-    ? "重试检查"
-    : status === "error" && intentRef.current
-      ? "重试上传"
-      : status === "timeout" || status === "retryable_error"
-        ? "重新检查"
-        : status === "succeeded"
-          ? "已完成"
-          : isBusy
-            ? "正在处理"
-            : "开始上传";
-
-  return <AppShell actionDisabled actionLabel={status === "processing" || status === "queued" ? "正在检查" : isBusy ? "正在上传" : "先选择图片"}>
-    <section className="upload-page" aria-labelledby="source-upload-title">
-      <div className="title-row">
-        <div>
-          <h1 id="source-upload-title">上传一张错题或作业图片</h1>
-          <p>先把你愿意用于检查的图片交给系统；上传完成后不会自动开始识别或生成学习结论。</p>
-        </div>
-      </div>
-      <div className="upload-layout">
-        <article className="upload-card">
-          <input
-            ref={inputRef}
-            id="source-upload-input"
-            name="source-upload"
-            type="file"
-            accept={ACCEPTED_SOURCE_UPLOAD_TYPES.join(",")}
-            tabIndex={-1}
-            onChange={event => chooseFile(event.currentTarget.files?.[0] ?? null)}
-            aria-describedby={!file ? "source-upload-help" : undefined}
-          />
-          {!file ? <div className="upload-picker-panel" data-upload-picker>
-            <label
-              className="upload-picker"
-              htmlFor="source-upload-input"
-              role="button"
-              tabIndex={0}
-              onKeyDown={event => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  openFilePicker();
-                }
-              }}
-            >
-              <span className="upload-picker-title">选择图片</span>
-              <span className="upload-picker-detail">JPG、PNG、WebP · 1B–10MiB</span>
-            </label>
-            <p id="source-upload-help" className="upload-help">上传前请先遮盖姓名、学校、班级等不必要的个人信息。</p>
-          </div> : <div className="selected-upload-preview" data-selected-upload>
-            {currentValidation.ok && previewUrl ? <img src={previewUrl} alt="你刚刚选择的学习材料预览"/> : <div className="selected-upload-placeholder" aria-hidden="true"/>}
-            <div><strong>已选择 1 张图片</strong><span>{file.type.replace("image/", "").toUpperCase()} · {file.size < 1024 * 1024 ? `${Math.max(1, Math.round(file.size / 1024))} KiB` : `${(file.size / 1024 / 1024).toFixed(1)} MiB`}</span><small>尚未上传；不显示本地文件名。</small></div>
-          </div>}
-          {file && currentValidation.ok ? <ol className="upload-journey-steps" aria-label="材料处理进度">{uploadJourneyLabels.map((label, index) => {
-            const position = uploadJourneyPosition(status, startRecognitionStatus);
-            return <li key={label} className={index < position ? "complete" : index === position ? "current" : "pending"} aria-current={index === position ? "step" : undefined}><span>{index < position ? "✓" : index + 1}</span><strong>{label}</strong></li>;
-          })}</ol> : null}
-          <UploadStatusMessage status={status} message={message}/>
-          {file ? <div className="upload-actions">
-            <button className="primary-blue" type="button" onClick={() => void startUpload()} disabled={!canSubmit}>
-              {primaryLabel}
-            </button>
-            <button className="secondary-button" type="button" onClick={openFilePicker} disabled={isBusy || startRecognitionStatus === "starting"}>更换图片</button>
-          </div> : null}
-          {status === "succeeded"
-            ? <div className="upload-success" data-upload-success><strong>图片基础检查通过</strong><span>识别尚未开始；不会自动生成学习结论。</span></div>
-            : null}
-          {status === "succeeded" && qualityPassed
-            ? <section className="recognition-start-card" data-recognition-start aria-labelledby="recognition-start-title">
-              <h2 id="recognition-start-title">继续体验识别</h2>
-              <p>{SYNTHETIC_RECOGNITION_NOTICE}</p>
-              <label className="recognition-guardian-confirmation">
-                <input
-                  type="checkbox"
-                  checked={guardianConfirmed}
-                  disabled={startRecognitionStatus === "starting" || startRecognitionStatus === "success" || startRecognitionStatus === "network_unknown"}
-                  onChange={event => setGuardianConfirmed(event.currentTarget.checked)}
-                />
-                <span>我已获得监护人确认（未满18岁必需）</span>
-              </label>
-              <button
-                className="primary-blue"
-                type="button"
-                onClick={() => void startRecognition()}
-                disabled={!guardianConfirmed || startRecognitionStatus === "starting" || startRecognitionStatus === "success" || startRecognitionStatus === "network_unknown"}
-              >开始识别并继续</button>
-              {startRecognitionMessage
-                ? <p
-                  className={`recognition-start-message ${startRecognitionStatus === "error" || startRecognitionStatus === "network_unknown" ? "error" : startRecognitionStatus === "success" ? "success" : ""}`}
-                  aria-live={startRecognitionStatus === "error" || startRecognitionStatus === "network_unknown" ? "assertive" : "polite"}
-                  role={startRecognitionStatus === "error" || startRecognitionStatus === "network_unknown" ? "alert" : undefined}
-                  data-recognition-start-status={startRecognitionStatus}
-                >{startRecognitionMessage}</p>
-                : null}
-              {startRecognitionStatus === "success"
-                ? <p className="recognition-start-detail">{SYNTHETIC_RECOGNITION_SUCCESS_DETAIL}</p>
-                : null}
-              {startRecognitionStatus === "success" && recognitionCaseId
-                ? <button type="button" className="secondary-button recognition-review-link" onClick={() => router.push(`/materials/${recognitionCaseId}/review`)}>查看并确认识别内容</button>
-                : null}
-              {startRecognitionStatus !== "success"
-                ? <a className="secondary-button recognition-return-link" href="/student/today">返回今日</a>
-                : null}
-            </section>
-            : null}
-        </article>
-        <aside className="upload-guidance">
-          <h2>上传前看一眼</h2>
-          <ul>
-            <li>尽量让题目和批改痕迹都在图片里。</li>
-            <li>先遮盖姓名、学校和班级等不必要信息。</li>
-            <li>上传后仍需由你确认，才会继续下一步。</li>
-          </ul>
-          <p>后续识别、确认和诊断会在明确的下一步中进行。</p>
-        </aside>
-      </div>
-    </section>
-  </AppShell>;
+  const allPassed = items.length > 0 && items.every(item => passed(item.status));
+  const anyBusy = items.some(item => busy(item.status));
+  const editable = startStatus === "idle" || startStatus === "error";
+  return <AppShell actionDisabled actionLabel={anyBusy ? "正在处理" : "上传学习材料"}><section className="upload-page" aria-labelledby="source-upload-title"><div className="title-row"><div><h1 id="source-upload-title">上传错题、作业或试卷</h1><p>可一次添加多张同一份材料的图片。每张图片通过检查并由你确认后，才会开始真实识别。</p></div></div><div className="upload-layout"><article className="upload-card">
+    <input ref={inputRef} id="source-upload-input" name="source-upload" type="file" multiple accept={ACCEPTED_SOURCE_UPLOAD_TYPES.join(",")} tabIndex={-1} onChange={event => addFiles(event.currentTarget.files)} aria-describedby={items.length === 0 ? "source-upload-help" : undefined} />
+    {items.length === 0 ? <div className="upload-picker-panel" data-upload-picker><label className="upload-picker" htmlFor="source-upload-input" role="button" tabIndex={0}><span className="upload-picker-title">选择图片</span><span className="upload-picker-detail">可多选 JPG、PNG、WebP · 每张 1B–10MiB</span></label><p id="source-upload-help" className="upload-help">上传前请遮盖姓名、学校、班级等不必要的个人信息。</p></div> : <><div className="upload-queue-heading"><strong>已添加 {items.length} 张图片</strong>{editable ? <button type="button" className="secondary-button compact-upload-button" onClick={openPicker}>继续添加</button> : null}</div><ol className="upload-queue" aria-label="图片队列">{items.map((item, index) => <li key={item.clientId} className="upload-queue-item" data-page-status={item.status}><img src={item.previewUrl} alt={`第 ${index + 1} 张学习材料预览`} /><div className="upload-queue-copy"><strong>第 {index + 1} 张</strong><span>{item.message}</span></div>{editable && !busy(item.status) ? <div className="queue-item-actions"><label className="queue-action">替换<input className="visually-hidden" type="file" accept={ACCEPTED_SOURCE_UPLOAD_TYPES.join(",")} onChange={event => replaceItem(item.clientId, event.currentTarget.files?.[0])}/></label><button type="button" className="queue-action" onClick={() => void removeItem(item.clientId)}>移除</button>{item.status === "retryable_error" ? <button type="button" className="queue-action" onClick={() => void retryPage(item.clientId)}>重试</button> : null}</div> : null}</li>)}</ol></>}
+    <p className="upload-status-message" aria-live="polite">{message}</p>{items.length > 0 && editable ? <div className="upload-actions"><button className="primary-blue" type="button" onClick={() => void uploadAll()} disabled={anyBusy || items.every(item => item.status === "passed" || item.status === "failed")}>{anyBusy ? "正在处理" : "上传并检查图片"}</button></div> : null}
+    {allPassed && startStatus !== "success" ? <section className="recognition-start-card" data-real-recognition-start aria-labelledby="recognition-start-title"><h2 id="recognition-start-title">确认后开始识别</h2><p>确认后，图片会被发送给教育场景识别服务处理。识别结果仍需你核对；它不是学习结论或学习效果证明。</p><label className="recognition-guardian-confirmation"><input type="checkbox" checked={noticeAccepted} disabled={startStatus === "starting"} onChange={event => setNoticeAccepted(event.currentTarget.checked)} /><span>我已阅读并同意本次图片处理说明</span></label><label className="recognition-guardian-confirmation"><input type="checkbox" checked={guardianConfirmed} disabled={startStatus === "starting"} onChange={event => setGuardianConfirmed(event.currentTarget.checked)} /><span>我已获得监护人确认（未满 18 岁时必需）</span></label><button className="primary-blue" type="button" onClick={() => void startRecognition()} disabled={!guardianConfirmed || !noticeAccepted || startStatus === "starting"}>{startStatus === "starting" ? "正在开始识别" : "开始识别"}</button></section> : null}
+    {startStatus === "success" && caseId ? <div className="upload-success"><strong>识别正在处理</strong><span>识别完成后请先确认题目内容。</span><button type="button" className="secondary-button recognition-review-link" onClick={() => router.push(`/materials/${caseId}/review`)}>查看识别进度</button></div> : null}
+  </article><aside className="upload-guidance"><h2>上传前看一眼</h2><ul><li>按试卷或作业的顺序添加图片。</li><li>尽量让题目和批改痕迹完整清晰。</li><li>识别后的题目仍需要你确认。</li></ul><p>图片只用于本次材料识别与后续确认。</p></aside></div></section></AppShell>;
 }

@@ -79,6 +79,16 @@ export const assetProcessingStatus = appSchema.enum("asset_processing_status", [
   "failed",
 ]);
 
+export const ocrBatchStatus = appSchema.enum("ocr_batch_status", [
+  "collecting",
+  "ready",
+  "processing",
+  "needs_confirmation",
+  "completed",
+  "retryable_error",
+  "failed",
+]);
+
 export const students = appSchema.table(
   "students",
   {
@@ -211,6 +221,48 @@ export const sourceAssets = appSchema.table(
       sql`${table.sha256} ~ '^[0-9a-f]{64}$'`,
     ),
     check("source_assets_byte_size_positive_chk", sql`${table.byteSize} > 0`),
+  ],
+);
+
+/** A real-material OCR session. Raw provider responses are deliberately never stored. */
+export const ocrBatches = appSchema.table(
+  "ocr_batches",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    studentId: uuid("student_id").notNull().references(() => students.id),
+    caseId: uuid("case_id").notNull().references(() => cases.id),
+    status: ocrBatchStatus("status").notNull().default("collecting"),
+    guardianConfirmed: boolean("guardian_confirmed").notNull().default(false),
+    version: integer("version").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("ocr_batches_student_updated_idx").on(table.studentId, table.updatedAt),
+    uniqueIndex("ocr_batches_case_uidx").on(table.caseId),
+    check("ocr_batches_version_nonnegative", sql`${table.version} >= 0`),
+  ],
+);
+
+export const ocrBatchPages = appSchema.table(
+  "ocr_batch_pages",
+  {
+    id: uuid("id").primaryKey(),
+    batchId: uuid("batch_id").notNull().references(() => ocrBatches.id),
+    assetId: uuid("asset_id").notNull().references(() => sourceAssets.id),
+    pageOrder: integer("page_order").notNull(),
+    status: assetProcessingStatus("status").notNull().default("pending_upload"),
+    extraction: jsonb("extraction").$type<Record<string, unknown> | null>(),
+    failureCode: text("failure_code"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("ocr_batch_pages_asset_uidx").on(table.assetId),
+    uniqueIndex("ocr_batch_pages_order_uidx").on(table.batchId, table.pageOrder),
+    index("ocr_batch_pages_batch_status_idx").on(table.batchId, table.status),
+    check("ocr_batch_pages_order_positive", sql`${table.pageOrder} > 0`),
   ],
 );
 
@@ -347,6 +399,8 @@ export type CaseRow = typeof cases.$inferSelect;
 export type NewCaseRow = typeof cases.$inferInsert;
 export type SourceAssetRow = typeof sourceAssets.$inferSelect;
 export type NewSourceAssetRow = typeof sourceAssets.$inferInsert;
+export type OcrBatchRow = typeof ocrBatches.$inferSelect;
+export type OcrBatchPageRow = typeof ocrBatchPages.$inferSelect;
 export type ApiIdempotencyRecordRow =
   typeof apiIdempotencyRecords.$inferSelect;
 export type LearningEvidenceEventRow =

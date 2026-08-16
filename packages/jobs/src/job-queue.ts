@@ -3,6 +3,7 @@ import type {
   RetestDueJobData,
   RunNextJobData,
   SourceAssetQualityCheckJobData,
+  RealOcrBatchJobData,
 } from "@gapproof/contracts";
 import {
   apiIdempotencyRecords,
@@ -25,6 +26,7 @@ export const RUN_NEXT_QUEUE = "case-run-next";
 export const RETEST_DUE_QUEUE = "retest.due";
 export const REPLAN_QUEUE = "case.replan";
 export const SOURCE_ASSET_QUALITY_CHECK_QUEUE = "source_asset.quality_check";
+export const REAL_OCR_BATCH_QUEUE = "ocr.real_batch";
 export const SYNTHETIC_PARSE_ASSET_ID = "asset-synthetic-paper-1";
 
 export interface EnqueueRunNextInput extends RunNextJobData {
@@ -55,6 +57,7 @@ export class JobQueue {
     await this.boss.createQueue(RETEST_DUE_QUEUE);
     await this.boss.createQueue(REPLAN_QUEUE);
     await this.boss.createQueue(SOURCE_ASSET_QUALITY_CHECK_QUEUE);
+    await this.boss.createQueue(REAL_OCR_BATCH_QUEUE);
   }
 
   async stop(): Promise<void> {
@@ -134,6 +137,17 @@ export class JobQueue {
   async stopSourceAssetQualityCheckWorker(workerId: string): Promise<void> {
     await this.boss.offWork(SOURCE_ASSET_QUALITY_CHECK_QUEUE, { id: workerId, wait: true });
   }
+
+  async workRealOcrBatch(handler: (job: Job<RealOcrBatchJobData>) => Promise<object>): Promise<string> {
+    return this.boss.work<RealOcrBatchJobData, object>(REAL_OCR_BATCH_QUEUE, { batchSize: 1, pollingIntervalSeconds: 1 }, async ([job]) => {
+      if (job === undefined) throw new Error("pg-boss delivered an empty real OCR batch.");
+      return handler(job);
+    });
+  }
+
+  async stopRealOcrBatchWorker(workerId: string): Promise<void> {
+    await this.boss.offWork(REAL_OCR_BATCH_QUEUE, { id: workerId, wait: true });
+  }
 }
 
 export function createJobQueue(databaseUrl: string): JobQueue {
@@ -203,6 +217,17 @@ export async function enqueueReplanTransactional(
 
 export interface EnqueueRunNextTransactionalInput extends RunNextJobData {
   readonly jobId: string;
+}
+
+export interface EnqueueRealOcrBatchTransactionalInput extends RealOcrBatchJobData { readonly jobId: string; }
+export async function enqueueRealOcrBatchTransactional(
+  database: Parameters<Parameters<Database["transaction"]>[0]>[0], queue: JobQueue, input: EnqueueRealOcrBatchTransactionalInput,
+) {
+  const jobId = await queue.boss.send(REAL_OCR_BATCH_QUEUE, { batchId: input.batchId, traceId: input.traceId } satisfies RealOcrBatchJobData, {
+    id: input.jobId, retryLimit: 0, db: fromDrizzle(database, sql),
+  });
+  if (jobId === null) throw new Error("The real OCR batch job was not queued.");
+  return jobId;
 }
 
 export async function enqueueRunNextTransactional(

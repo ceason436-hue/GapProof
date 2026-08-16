@@ -4,6 +4,7 @@ import {
   findSourceAssetById,
   inspectImageHeaders,
   updateSourceAssetInspection,
+  syncOcrBatchPageQualityStatus,
   type Database,
 } from "@gapproof/db";
 import type { JobQueue } from "@gapproof/jobs";
@@ -42,19 +43,23 @@ export function createSourceAssetQualityWorker(options: SourceAssetQualityWorker
           bytes = await options.storage.read({ assetId: asset.id, objectKey: asset.objectKey });
         } catch (error) {
           if (isMissingFile(error)) {
-            await updateSourceAssetInspection(options.database, { assetId: asset.id, from: "processing", to: "failed", quality: { status: "failed", detectedMimeType: null, width: null, height: null, reasons: ["stored_bytes_missing"], checkerVersion: "image-header-v1" } });
+            const updated = await updateSourceAssetInspection(options.database, { assetId: asset.id, from: "processing", to: "failed", quality: { status: "failed", detectedMimeType: null, width: null, height: null, reasons: ["stored_bytes_missing"], checkerVersion: "image-header-v1" } });
+            if (updated !== undefined) await syncOcrBatchPageQualityStatus(options.database, asset.id, updated.processingStatus);
             return { assetId: asset.id, status: "failed" };
           }
-          await updateSourceAssetInspection(options.database, { assetId: asset.id, from: "processing", to: "retryable_error", quality: null });
+          const updated = await updateSourceAssetInspection(options.database, { assetId: asset.id, from: "processing", to: "retryable_error", quality: null });
+          if (updated !== undefined) await syncOcrBatchPageQualityStatus(options.database, asset.id, updated.processingStatus);
           throw error;
         }
         if (bytes.byteLength !== asset.byteSize || createHash("sha256").update(bytes).digest("hex") !== asset.sha256) {
-          await updateSourceAssetInspection(options.database, { assetId: asset.id, from: "processing", to: "failed", quality: { status: "failed", detectedMimeType: null, width: null, height: null, reasons: ["stored_bytes_mismatch"], checkerVersion: "image-header-v1" } });
+          const updated = await updateSourceAssetInspection(options.database, { assetId: asset.id, from: "processing", to: "failed", quality: { status: "failed", detectedMimeType: null, width: null, height: null, reasons: ["stored_bytes_mismatch"], checkerVersion: "image-header-v1" } });
+          if (updated !== undefined) await syncOcrBatchPageQualityStatus(options.database, asset.id, updated.processingStatus);
           return { assetId: asset.id, status: "failed" };
         }
         const quality = inspectImageHeaders(bytes, asset.mimeType as "image/jpeg" | "image/png" | "image/webp");
         const status = quality.status === "passed" ? "succeeded" : quality.status;
-        await updateSourceAssetInspection(options.database, { assetId: asset.id, from: "processing", to: status, quality });
+        const updated = await updateSourceAssetInspection(options.database, { assetId: asset.id, from: "processing", to: status, quality });
+        if (updated !== undefined) await syncOcrBatchPageQualityStatus(options.database, asset.id, updated.processingStatus);
         return { assetId: asset.id, status };
       });
       return workerId;

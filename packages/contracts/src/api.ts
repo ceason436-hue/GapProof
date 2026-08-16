@@ -172,6 +172,35 @@ export type UploadedSourceAssetView = Static<
   typeof UploadedSourceAssetViewSchema
 >;
 
+export const OcrBatchIdParamsSchema = Type.Object({ batchId: Type.String({ format: "uuid" }) }, { additionalProperties: false });
+export type OcrBatchIdParams = Static<typeof OcrBatchIdParamsSchema>;
+export const CreateRealOcrBatchRequestSchema = Type.Object({ studentId: Type.String({ format: "uuid" }) }, { additionalProperties: false });
+export type CreateRealOcrBatchRequest = Static<typeof CreateRealOcrBatchRequestSchema>;
+export const RealOcrBatchPageSchema = Type.Object({
+  pageId: Type.String({ format: "uuid" }), assetId: Type.String({ format: "uuid" }), order: Type.Integer({ minimum: 1 }),
+  status: Type.Union([Type.Literal("pending_upload"), Type.Literal("uploaded"), Type.Literal("queued"), Type.Literal("processing"), Type.Literal("needs_confirmation"), Type.Literal("succeeded"), Type.Literal("retryable_error"), Type.Literal("failed")]),
+  retryable: Type.Boolean(), needsReview: Type.Boolean(),
+}, { additionalProperties: false });
+export const RealOcrBatchViewSchema = Type.Object({
+  batchId: Type.String({ format: "uuid" }), caseId: Type.String({ format: "uuid" }),
+  status: Type.Union([Type.Literal("collecting"), Type.Literal("ready"), Type.Literal("processing"), Type.Literal("needs_confirmation"), Type.Literal("completed"), Type.Literal("retryable_error"), Type.Literal("failed")]),
+  guardianConfirmed: Type.Boolean(), version: Type.Integer({ minimum: 0 }), pages: Type.Array(RealOcrBatchPageSchema),
+}, { additionalProperties: false });
+export type RealOcrBatchView = Static<typeof RealOcrBatchViewSchema>;
+export const AddRealOcrBatchPageRequestSchema = Type.Object({
+  fileName: Type.String({ minLength: 1, maxLength: 200, pattern: "^[^/\\\\\\u0000]+$" }), mimeType: StudentUploadMimeTypeSchema,
+  byteSize: Type.Integer({ minimum: 1, maximum: 10_485_760 }), sha256: SourceAssetSha256Schema,
+}, { additionalProperties: false });
+export type AddRealOcrBatchPageRequest = Static<typeof AddRealOcrBatchPageRequestSchema>;
+export const OcrBatchPageParamsSchema = Type.Object({ batchId: Type.String({ format: "uuid" }), pageId: Type.String({ format: "uuid" }) }, { additionalProperties: false });
+export type OcrBatchPageParams = Static<typeof OcrBatchPageParamsSchema>;
+export const AddedRealOcrBatchPageViewSchema = Type.Object({ page: RealOcrBatchPageSchema, upload: SourceAssetUploadTargetSchema }, { additionalProperties: false });
+export type AddedRealOcrBatchPageView = Static<typeof AddedRealOcrBatchPageViewSchema>;
+export const StartRealOcrBatchRequestSchema = Type.Object({ guardianConfirmed: Type.Literal(true), processingNoticeAccepted: Type.Literal(true) }, { additionalProperties: false });
+export type StartRealOcrBatchRequest = Static<typeof StartRealOcrBatchRequestSchema>;
+export const StartRealOcrBatchViewSchema = Type.Object({ batchId: Type.String({ format: "uuid" }), caseId: Type.String({ format: "uuid" }), status: Type.Literal("processing"), processingNoticeAccepted: Type.Literal(true) }, { additionalProperties: false });
+export type StartRealOcrBatchView = Static<typeof StartRealOcrBatchViewSchema>;
+
 export const PrepareSourceAssetRequestSchema = Type.Object(
   {},
   { additionalProperties: false },
@@ -281,6 +310,12 @@ export type SourceAssetQualityCheckJobData = Static<
   typeof SourceAssetQualityCheckJobDataSchema
 >;
 
+export const RealOcrBatchJobDataSchema = Type.Object({
+  batchId: Type.String({ format: "uuid" }),
+  traceId: Type.String({ minLength: 1 }),
+}, { additionalProperties: false });
+export type RealOcrBatchJobData = Static<typeof RealOcrBatchJobDataSchema>;
+
 export const CaseViewSchema = Type.Object({
   id: Type.String({ format: "uuid" }),
   studentId: Type.String({ format: "uuid" }),
@@ -345,6 +380,18 @@ export const SyntheticExtractionViewSchema = Type.Object({
 export type SyntheticExtractionView = Static<
   typeof SyntheticExtractionViewSchema
 >;
+
+export const RealExtractionViewSchema = Type.Object({
+  caseId: Type.String({ format: "uuid" }),
+  state: Type.Literal("awaiting_confirmation"),
+  stateVersion: Type.Integer({ minimum: 0 }),
+  recognitionSource: Type.Literal("real_alibaba"),
+  uploadedAssetUsedForRecognition: Type.Literal(true),
+  items: Type.Array(SyntheticExtractionItemViewSchema, { minItems: 1 }),
+}, { additionalProperties: false });
+export type RealExtractionView = Static<typeof RealExtractionViewSchema>;
+export const ExtractionViewSchema = Type.Union([SyntheticExtractionViewSchema, RealExtractionViewSchema]);
+export type ExtractionView = Static<typeof ExtractionViewSchema>;
 
 export const DiagnosticProbeViewSchema = Type.Omit(
   DiagnosticProbeDraftSchema,

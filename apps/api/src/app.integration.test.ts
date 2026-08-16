@@ -34,6 +34,8 @@ import {
   eq,
   findCurrentActionableTaskId,
   learningEvidenceEvents,
+  ocrBatchPages,
+  ocrBatches,
   persistD1RetestEvaluation,
   runMigrations,
   sourceAssets,
@@ -279,6 +281,8 @@ describeWithDatabase("Fastify API and run-next worker", () => {
   beforeAll(async () => {
     await runMigrations(database.db);
     await database.db.delete(tasks);
+    await database.db.delete(ocrBatchPages);
+    await database.db.delete(ocrBatches);
     await database.db.delete(sourceAssets);
     await database.db.delete(learningEvidenceEvents);
     await database.db.delete(demoClocks);

@@ -12,7 +12,7 @@ export class ApiClientError extends Error {
 
 type RequestOptions = {
   signal?: AbortSignal;
-  method?: "GET" | "POST" | "PUT";
+  method?: "GET" | "POST" | "PUT" | "DELETE";
   body?: unknown;
   rawBody?: NonNullable<Parameters<typeof fetch>[1]>["body"];
   headers?: Record<string, string>;
@@ -32,7 +32,7 @@ export async function apiRequestUrl<S extends TSchema>(
 ): Promise<ApiResponse<Static<S>>> {
   ensureContractFormats();
   const method = options.method ?? "GET";
-  if (method === "POST" && !options.idempotencyKey) throw new Error("POST requests require an Idempotency-Key");
+  if ((method === "POST" || method === "DELETE") && !options.idempotencyKey) throw new Error(`${method} requests require an Idempotency-Key`);
   const maxAttempts = method === "GET" ? 3 : 2;
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -107,5 +107,16 @@ export const apiPut = <S extends TSchema>(
   method: "PUT",
   rawBody: body,
   headers,
+  ...(signal ? { signal } : {}),
+});
+
+export const apiDelete = <S extends TSchema>(
+  path: `/api/v1/${string}`,
+  schema: S,
+  idempotencyKey: string,
+  signal?: AbortSignal,
+) => apiRequest(path, schema, {
+  method: "DELETE",
+  idempotencyKey,
   ...(signal ? { signal } : {}),
 });

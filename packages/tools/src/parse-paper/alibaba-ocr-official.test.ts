@@ -45,13 +45,13 @@ describe("normalizeAlibabaEduPaperResponse", () => {
       pages: [{ page: 1, width: 1200, height: 1600 }],
       items: [
         {
-          id: "alibaba-word-1",
+          id: "alibaba-page-1",
           prompt: "Choose the correct form.",
-          coordinates: { page: 1, x: 10, y: 20, width: 300, height: 40 },
+          coordinates: { page: 1, x: 0, y: 0, width: 1200, height: 1600 },
           confidence: 0.96,
         },
       ],
-      coordinates: [{ page: 1, x: 10, y: 20, width: 300, height: 40 }],
+      coordinates: [{ page: 1, x: 0, y: 0, width: 1200, height: 1600 }],
       confidence: 0.96,
       warnings: [],
     });

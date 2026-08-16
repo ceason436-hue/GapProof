@@ -7,7 +7,7 @@ import {
   RunNextRequestSchema,
   RunNextQueuedSchema,
   SubmitAttemptRequestSchema,
-  SyntheticExtractionViewSchema,
+  ExtractionViewSchema,
   type ConfirmExtractionRequest,
   type SubmitAttemptRequest,
 } from "@gapproof/contracts";
@@ -85,7 +85,7 @@ export function createProbeIntent(
 }
 
 export const getExtraction = (caseId: string, signal?: AbortSignal) =>
-  apiGet(extractionPath(caseId), SyntheticExtractionViewSchema, signal);
+  apiGet(extractionPath(caseId), ExtractionViewSchema, signal);
 
 export const getCase = (caseId: string, signal?: AbortSignal) =>
   apiGet(`/api/v1/cases/${caseId}`, CaseViewSchema, signal);
