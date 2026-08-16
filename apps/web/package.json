@@ -16,6 +16,7 @@
     "test:browser:case-review": "node tests/same-case-review-browser-fixture.mjs",
     "test:browser:demo-review": "node tests/demo-review-browser-fixture.mjs",
     "test:browser:onboarding": "node tests/onboarding-quick-check-browser-fixture.mjs",
+    "test:browser:profile-setup": "node tests/profile-setup-browser-fixture.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

@@ -2,11 +2,11 @@ import type { D1RetestTaskView, D7RetestTaskView, TodayOverview } from "@gapproo
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { FirstUseToday, OverviewNextCheck, RetestCard, selectLaterRetests, TodayDashboard, TodayFootprint, TodayOverviewPanel } from "./live-today";
+import { FirstUseToday, OverviewNextCheck, ProfileSetupRequired, RetestCard, selectLaterRetests, TodayDashboard, TodayFootprint, TodayOverviewPanel } from "./live-today";
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/image", () => ({ default: ({ alt }: { alt: string }) => createElement("img", { alt }) }));
-vi.mock("next/navigation", () => ({ usePathname: () => "/student/today" }));
+vi.mock("next/navigation", () => ({ usePathname: () => "/student/today", useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 
 function retest(
   taskType: "d1_retest" | "d7_retest",
@@ -187,6 +187,32 @@ describe("FirstUseToday", () => {
   });
 });
 
+describe("ProfileSetupRequired", () => {
+  it("keeps first-time learning-range choices inside Today without inventing profile facts", () => {
+    const html = renderToStaticMarkup(createElement(ProfileSetupRequired, { profile: {
+      studentId: "0198b111-1111-7000-8000-0000000000d2",
+      timeZone: "Asia/Shanghai",
+      version: 0,
+      completed: false,
+      grade: null,
+      subject: null,
+      term: null,
+      region: null,
+      learningState: null,
+    } }));
+
+    expect(html).toContain("data-profile-setup-required");
+    expect(html).toContain('data-profile-setup="today"');
+    expect(html).toContain("先确定你的学习范围");
+    expect(html).toContain("还需选择 5 项");
+    expect(html).toContain('aria-pressed="false"');
+    expect(html).toContain("确认并开始");
+    expect(html).toContain("disabled");
+    expect(html.match(/href="\/setup"/g)).toHaveLength(2);
+    expect(html).not.toContain('aria-pressed="true"');
+  });
+});
+
 describe("Today frozen dashboard structure", () => {
   it("uses the mock visual hierarchy for a started API journey", () => {
     const html = renderToStaticMarkup(createElement(TodayDashboard, {
@@ -228,5 +254,17 @@ describe("Today frozen dashboard structure", () => {
     expect(html).toContain('class="main-column"');
     expect(html).toContain('class="right-column"');
     expect(html).not.toContain('class="state-card"');
+  });
+
+  it("gives a changed current-task state an explicit recovery action", () => {
+    const html = renderToStaticMarkup(createElement(TodayDashboard, {
+      current: { kind: "contract_error", code: "CURRENT_TASK_NOT_READY" },
+      overview,
+      retests: [],
+      timeZone: "Asia/Tokyo",
+      completed: false,
+    }));
+    expect(html).toContain("刷新今日安排");
+    expect(html).toContain('href="/student/today?source=api"');
   });
 });

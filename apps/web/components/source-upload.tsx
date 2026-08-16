@@ -51,7 +51,7 @@ export function SourceUpload({ studentId, recoverableBatches = [], initialBatch 
 
   useEffect(() => {
     mountedRef.current = true;
-    const cleanup = beginSourceUploadLifecycle(mountedRef, () => abortRef.current?.abort("PAGE_LEFT"));
+    const cleanup = beginSourceUploadLifecycle(mountedRef, () => abortRef.current?.abort());
     return () => { cleanup(); for (const item of itemsRef.current) URL.revokeObjectURL(item.previewUrl); };
   }, []);
 
@@ -141,13 +141,13 @@ export function SourceUpload({ studentId, recoverableBatches = [], initialBatch 
   };
   const uploadAll = async () => {
     const eligible = itemsRef.current.filter(item => ["waiting", "retryable_error"].includes(item.status)); if (!eligible.length) return;
-    abortRef.current?.abort("REPLACED"); const controller = new AbortController(); abortRef.current = controller;
+    abortRef.current?.abort(); const controller = new AbortController(); abortRef.current = controller;
     setMessage("正在逐张上传并检查图片；识别尚未开始。");
     try { const batch = await ensureBatch(controller.signal); for (const item of eligible) await runPage(item.clientId, batch.batchId, controller.signal); setMessage(itemsRef.current.every(item => passed(item.status)) ? "所有图片均已通过基础检查。确认后才会将图片发送给识别服务。" : "有图片尚未通过检查；请处理每张图片后再开始识别。"); }
     catch (error) { if (!controller.signal.aborted) setMessage(safeError(error)); }
     finally { if (abortRef.current === controller) abortRef.current = null; }
   };
-  const retryPage = async (clientId: string) => { const batch = batchRef.current; if (!batch) return void uploadAll(); const controller = new AbortController(); abortRef.current?.abort("REPLACED"); abortRef.current = controller; await runPage(clientId, batch.batchId, controller.signal); if (abortRef.current === controller) abortRef.current = null; };
+  const retryPage = async (clientId: string) => { const batch = batchRef.current; if (!batch) return void uploadAll(); const controller = new AbortController(); abortRef.current?.abort(); abortRef.current = controller; await runPage(clientId, batch.batchId, controller.signal); if (abortRef.current === controller) abortRef.current = null; };
   const startRecognition = async () => {
     const batch = batchRef.current;
     if (!batch || !guardianConfirmed || !noticeAccepted || !itemsRef.current.every(item => passed(item.status))) return;
@@ -160,7 +160,7 @@ export function SourceUpload({ studentId, recoverableBatches = [], initialBatch 
   const recoverRecognitionStart = async () => {
     const batch = batchRef.current;
     if (!batch || recoveryBusy) return;
-    const controller = new AbortController(); abortRef.current?.abort("REPLACED"); abortRef.current = controller; setRecoveryBusy(true);
+    const controller = new AbortController(); abortRef.current?.abort(); abortRef.current = controller; setRecoveryBusy(true);
     try {
       const response = await apiGet(`/api/v1/ocr-batches/${batch.batchId}`, RealOcrBatchViewSchema, controller.signal);
       if (response.data.status === "collecting" || response.data.status === "ready") {

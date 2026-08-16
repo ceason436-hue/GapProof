@@ -22,12 +22,22 @@ import {
 function isStoredTutorContext(value: unknown): value is SocraticTutorContext {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const candidate = value as Record<string, unknown>;
+  const historyValid = candidate.history === undefined || (
+    Array.isArray(candidate.history) && candidate.history.length <= 5 && candidate.history.every((turn) => {
+      if (typeof turn !== "object" || turn === null || Array.isArray(turn)) return false;
+      const historyTurn = turn as Record<string, unknown>;
+      return typeof historyTurn.learnerText === "string" && historyTurn.learnerText.length > 0 && historyTurn.learnerText.length <= 800 &&
+        typeof historyTurn.question === "string" && historyTurn.question.length > 0 && historyTurn.question.length <= 240 &&
+        (historyTurn.hint === null || (typeof historyTurn.hint === "string" && historyTurn.hint.length > 0 && historyTurn.hint.length <= 240));
+    })
+  );
   return typeof candidate.subject === "string" && candidate.subject.length > 0 && candidate.subject.length <= 40 &&
     typeof candidate.grade === "string" && candidate.grade.length > 0 && candidate.grade.length <= 40 &&
     typeof candidate.taskTitle === "string" && candidate.taskTitle.length > 0 && candidate.taskTitle.length <= 160 &&
     typeof candidate.stepTitle === "string" && candidate.stepTitle.length > 0 && candidate.stepTitle.length <= 120 &&
     typeof candidate.stepContent === "string" && candidate.stepContent.length > 0 && candidate.stepContent.length <= 1_000 &&
-    typeof candidate.learnerText === "string" && candidate.learnerText.length > 0 && candidate.learnerText.length <= 800;
+    typeof candidate.learnerText === "string" && candidate.learnerText.length > 0 && candidate.learnerText.length <= 800 &&
+    historyValid;
 }
 
 interface TutorTurnStore {

@@ -6,7 +6,9 @@ import { ParsePaperResultSchema } from "@gapproof/contracts";
 
 import {
   AlibabaEduPaperSdkTransport,
+  ALIBABA_OCR_LOW_TEXT_QUALITY_WARNING,
   createAlibabaEduPaperSdkTransportFromEnv,
+  isAlibabaOcrTextLowQuality,
   normalizeAlibabaEduPaperResponse,
   type AlibabaEduPaperSdkClient,
 } from "./alibaba-ocr-official.ts";
@@ -66,6 +68,19 @@ describe("normalizeAlibabaEduPaperResponse", () => {
     expect(
       normalizeAlibabaEduPaperResponse({ ...providerData, width: 0 }),
     ).toBeUndefined();
+  });
+
+  it("marks deterministic garbled text without treating readable questions as invalid", () => {
+    const garbled = "shc ce edt in doing sth dh sthScteedsuces fully 3. 句子还原";
+    expect(isAlibabaOcrTextLowQuality(garbled)).toBe(true);
+    expect(isAlibabaOcrTextLowQuality("Choose the correct answer. David went deep into the rainforest."))
+      .toBe(false);
+    expect(isAlibabaOcrTextLowQuality("Tom and Jim had two new books. Which one did Tom choose?"))
+      .toBe(false);
+    expect(isAlibabaOcrTextLowQuality("下列各式中，正确的是（ ） A. x+2=4"))
+      .toBe(false);
+    expect(normalizeAlibabaEduPaperResponse({ ...providerData, content: garbled })?.warnings)
+      .toEqual([ALIBABA_OCR_LOW_TEXT_QUALITY_WARNING]);
   });
 });
 

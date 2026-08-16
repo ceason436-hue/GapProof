@@ -9,6 +9,8 @@ import { chromium } from "playwright";
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const webPort = process.env.ONBOARDING_FIXTURE_WEB_PORT ?? "3110";
 const webOrigin = `http://127.0.0.1:${webPort}`;
+const fixtureDistDir = ".next-onboarding-fixture";
+const fixtureDistPath = resolve(webRoot, fixtureDistDir);
 const studentId = "0198c111-1111-7000-8000-000000000001";
 const nextEnvPath = resolve(webRoot, "next-env.d.ts");
 const nextEnvBefore = await readFile(nextEnvPath);
@@ -69,7 +71,7 @@ await new Promise((resolveListen, rejectListen) => { server.once("error", reject
 const address = server.address();
 if (!address || typeof address === "string") throw new Error("Fixture port missing");
 const nextBin = createRequire(import.meta.url).resolve("next/dist/bin/next");
-const web = spawn(process.execPath, [nextBin, "dev", "-H", "127.0.0.1", "-p", webPort], { cwd: webRoot, windowsHide: true, env: { ...process.env, GAPPROOF_API_ORIGIN: `http://127.0.0.1:${address.port}`, GAPPROOF_DEMO_STUDENT_ID: studentId }, stdio: ["ignore", "pipe", "pipe"] });
+const web = spawn(process.execPath, [nextBin, "dev", "-H", "127.0.0.1", "-p", webPort], { cwd: webRoot, windowsHide: true, env: { ...process.env, GAPPROOF_API_ORIGIN: `http://127.0.0.1:${address.port}`, GAPPROOF_DEMO_STUDENT_ID: studentId, GAPPROOF_NEXT_DIST_DIR: fixtureDistDir }, stdio: ["ignore", "pipe", "pipe"] });
 let output = ""; web.stdout.on("data", chunk => { output += chunk; }); web.stderr.on("data", chunk => { output += chunk; });
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
 try {
@@ -78,6 +80,9 @@ try {
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
     await page.goto(`${webOrigin}/student/today`, { waitUntil: "networkidle" });
+    const startButton = page.getByRole("button", { name: "开始使用", exact: true });
+    if (await startButton.count()) await startButton.click();
+    await page.getByRole("heading", { name: "从一次小检查开始" }).waitFor();
     assert(await page.getByRole("heading", { name: "从一次小检查开始" }).count() === 1, `First-use Today did not render. sessions=${sessionPosts.length}; body=${await page.locator("body").innerText()}`);
     assert(sessionPosts.length >= 1 && sessionPosts.every(post => post.key === sessionPosts[0].key), `Device-session bootstrap did not preserve one intent across ${sessionPosts.length} POST requests.`);
     assert(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sessionPosts[0]?.key ?? ""), "Device-session bootstrap did not use a UUIDv7 idempotency key.");
@@ -128,4 +133,5 @@ try {
   web.kill(); server.close();
   await writeFile(nextEnvPath, nextEnvBefore);
   await Promise.all(generated.map(path => existed.get(path) ? Promise.resolve() : rm(path, { force: true })));
+  await rm(fixtureDistPath, { force: true, recursive: true });
 }

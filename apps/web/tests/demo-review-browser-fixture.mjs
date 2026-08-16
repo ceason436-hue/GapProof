@@ -7,6 +7,8 @@ import { chromium } from "playwright";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const screenshots = resolve(webRoot, "screenshots");
+const fixtureDistDir = ".next-demo-review-fixture";
+const fixtureDistPath = resolve(webRoot, fixtureDistDir);
 const nextEnvPath = resolve(webRoot, "next-env.d.ts");
 const nextEnvBefore = await readFile(nextEnvPath);
 const generatedAgentFiles = [resolve(webRoot, "AGENTS.md"), resolve(webRoot, "CLAUDE.md")];
@@ -19,7 +21,7 @@ const nextBin = createRequire(import.meta.url).resolve("next/dist/bin/next");
 const webServer = spawn(process.execPath, [nextBin, "dev", "-H", "127.0.0.1", "-p", webPort], {
   cwd: webRoot,
   windowsHide: true,
-  env: { ...process.env },
+  env: { ...process.env, GAPPROOF_NEXT_DIST_DIR: fixtureDistDir },
   stdio: ["ignore", "pipe", "pipe"],
 });
 let serverOutput = "";
@@ -90,4 +92,5 @@ try {
   await webServerExit;
   await writeFile(nextEnvPath, nextEnvBefore);
   await Promise.all(generatedAgentFiles.map(path => agentFileExisted.get(path) ? undefined : rm(path, { force: true })));
+  await rm(fixtureDistPath, { force: true, recursive: true });
 }

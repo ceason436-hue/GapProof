@@ -13,9 +13,11 @@ const allowedDevOrigins = process.env.GAPPROOF_ALLOWED_DEV_ORIGINS
   ?.split(",")
   .map(origin => origin.trim())
   .filter(Boolean);
+const isolatedDistDir = process.env.GAPPROOF_NEXT_DIST_DIR?.trim();
 
 const nextConfig: NextConfig = {
   transpilePackages: ["@gapproof/contracts"],
+  ...(isolatedDistDir ? { distDir: isolatedDistDir } : {}),
   ...(allowedDevOrigins?.length ? { allowedDevOrigins } : {}),
   async rewrites() {
     return apiOrigin

@@ -1,4 +1,4 @@
-import type { D1RetestTaskView, D7RetestTaskView, GuidedInterventionTaskView, RecoverableOcrBatchView, TodayOverview } from "@gapproof/contracts";
+import type { D1RetestTaskView, D7RetestTaskView, GuidedInterventionTaskView, RecoverableOcrBatchView, StudentProfileView, TodayOverview } from "@gapproof/contracts";
 import Link from "next/link";
 import { AppShell } from "./app-shell";
 import { D1AttemptPanel } from "./d1-attempt-panel";
@@ -19,6 +19,7 @@ import { StudentSessionRequiredError } from "@/lib/student-session-server";
 import { StudentSessionBootstrap } from "./student-session-bootstrap";
 import { OcrBatchRecovery } from "./ocr-batch-recovery";
 import { fetchRecoverableOcrBatches } from "@/lib/ocr-recovery-server";
+import { StudentProfileSetup } from "./student-profile-setup";
 
 function TaskDates({
   scheduledFor,
@@ -97,11 +98,10 @@ export function FirstUseToday({ recoverableBatches = [] }: { recoverableBatches?
   </section></AppShell>;
 }
 
-function ProfileSetupRequired({ recoverableBatches = [] }: { recoverableBatches?: readonly RecoverableOcrBatchView[] }) {
-  return <AppShell actionHref="/setup" actionLabel="设置学习范围"><section className="today-page" data-profile-setup-required>
-    <div className="title-row"><div><h1>先选一下学习范围</h1><p>完成这些选择后，再开始上传材料或进行学习检查。</p></div></div>
+export function ProfileSetupRequired({ profile, recoverableBatches = [] }: { profile: StudentProfileView; recoverableBatches?: readonly RecoverableOcrBatchView[] }) {
+  return <AppShell actionDisabled actionLabel="完成学习范围后开始"><section className="today-page profile-setup-today" data-profile-setup-required>
     <OcrBatchRecovery batches={recoverableBatches}/>
-    <article className="state-card"><Icon name="today"/><div><h2>让接下来的内容更贴合你的学习范围</h2><p>请确认年级、学科、学期、学习地区和目前的学习状态。它们不会被默认补全。</p><Link className="primary-blue" href="/setup">设置学习范围</Link></div></article>
+    <StudentProfileSetup profile={profile} variant="today"/>
   </section></AppShell>;
 }
 
@@ -203,7 +203,8 @@ function CurrentContractError({ current }: { current: Extract<CurrentTaskSelecti
     <HeroArt/><div className="hero-content">
       <div className="task-label-row"><span className="dark-chip"><i/> 需要刷新</span></div>
       <h2>当前任务暂不可用</h2>
-      <p>{detail} 请返回今日页刷新后再试。</p>
+      <p>{detail} 请刷新今日安排后再试。</p>
+      <div className="cta-row"><Link className="lime-button" href="/student/today?source=api">刷新今日安排 <Icon name="arrow"/></Link></div>
     </div>
   </article>;
 }
@@ -313,8 +314,8 @@ function LiveError({ error }: { error: unknown }) {
     title = "今日概览暂不可用";
     detail = "学习概览还没有准备好，请稍后刷新。";
   }
-  return <AppShell actionDisabled actionLabel="等待配置">
-    <section className="today-page"><div className="title-row"><div><h1>{title}</h1><p>{detail}</p></div></div></section>
+  return <AppShell actionHref="/student/today?source=api" actionLabel="重新读取">
+    <section className="today-page"><div className="title-row"><div><h1>{title}</h1><p>{detail}</p><Link className="primary-blue" href="/student/today?source=api">重新读取今日安排</Link></div></div></section>
   </AppShell>;
 }
 
@@ -323,7 +324,7 @@ export async function LiveToday({ selectedRetestId }: { selectedRetestId?: strin
     const [response, recoveryResponse] = await Promise.all([fetchCurrentStudentToday(), fetchRecoverableOcrBatches()]);
     const recoverableBatches = recoveryResponse.data.batches;
     const model = toTodayReadModel(response.data, selectedRetestId);
-    if (!model.profile.completed) return <ProfileSetupRequired recoverableBatches={recoverableBatches}/>;
+    if (!model.profile.completed) return <ProfileSetupRequired profile={model.profile} recoverableBatches={recoverableBatches}/>;
     if (!model.overview.hasStartedJourney) return <FirstUseToday recoverableBatches={recoverableBatches}/>;
     const completed = model.taskCount === 0 && model.current.kind === "none";
     if (completed) return <AppShell actionHref="/diagnose" actionLabel="开始新的检查"><TodayDashboard

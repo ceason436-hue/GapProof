@@ -11,6 +11,16 @@ describe("real diagnosis confirmed evidence reconstruction", () => {
     expect(JSON.stringify(items)).not.toContain("不应进入诊断");
   });
 
+  it("uses each student-reviewed split question instead of the page-level OCR item", () => {
+    expect(reconstructConfirmedDiagnosisItems(
+      { extraction: { items: [{ itemId: "page-1", prompt: "整页 OCR 原文" }] } },
+      { confirmedItemIds: ["page-1"], corrections: [], reviewedQuestions: [
+        { sourceItemId: "page-1", prompt: "第一题", studentAnswer: "A" },
+        { sourceItemId: "page-1", prompt: "第二题", studentAnswer: null },
+      ] },
+    )).toEqual([{ prompt: "第一题", studentAnswer: "A" }, { prompt: "第二题" }]);
+  });
+
   it("rejects inconsistent confirmation evidence", () => {
     expect(reconstructConfirmedDiagnosisItems(
       { extraction: { items: [{ itemId: "item-1", prompt: "题目" }] } },

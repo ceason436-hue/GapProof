@@ -52,6 +52,35 @@ export function reconstructConfirmedDiagnosisItems(
   const extraction = typeof extractionPayload.extraction === "object" && extractionPayload.extraction !== null ? extractionPayload.extraction as Record<string, unknown> : undefined;
   if (!Array.isArray(extraction?.items) || !Array.isArray(confirmationPayload.confirmedItemIds) || !Array.isArray(confirmationPayload.corrections)) return undefined;
   const confirmedIds = new Set(confirmationPayload.confirmedItemIds.filter((value): value is string => typeof value === "string"));
+  if (confirmedIds.size === 0 || confirmedIds.size !== confirmationPayload.confirmedItemIds.length) return undefined;
+  if (confirmationPayload.reviewedQuestions !== undefined) {
+    if (!Array.isArray(confirmationPayload.reviewedQuestions) || confirmationPayload.reviewedQuestions.length === 0 || confirmationPayload.reviewedQuestions.length > 50) return undefined;
+    const extractionIds = new Set<string>();
+    for (const raw of extraction.items) {
+      if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return undefined;
+      const item = raw as Record<string, unknown>;
+      if (typeof item.itemId !== "string" || extractionIds.has(item.itemId)) return undefined;
+      extractionIds.add(item.itemId);
+    }
+    if ([...confirmedIds].some(itemId => !extractionIds.has(itemId))) return undefined;
+    const result: ConfirmedDiagnosisItem[] = [];
+    const representedItemIds = new Set<string>();
+    for (const raw of confirmationPayload.reviewedQuestions) {
+      if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return undefined;
+      const question = raw as Record<string, unknown>;
+      if (
+        typeof question.sourceItemId !== "string" || !confirmedIds.has(question.sourceItemId) ||
+        typeof question.prompt !== "string" || question.prompt.trim().length === 0 || question.prompt.length > 4_000 ||
+        (question.studentAnswer !== null && (typeof question.studentAnswer !== "string" || question.studentAnswer.trim().length === 0 || question.studentAnswer.length > 2_000))
+      ) return undefined;
+      result.push({
+        prompt: question.prompt.trim(),
+        ...(typeof question.studentAnswer === "string" ? { studentAnswer: question.studentAnswer.trim() } : {}),
+      });
+      representedItemIds.add(question.sourceItemId);
+    }
+    return [...confirmedIds].every(itemId => representedItemIds.has(itemId)) ? result : undefined;
+  }
   const corrections = new Map<string, { prompt?: string; studentAnswer?: string }>();
   for (const raw of confirmationPayload.corrections) {
     if (typeof raw !== "object" || raw === null) return undefined;

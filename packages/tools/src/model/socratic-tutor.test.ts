@@ -29,6 +29,18 @@ describe("Socratic tutor adapter", () => {
       .toBeUndefined();
     expect(guardSocraticTutorOutput({ question: "请再想一下", hint: null, nextAction: "reflect" }))
       .toBeUndefined();
+    expect(guardSocraticTutorOutput({ question: "正确选项是 C，你能看出来吗？", hint: null, nextAction: "reflect" }))
+      .toBeUndefined();
+    expect(guardSocraticTutorOutput({ question: "你看到了什么？它说明哪个时态？", hint: null, nextAction: "reflect" }))
+      .toBeUndefined();
+    expect(guardSocraticTutorOutput({ question: "你在哪所学校读书？", hint: null, nextAction: "reflect" }))
+      .toBeUndefined();
+    expect(guardSocraticTutorOutput({ question: "write 的过去分词和过去式分别是什么？", hint: null, nextAction: "reflect" }))
+      .toBeUndefined();
+    expect(guardSocraticTutorOutput({ question: "请联系 13812345678 后再想想？", hint: null, nextAction: "reflect" }))
+      .toBeUndefined();
+    expect(guardSocraticTutorOutput({ question: "你能把答案发到 student@example.com 吗？", hint: null, nextAction: "reflect" }))
+      .toBeUndefined();
   });
 
   it("sends only a desensitized bounded context and locally guards the response", async () => {
@@ -52,6 +64,7 @@ describe("Socratic tutor adapter", () => {
         stepTitle: "先找结构",
         stepContent: "have 后使用过去分词。",
         learnerText: "我的手机号 13812345678，我觉得用过去式。",
+        history: [{ learnerText: "我先看到了 yesterday。", question: "你从哪个词看出时间？", hint: "联系 13812345678" }],
       },
     });
     expect(result.status).toBe("succeeded");
@@ -59,6 +72,12 @@ describe("Socratic tutor adapter", () => {
     const providerContext = JSON.parse((captured as { input: { userPrompt: string } }).input.userPrompt);
     expect(JSON.stringify(providerContext)).not.toContain("case-1");
     expect(JSON.stringify(providerContext)).not.toContain("student-1");
+    expect(JSON.stringify(providerContext)).not.toContain("13812345678");
+    expect(providerContext.history).toEqual([{
+      learnerText: "我先看到了 yesterday。",
+      question: "你从哪个词看出时间?",
+      hint: "联系 [手机号已隐藏]",
+    }]);
     expect((captured as { input: { inputKind: string } }).input.inputKind).toBe("desensitized");
   });
 

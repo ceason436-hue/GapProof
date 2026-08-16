@@ -14,6 +14,7 @@ import {
   confirmExtraction,
   createConfirmExtractionIntent,
   buildExtractionCorrections,
+  buildReviewedQuestions,
   createProbeIntent,
   createRunNextIntent,
   deleteCaseOriginalImages,
@@ -26,6 +27,7 @@ import {
   reviewSuccessIsInterventionReady,
   submitProbe,
 } from "@/lib/case-review";
+import { isAbortError, runAbortable } from "@/lib/abort-control";
 import { AppShell } from "./app-shell";
 
 export type ReviewState =
@@ -55,6 +57,13 @@ export type ReviewState =
 
 const initialMessage = "正在准备识别内容。";
 
+type ReviewedQuestionDraft = { prompt: string; studentAnswer: string };
+const OCR_MANUAL_ENTRY_PROMPT = "这页图片没有识别出可直接核对的文字，请根据原图手动输入题目。";
+
+export function requiresManualOcrEntry(prompt: string): boolean {
+  return prompt === OCR_MANUAL_ENTRY_PROMPT;
+}
+
 export function reviewBoundaryCopy(source?: ExtractionView["recognitionSource"]) {
   if (source === "real_alibaba") return {
     title: "学习材料识别",
@@ -81,10 +90,6 @@ function wait(milliseconds: number, signal: AbortSignal) {
       reject(signal.reason);
     }, { once: true });
   });
-}
-
-function isAbort(signal: AbortSignal, error: unknown) {
-  return signal.aborted || (error instanceof Error && error.name === "AbortError");
 }
 
 export function reviewStateMessage(state: ReviewState): string {
@@ -145,6 +150,7 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
   const [extraction, setExtraction] = useState<ExtractionView | null>(null);
   const [promptValues, setPromptValues] = useState<Record<string, string>>({});
   const [answerValues, setAnswerValues] = useState<Record<string, string>>({});
+  const [reviewedQuestions, setReviewedQuestions] = useState<Record<string, ReviewedQuestionDraft[]>>({});
   const [confirmedItemIds, setConfirmedItemIds] = useState<string[]>([]);
   const [hypotheses, setHypotheses] = useState<HypothesesView | null>(null);
   const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
@@ -160,11 +166,11 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
   };
 
   const withController = async <T,>(run: (signal: AbortSignal) => Promise<T>): Promise<T | undefined> => {
-    activeAbortRef.current?.abort("REPLACED");
+    activeAbortRef.current?.abort();
     const controller = new AbortController();
     activeAbortRef.current = controller;
     try {
-      return await run(controller.signal);
+      return await runAbortable(controller, run);
     } finally {
       if (activeAbortRef.current === controller) activeAbortRef.current = null;
     }
@@ -188,11 +194,20 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
             for (const item of response.data.items) next[item.itemId] ??= item.prompt;
             return next;
           });
+          if (response.data.recognitionSource === "real_alibaba") {
+            setReviewedQuestions(previous => {
+              const next = { ...previous };
+              for (const item of response.data.items) {
+                next[item.itemId] ??= [{ prompt: requiresManualOcrEntry(item.prompt) ? "" : item.prompt, studentAnswer: "" }];
+              }
+              return next;
+            });
+          }
           if (!preserveForConflict) setConfirmedItemIds([]);
           safeState(preserveForConflict ? "confirm_conflict" : "ready");
           return;
         } catch (error) {
-          if (isAbort(signal, error)) return;
+          if (isAbortError(signal, error)) return;
           if (apiErrorCode(error) !== "EXTRACTION_NOT_READY") {
             safeState(apiErrorCode(error) === "RESOURCE_NOT_FOUND" ? "error" : "error", reviewErrorMessage(error, "识别内容暂时无法读取，请稍后再试。"));
             return;
@@ -225,7 +240,7 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
           safeState("hypotheses");
           return;
         } catch (error) {
-          if (isAbort(signal, error)) return;
+          if (isAbortError(signal, error)) return;
           if (apiErrorCode(error) !== "RESOURCE_NOT_FOUND") {
             safeState("run_next_error", reviewErrorMessage(error, "找原因内容没有准备好；请稍后重新明确开始。"));
             return;
@@ -247,29 +262,37 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
   useEffect(() => {
     mountedRef.current = true;
     const stopWhenHidden = () => {
-      if (document.visibilityState === "hidden") activeAbortRef.current?.abort("PAGE_HIDDEN");
+      if (document.visibilityState === "hidden") activeAbortRef.current?.abort();
     };
     document.addEventListener("visibilitychange", stopWhenHidden);
     void readExtraction();
     return () => {
       mountedRef.current = false;
-      activeAbortRef.current?.abort("PAGE_LEFT");
+      activeAbortRef.current?.abort();
       document.removeEventListener("visibilitychange", stopWhenHidden);
     };
   }, [caseId]);
 
+  const realExtraction = extraction?.recognitionSource === "real_alibaba";
   const corrections = useMemo(() => extraction
-    ? buildExtractionCorrections(extraction.items, promptValues, answerValues)
-    : [], [answerValues, extraction, promptValues]);
+    ? realExtraction ? [] : buildExtractionCorrections(extraction.items, promptValues, answerValues)
+    : [], [answerValues, extraction, promptValues, realExtraction]);
+  const reviewedQuestionPayload = useMemo(() => realExtraction ? buildReviewedQuestions(
+    extraction.items.flatMap(item => (reviewedQuestions[item.itemId] ?? []).map(question => ({
+      sourceItemId: item.itemId,
+      ...question,
+    }))),
+  ) : undefined, [extraction, realExtraction, reviewedQuestions]);
   const allConfirmed = Boolean(extraction?.items.length) && extraction?.items.every(item => confirmedItemIds.includes(item.itemId));
-  const promptsValid = Boolean(extraction?.items.length) && extraction?.items.every(item => (promptValues[item.itemId] ?? item.prompt).trim().length > 0);
+  const promptsValid = Boolean(extraction?.items.length) && (realExtraction
+    ? Boolean(reviewedQuestionPayload?.length) && reviewedQuestionPayload!.length <= 50 && reviewedQuestionPayload!.every(question => question.prompt.length > 0 && question.prompt.length <= 4_000 && (question.studentAnswer?.length ?? 0) <= 2_000)
+    : extraction!.items.every(item => (promptValues[item.itemId] ?? item.prompt).trim().length > 0));
   const controlsLocked = ["confirming", "confirm_unknown", "run_next", "run_next_unknown", "probe_submitting", "probe_unknown", "intervention_unknown", "intervention_accepted"].includes(state);
   const boundary = reviewBoundaryCopy(extraction?.recognitionSource);
-  const realExtraction = extraction?.recognitionSource === "real_alibaba";
 
   const submitExtraction = async () => {
     if (!extraction || !allConfirmed || controlsLocked) return;
-    const intent = createConfirmExtractionIntent(extraction.stateVersion, confirmedItemIds, corrections);
+    const intent = createConfirmExtractionIntent(extraction.stateVersion, confirmedItemIds, corrections, undefined, reviewedQuestionPayload);
     safeState("confirming");
     await withController(async signal => {
       try {
@@ -277,7 +300,7 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
         setExtraction(current => current ? { ...current, stateVersion: response.data.stateVersion } : current);
         safeState("confirmed", "识别内容已由你确认。");
       } catch (error) {
-        if (isAbort(signal, error)) return;
+        if (isAbortError(signal, error)) return;
         if (apiErrorCode(error) === "VERSION_CONFLICT") {
           setConfirmedItemIds([]);
           await readExtraction(true);
@@ -297,7 +320,7 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
         await queueRunNext(caseId, intent, signal);
         await readHypotheses();
       } catch (error) {
-        if (isAbort(signal, error)) return;
+        if (isAbortError(signal, error)) return;
         if (apiErrorCode(error) === "VERSION_CONFLICT") {
           try {
             const latest = await getCase(caseId, signal);
@@ -323,7 +346,7 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
         setAttempt(response.data);
         safeState("probe_success");
       } catch (error) {
-        if (isAbort(signal, error)) return;
+        if (isAbortError(signal, error)) return;
         if (apiErrorCode(error) === "VERSION_CONFLICT") {
           await readHypotheses(true);
           safeState("probe_conflict", reviewStateMessage("probe_conflict"));
@@ -342,7 +365,7 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
         await deleteCaseOriginalImages(caseId, signal);
         if (mountedRef.current) setOriginalImages("deleted");
       } catch (error) {
-        if (!isAbort(signal, error) && mountedRef.current) setOriginalImages("error");
+        if (!isAbortError(signal, error) && mountedRef.current) setOriginalImages("error");
       }
     });
   };
@@ -360,7 +383,7 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
             safeState("hypotheses", "已读取最新状态，请继续完成确认小题。");
             return;
           } catch (error) {
-            if (isAbort(signal, error)) return;
+            if (isAbortError(signal, error)) return;
             if (apiErrorCode(error) !== "RESOURCE_NOT_FOUND") throw error;
           }
         }
@@ -389,7 +412,7 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
           safeState(unknownState, "最新状态已读取。请返回今日页查看当前可继续的任务。");
         }
       } catch (error) {
-        if (!isAbort(signal, error)) safeState(unknownState, reviewErrorMessage(error, "暂时无法读取最新状态，请返回今日页稍后查看。"));
+        if (!isAbortError(signal, error)) safeState(unknownState, reviewErrorMessage(error, "暂时无法读取最新状态，请返回今日页稍后查看。"));
       }
     });
     if (mountedRef.current) setRecoveryBusy(false);
@@ -405,7 +428,7 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
         await queueRunNext(caseId, intent, signal);
         safeState("intervention_accepted");
       } catch (error) {
-        if (isAbort(signal, error)) return;
+        if (isAbortError(signal, error)) return;
         if (apiErrorCode(error) === "VERSION_CONFLICT") {
           try {
             const latest = await getCase(caseId, signal);
@@ -445,10 +468,23 @@ export function CaseRecognitionReview({ caseId }: { caseId: string }) {
           <div className="case-review-items">
             {extraction.items.map(item => {
               const checked = confirmedItemIds.includes(item.itemId);
+              const manualEntryRequired = realExtraction && requiresManualOcrEntry(item.prompt);
               return <article className="case-review-item" key={item.itemId}>
-                <label htmlFor={`prompt-${item.itemId}`}>{realExtraction ? "本页识别内容" : "题干"}</label>
-                <textarea id={`prompt-${item.itemId}`} value={promptValues[item.itemId] ?? item.prompt} onChange={event => { const value = event.currentTarget.value; setPromptValues(previous => ({ ...previous, [item.itemId]: value })); }} disabled={controlsLocked} rows={3}/>
-                {realExtraction ? <><label htmlFor={`answer-${item.itemId}`}>你当时的作答（选填）</label><textarea id={`answer-${item.itemId}`} value={answerValues[item.itemId] ?? ""} onChange={event => { const value = event.currentTarget.value; setAnswerValues(previous => ({ ...previous, [item.itemId]: value })); }} disabled={controlsLocked} rows={2} placeholder="如果图片里没有清楚识别出你的作答，可以在这里补充"/></> : null}
+                {realExtraction ? <div className="case-review-question-splits">
+                  {manualEntryRequired ? <div className="case-review-quality-recovery" role="alert">
+                    <strong>这页文字没有识别清楚</strong>
+                    <p>为避免把乱码当成题目，我们没有填入识别原文。你可以换一张更清晰的图片，或对照原图手动输入题目。</p>
+                    <div><a className="secondary-button" href="/materials/new">重新上传清晰图片</a><a className="text-button" href={`#prompt-${item.itemId}-0`}>直接手动输入</a></div>
+                  </div> : <div className="case-review-split-heading"><strong>把本页内容整理成题目</strong><span>识别结果可能包含整页文字，请按实际题目拆开并核对。</span></div>}
+                  {(reviewedQuestions[item.itemId] ?? []).map((question, questionIndex) => <div className="case-review-question" key={`${item.itemId}:${questionIndex}`}>
+                    <div className="case-review-question-heading"><strong>第 {questionIndex + 1} 道题</strong>{(reviewedQuestions[item.itemId]?.length ?? 0) > 1 ? <button type="button" className="text-button danger" disabled={controlsLocked} onClick={() => setReviewedQuestions(previous => ({ ...previous, [item.itemId]: (previous[item.itemId] ?? []).filter((_, index) => index !== questionIndex) }))}>删除这道题</button> : null}</div>
+                    <label htmlFor={`prompt-${item.itemId}-${questionIndex}`}>题干</label>
+                    <textarea id={`prompt-${item.itemId}-${questionIndex}`} value={question.prompt} maxLength={4000} onChange={event => { const value = event.currentTarget.value; setReviewedQuestions(previous => ({ ...previous, [item.itemId]: (previous[item.itemId] ?? []).map((current, index) => index === questionIndex ? { ...current, prompt: value } : current) })); }} disabled={controlsLocked} rows={3}/>
+                    <label htmlFor={`answer-${item.itemId}-${questionIndex}`}>你当时的作答（选填）</label>
+                    <textarea id={`answer-${item.itemId}-${questionIndex}`} value={question.studentAnswer} maxLength={2000} onChange={event => { const value = event.currentTarget.value; setReviewedQuestions(previous => ({ ...previous, [item.itemId]: (previous[item.itemId] ?? []).map((current, index) => index === questionIndex ? { ...current, studentAnswer: value } : current) })); }} disabled={controlsLocked} rows={2} placeholder="如果图片里没有清楚识别出你的作答，可以在这里补充"/>
+                  </div>)}
+                  <button type="button" className="secondary-button case-review-add-question" disabled={controlsLocked || (reviewedQuestionPayload?.length ?? 0) >= 50} onClick={() => setReviewedQuestions(previous => ({ ...previous, [item.itemId]: [...(previous[item.itemId] ?? []), { prompt: "", studentAnswer: "" }] }))}>+ 继续拆出一道题</button>
+                </div> : <><label htmlFor={`prompt-${item.itemId}`}>题干</label><textarea id={`prompt-${item.itemId}`} value={promptValues[item.itemId] ?? item.prompt} onChange={event => { const value = event.currentTarget.value; setPromptValues(previous => ({ ...previous, [item.itemId]: value })); }} disabled={controlsLocked} rows={3}/></>}
                 <label className="case-review-confirm-item"><input type="checkbox" checked={checked} onChange={event => { const nextChecked = event.currentTarget.checked; setConfirmedItemIds(previous => nextChecked ? [...previous, item.itemId] : previous.filter(id => id !== item.itemId)); }} disabled={controlsLocked}/><span>{realExtraction ? "我已核对本页识别内容" : "我确认这一项题干"}</span></label>
               </article>;
             })}

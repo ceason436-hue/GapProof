@@ -98,29 +98,47 @@ try {
     });
   });
 
-  const turnResponse = await fetch(`${apiOrigin}/v1/tasks/${taskId}/tutor-turns`, {
-    method: "POST",
-    headers: { Cookie: cookie, "Content-Type": "application/json", "Idempotency-Key": uuidv7() },
-    body: JSON.stringify({ expectedVersion: 1, stepId: "step-synthetic", learnerText: "我觉得 did not 后面可能要看动词形式。" }),
-  });
-  if (turnResponse.status !== 202 && turnResponse.status !== 200) fail("TUTOR_TURN_QUEUE_FAILED");
-
-  const deadline = Date.now() + 45_000;
-  let view: { status?: string; response?: { question?: string; hint?: string | null } | null } | undefined;
-  while (Date.now() < deadline) {
-    const response = await fetch(`${apiOrigin}/v1/tasks/${taskId}/tutor-session`, { headers: { Cookie: cookie } });
-    if (response.ok) {
-      const body = await response.json() as { data?: typeof view };
-      view = body.data;
-      if (view?.status === "succeeded" || view?.status === "fallback" || view?.status === "failed") break;
+  type SmokeTurn = { turnId?: string; status?: string; learnerText?: string; response?: { question?: string; hint?: string | null } | null };
+  const submitAndWait = async (learnerText: string, expectedTurnCount: number) => {
+    const turnResponse = await fetch(`${apiOrigin}/v1/tasks/${taskId}/tutor-turns`, {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "application/json", "Idempotency-Key": uuidv7() },
+      body: JSON.stringify({ expectedVersion: 1, stepId: "step-synthetic", learnerText }),
+    });
+    if (turnResponse.status !== 202 && turnResponse.status !== 200) fail("TUTOR_TURN_QUEUE_FAILED");
+    const deadline = Date.now() + 45_000;
+    let turns: SmokeTurn[] = [];
+    while (Date.now() < deadline) {
+      const response = await fetch(`${apiOrigin}/v1/tasks/${taskId}/tutor-session`, { headers: { Cookie: cookie } });
+      if (response.ok) {
+        const body = await response.json() as { data?: { turns?: SmokeTurn[] } };
+        turns = body.data?.turns ?? [];
+        const latest = turns.at(-1);
+        if (turns.length >= expectedTurnCount && (latest?.status === "succeeded" || latest?.status === "fallback" || latest?.status === "failed")) return turns;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
     }
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    return turns;
+  };
+
+  const firstTurns = await submitAndWait("我觉得 did not 后面可能要看动词形式。", 1);
+  const firstView = firstTurns.at(-1);
+  if (firstView?.status !== "succeeded" || typeof firstView.response?.question !== "string") {
+    const storedFirstTurns = await database.db.select().from(tutorTurns).where(eq(tutorTurns.taskId, taskId));
+    const storedFirst = storedFirstTurns.find(candidate => candidate.id === firstView?.turnId);
+    throw new Error(`TUTOR_PROVIDER_FIRST_RESULT_${String(firstView?.status ?? "TIMEOUT")}_${storedFirst?.errorCode ?? "UNKNOWN"}`);
   }
-  const [turn] = await database.db.select().from(tutorTurns).where(eq(tutorTurns.taskId, taskId)).limit(1);
+  const turns = await submitAndWait("did not 已经表示过去，所以我想动词可能保留原形。", 2);
+  const view = turns.at(-1);
+  const storedTurns = await database.db.select().from(tutorTurns).where(eq(tutorTurns.taskId, taskId));
+  const turn = storedTurns.find(candidate => candidate.id === view?.turnId);
   const [caseAfter] = await database.db.select().from(cases).where(eq(cases.id, caseId)).limit(1);
   const [taskAfter] = await database.db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
-  if (view?.status !== "succeeded" || turn?.provider !== "deepseek" || typeof view.response?.question !== "string") {
-    throw new Error(`TUTOR_PROVIDER_RESULT_${String(view?.status ?? "TIMEOUT")}`);
+  if (turns.length !== 2 || view?.status !== "succeeded" || turn?.provider !== "deepseek" || typeof view.response?.question !== "string") {
+    throw new Error(`TUTOR_PROVIDER_RESULT_${String(view?.status ?? "TIMEOUT")}_${turn?.errorCode ?? "UNKNOWN"}`);
+  }
+  if (!Array.isArray(turn.context.history) || turn.context.history.length !== 1 || turn.context.history[0]?.question !== firstView.response.question) {
+    throw new Error("TUTOR_SECOND_TURN_HISTORY_MISSING");
   }
   if (caseAfter?.stateVersion !== 1 || caseAfter.state !== "intervention_active" || taskAfter?.status !== "ready") {
     throw new Error("TUTOR_MUTATED_LEARNING_STATE");
@@ -131,6 +149,8 @@ try {
     model: turn.model,
     questionGuarded: view.response.question.endsWith("？") || view.response.question.endsWith("?"),
     hintPresent: typeof view.response.hint === "string",
+    turnCount: turns.length,
+    secondTurnUsedHistory: true,
     caseUnchanged: true,
     taskUnchanged: true,
   }));

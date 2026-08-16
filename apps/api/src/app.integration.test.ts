@@ -45,6 +45,8 @@ import {
   students,
   startSyntheticRecognitionIdempotent,
   tasks,
+  tutorSessions,
+  tutorTurns,
 } from "@gapproof/db";
 import { FixedClock } from "@gapproof/domain";
 import { RealFormHypothesesAdapter } from "../../../packages/tools/src/form-hypotheses/real-form-hypotheses.ts";
@@ -283,6 +285,8 @@ describeWithDatabase("Fastify API and run-next worker", () => {
 
   beforeAll(async () => {
     await runMigrations(database.db);
+    await database.db.delete(tutorTurns);
+    await database.db.delete(tutorSessions);
     await database.db.delete(tasks);
     await database.db.delete(ocrBatchPages);
     await database.db.delete(ocrBatches);
@@ -348,13 +352,13 @@ describeWithDatabase("Fastify API and run-next worker", () => {
   });
 
   afterAll(async () => {
-    await api.close();
-    await qualityWorker.stop();
-    await retestDueWorker.stop();
-    await worker.stop();
+    await api?.close();
+    await qualityWorker?.stop();
+    await retestDueWorker?.stop();
+    await worker?.stop();
     await queue.stop();
     await database.close();
-    await rm(uploadRoot, { recursive: true, force: true });
+    if (uploadRoot !== undefined) await rm(uploadRoot, { recursive: true, force: true });
   });
 
   it("rejects a write request without an idempotency key", async () => {
@@ -1556,6 +1560,56 @@ describeWithDatabase("Fastify API and run-next worker", () => {
     expect(generated?.sourceType).toBe("deepseek_diagnosis");
     expect(JSON.stringify(generated?.payload)).not.toMatch(/Mina|saving water|学生确认后的真实题干|integration-fixture/);
   }, 15_000);
+
+  it("persists bounded manual question splits when confirming a real OCR page", async () => {
+    const tenantId = uuidv7();
+    const studentId = uuidv7();
+    const caseId = uuidv7();
+    const occurredAt = new Date("2026-08-15T00:30:00.000Z");
+    await database.db.insert(students).values({ id: studentId, tenantId, anonymousKey: `split-review-${studentId}`, timezone: "Asia/Shanghai" });
+    await database.db.insert(cases).values({
+      id: caseId, tenantId, studentId, state: "awaiting_confirmation", stateVersion: 1,
+      title: "英语练习", simulation: false, synthetic: false,
+    });
+    await database.db.insert(learningEvidenceEvents).values({
+      id: uuidv7(), tenantId, studentId, caseId,
+      eventType: "evidence_ingested", sourceType: "real_alibaba_ocr", sourceRef: "private-source",
+      payload: { extraction: { items: [{ itemId: "page-1", prompt: "整页识别文字" }] }, recognitionSource: "real_alibaba", uploadedAssetUsedForRecognition: true },
+      confidence: null, occurredAt, idempotencyKey: `split-extraction:${caseId}`,
+    });
+
+    const missingSplits = await api.inject({
+      method: "POST", url: `/v1/cases/${caseId}/extraction/confirm`,
+      headers: { "idempotency-key": `split-confirm-missing:${caseId}` },
+      payload: { expectedVersion: 1, confirmedItemIds: ["page-1"], corrections: [] },
+    });
+    expect(missingSplits.statusCode).toBe(400);
+    expect(missingSplits.json<ApiErrorResponse>().error.code).toBe("INVALID_INPUT");
+
+    const confirmation = await api.inject({
+      method: "POST", url: `/v1/cases/${caseId}/extraction/confirm`,
+      headers: { "idempotency-key": `split-confirm:${caseId}` },
+      payload: {
+        expectedVersion: 1,
+        confirmedItemIds: ["page-1"],
+        corrections: [],
+        reviewedQuestions: [
+          { sourceItemId: "page-1", prompt: "第一道题", studentAnswer: "A" },
+          { sourceItemId: "page-1", prompt: "第二道题", studentAnswer: null },
+        ],
+      },
+    });
+    expect(confirmation.statusCode).toBe(200);
+    expect(confirmation.json<ApiResponse<CaseView>>().data).toMatchObject({ state: "ready_for_diagnosis", stateVersion: 2 });
+
+    const archive = await api.inject({ method: "GET", url: `/v1/students/${studentId}/question-archive` });
+    expect(archive.statusCode).toBe(200);
+    expect(archive.json<ApiResponse<QuestionArchiveView>>().data.items).toMatchObject([
+      { prompt: "第一道题", studentAnswer: "A" },
+      { prompt: "第二道题", studentAnswer: null },
+    ]);
+    expect(JSON.stringify(archive.json())).not.toMatch(/private-source|page-1|answerKey|confidence|objectKey|sha256|token/i);
+  });
 
   it("projects only human-confirmed real OCR items into the question archive", async () => {
     const tenantId = uuidv7();

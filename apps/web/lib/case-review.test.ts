@@ -3,6 +3,7 @@ import { ApiClientError } from "./api-client";
 import {
   attemptPath,
   buildExtractionCorrections,
+  buildReviewedQuestions,
   caseOriginalImagesPath,
   confirmExtractionPath,
   createConfirmExtractionIntent,
@@ -55,5 +56,17 @@ describe("same Case recognition review client", () => {
       { itemId: "item-1", field: "student_answer", value: "my original answer" },
     ]);
     expect(buildExtractionCorrections([{ itemId: "item-1", prompt: "OCR text" }], {}, { "item-1": "   " })).toEqual([]);
+  });
+
+  it("normalizes manually split questions into the real confirmation intent", () => {
+    const questions = buildReviewedQuestions([
+      { sourceItemId: "page-1", prompt: "  First question  ", studentAnswer: "  A  " },
+      { sourceItemId: "page-1", prompt: "Second question", studentAnswer: "   " },
+    ]);
+    expect(questions).toEqual([
+      { sourceItemId: "page-1", prompt: "First question", studentAnswer: "A" },
+      { sourceItemId: "page-1", prompt: "Second question", studentAnswer: null },
+    ]);
+    expect(createConfirmExtractionIntent(1, ["page-1"], [], () => "0198c111-1111-7000-8000-000000000013", questions).body.reviewedQuestions).toEqual(questions);
   });
 });

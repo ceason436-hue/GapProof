@@ -1,5 +1,5 @@
 import type { SocraticTutorContext, SocraticTutorOutput } from "@gapproof/contracts";
-import { isUuidV7, TUTOR_MAX_TURNS_PER_DAY, TUTOR_MAX_TURNS_PER_TASK } from "@gapproof/contracts";
+import { isUuidV7, TUTOR_MAX_TURNS_PER_DAY, TUTOR_MAX_TURNS_PER_TASK, TUTOR_SESSION_HISTORY_LIMIT } from "@gapproof/contracts";
 import { and, count, desc, eq, gte, inArray } from "drizzle-orm";
 
 import type { Database } from "./client.ts";
@@ -115,6 +115,27 @@ export async function findLatestTutorTurn(database: Database, taskId: string, st
     .where(and(eq(tutorTurns.taskId, taskId), eq(tutorTurns.studentId, studentId)))
     .orderBy(desc(tutorTurns.createdAt)).limit(1);
   return turn;
+}
+
+export async function findTutorSessionHistory(database: Database, input: {
+  readonly taskId: string;
+  readonly studentId: string;
+  readonly tenantId: string;
+}) {
+  const rows = await database.select({ turn: tutorTurns }).from(tutorTurns)
+    .innerJoin(tutorSessions, and(
+      eq(tutorSessions.id, tutorTurns.sessionId),
+      eq(tutorSessions.taskId, input.taskId),
+      eq(tutorSessions.studentId, input.studentId),
+      eq(tutorSessions.tenantId, input.tenantId),
+    ))
+    .where(and(
+      eq(tutorTurns.taskId, input.taskId),
+      eq(tutorTurns.studentId, input.studentId),
+    ))
+    .orderBy(desc(tutorTurns.createdAt), desc(tutorTurns.id))
+    .limit(TUTOR_SESSION_HISTORY_LIMIT);
+  return rows.map(({ turn }) => turn).reverse();
 }
 
 export async function claimTutorTurn(database: Database, turnId: string, now = new Date()) {

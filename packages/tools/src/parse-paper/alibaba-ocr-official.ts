@@ -18,6 +18,7 @@ export const DEFAULT_ALIBABA_OCR_ENDPOINT =
   "ocr-api.cn-hangzhou.aliyuncs.com";
 export const DEFAULT_ALIBABA_EDU_IMAGE_TYPE = "scan";
 export const DEFAULT_ALIBABA_EDU_SUBJECT = "JHighSchool_English";
+export const ALIBABA_OCR_LOW_TEXT_QUALITY_WARNING = "OCR_LOW_TEXT_QUALITY";
 
 export type AlibabaEduImageType = "scan" | "photo";
 export type AlibabaEduSubject =
@@ -104,6 +105,25 @@ function normalizedConfidence(value: unknown): number {
   return Math.min(1, Math.max(0, number / 100));
 }
 
+/** Rejects deterministic OCR corruption without pretending to judge an answer's meaning. */
+export function isAlibabaOcrTextLowQuality(value: string): boolean {
+  const text = value.replace(/\s+/g, " ").trim();
+  if (text.length === 0) return true;
+  if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFD]/u.test(text)) return true;
+  if (/[a-z][A-Z][a-z]/.test(text)) return true;
+
+  // Broken OCR often starts with several short consonant fragments. Limit this
+  // check to the prefix and require multiple fragments so ordinary names and
+  // abbreviations do not make a valid English question fail closed.
+  const prefixTokens = (text.slice(0, 180).match(/[A-Za-z]+/g) ?? []).slice(0, 14);
+  if (prefixTokens.length >= 6) {
+    const consonantFragments = prefixTokens.filter((token) =>
+      token.length >= 2 && token.length <= 4 && !/[aeiouy]/i.test(token));
+    if (consonantFragments.length >= 3) return true;
+  }
+  return false;
+}
+
 export function normalizeAlibabaEduPaperResponse(
   data: unknown,
 ): ParsePaperOutput | undefined {
@@ -172,12 +192,13 @@ export function normalizeAlibabaEduPaperResponse(
     coordinates: { page: 1, x: 0, y: 0, width, height },
     confidence,
   }];
+  const lowTextQuality = isAlibabaOcrTextLowQuality(prompt);
   return {
     pages: [{ page: 1, width, height }],
     items,
     coordinates: items.map((item) => ({ ...item.coordinates })),
     confidence,
-    warnings: [],
+    warnings: lowTextQuality ? [ALIBABA_OCR_LOW_TEXT_QUALITY_WARNING] : [],
   };
 }
 

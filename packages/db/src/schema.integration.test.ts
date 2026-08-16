@@ -13,6 +13,8 @@ import {
   studentProfileRevisions,
   students,
   tasks,
+  tutorSessions,
+  tutorTurns,
 } from "./schema.ts";
 import {
   persistCaseTransition,
@@ -36,6 +38,8 @@ describeWithDatabase("PostgreSQL evidence ledger", () => {
   const database = createDatabase(databaseUrl ?? "");
 
   beforeAll(async () => {
+    await database.db.delete(tutorTurns);
+    await database.db.delete(tutorSessions);
     await database.db.delete(tasks);
     await database.db.delete(ocrBatchPages);
     await database.db.delete(ocrBatches);

@@ -59,6 +59,14 @@ let caseReads = 0;
 let caseReadFailureMode = null;
 const posts = [];
 const tutorPosts = [];
+const priorTutorTurn = {
+  turnId: "0198b111-1111-7000-8000-000000000070",
+  taskId,
+  status: "succeeded",
+  learnerText: "我先看到了旧的时间线索。",
+  response: { question: "这个旧线索说明什么？", hint: null, nextAction: "reflect" },
+  retryable: false,
+};
 const fixtureServer = createServer(async (request, response) => {
   if (handleDeviceSessionFixture(request, response, studentId)) return;
   if (request.method === "GET" && request.url === `/v1/students/${studentId}/today`) {
@@ -96,11 +104,13 @@ const fixtureServer = createServer(async (request, response) => {
   if (request.method === "POST" && request.url === `/v1/tasks/${taskId}/tutor-turns`) {
     const body = await readJsonBody(request);
     tutorPosts.push({ body, idempotencyKey: request.headers["idempotency-key"] });
+    if (scenario === "tutor-network-unknown") { request.socket.destroy(); return; }
     response.writeHead(200, { "Content-Type": "application/json" });
     response.end(JSON.stringify(envelope({
       turnId: "0198b111-1111-7000-8000-000000000071",
       taskId,
       status: "succeeded",
+      learnerText: body.learnerText,
       response: {
         question: "你能先指出这一步里最关键的线索吗？",
         hint: "只看当前步骤，不需要直接写出答案。",
@@ -108,6 +118,16 @@ const fixtureServer = createServer(async (request, response) => {
       },
       retryable: false,
     })));
+    return;
+  }
+  if (request.method === "GET" && request.url === `/v1/tasks/${taskId}/tutor-session`) {
+    if (scenario === "tutor-network-unknown") {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify(envelope({ taskId, turns: [priorTutorTurn] })));
+      return;
+    }
+    response.writeHead(404, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ error: { code: "RESOURCE_NOT_FOUND", message: "No tutor session.", retryable: false }, requestId: "guided-no-session", traceId: "guided-no-session" }));
     return;
   }
   response.writeHead(404, { "Content-Type": "application/json" });
@@ -137,7 +157,7 @@ try {
   }
   const browser = await chromium.launch({ channel: "msedge", headless: true });
   try {
-    for (const currentScenario of ["success", "conflict", "network-unknown", "initial-get-failure", "pre-submit-get-failure", "conflict-get-failure", "case-not-found"]) {
+    for (const currentScenario of ["success", "tutor-network-unknown", "conflict", "network-unknown", "initial-get-failure", "pre-submit-get-failure", "conflict-get-failure", "case-not-found"]) {
       scenario = currentScenario; caseReads = 0; caseReadFailureMode = currentScenario === "initial-get-failure" ? "network" : currentScenario === "case-not-found" ? "not_found" : null; posts.length = 0; tutorPosts.length = 0;
       const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
       await installDeviceSessionCookie(page, webOrigin);
@@ -150,16 +170,37 @@ try {
         });
       });
       await page.goto(`${webOrigin}/student/today?source=api&fixture=${currentScenario}`, { waitUntil: "networkidle" });
+      if (currentScenario === "tutor-network-unknown") {
+        await page.getByText(priorTutorTurn.response.question, { exact: true }).waitFor();
+        await page.getByRole("button", { name: "回答这个问题" }).click();
+        const newLearnerText = "这是本轮新的思路。";
+        await page.getByLabel("写下你对当前步骤的思路").fill(newLearnerText);
+        await page.getByRole("button", { name: "请导师引导我" }).click();
+        await page.getByRole("button", { name: "读取最新状态" }).waitFor();
+        await page.getByRole("button", { name: "读取最新状态" }).click();
+        await page.getByText(/最新记录里还没有看到这次提问/).waitFor();
+        assert(tutorPosts.length === 2, `tutor-network-unknown: expected the bounded same-intent retry, observed ${tutorPosts.length} tutor POSTs.`);
+        assert(tutorPosts[0].idempotencyKey === tutorPosts[1].idempotencyKey && JSON.stringify(tutorPosts[0].body) === JSON.stringify(tutorPosts[1].body), "tutor-network-unknown: retry changed the idempotency key or body.");
+        assert(await page.getByLabel("写下你对当前步骤的思路").isDisabled(), "tutor-network-unknown: learner input was unlocked after reading the old turn.");
+        assert(await page.getByText(priorTutorTurn.response.question, { exact: true }).count() === 1, "tutor-network-unknown: prior history disappeared during recovery.");
+        assert(await page.locator(".socratic-tutor-history .student-message", { hasText: newLearnerText }).count() === 0, "tutor-network-unknown: old session was mislabeled as the unknown submission.");
+        await page.close();
+        continue;
+      }
       if (currentScenario === "success") {
         await page.getByRole("heading", { name: "把你的思路说出来" }).waitFor();
+        assert(await page.getByRole("group", { name: "你想问哪一步？" }).count() === 1, "success: plain-language tutor step chooser missing.");
+        assert(await page.locator(".socratic-tutor select").count() === 0, "success: legacy technical tutor select remained visible.");
+        await page.getByLabel("第 2 步步骤 2").check();
         const tutorButton = page.getByRole("button", { name: "请导师引导我" });
         assert(await tutorButton.isDisabled(), "success: tutor submit should be disabled before learner input.");
         await page.getByLabel("写下你对当前步骤的思路").fill("我注意到了这一步的时态线索。");
         assert(await tutorButton.isEnabled(), "success: tutor submit did not become actionable after learner input.");
         await tutorButton.click();
         await page.getByText("你能先指出这一步里最关键的线索吗？", { exact: true }).waitFor();
+        await page.getByText("我注意到了这一步的时态线索。", { exact: true }).waitFor();
         assert(tutorPosts.length === 1, `success: expected one tutor POST, observed ${tutorPosts.length}.`);
-        assert(tutorPosts[0].body.expectedVersion === 4 && tutorPosts[0].body.stepId === stepIds[0], "success: tutor POST did not use current Case version and selected step.");
+        assert(tutorPosts[0].body.expectedVersion === 4 && tutorPosts[0].body.stepId === stepIds[1], "success: tutor POST did not use current Case version and selected step.");
         assert(tutorPosts[0].body.learnerText === "我注意到了这一步的时态线索。", "success: tutor POST changed learner input.");
         assert(uuidV7Pattern.test(tutorPosts[0].idempotencyKey ?? ""), "success: tutor Idempotency-Key was not UUIDv7.");
       }

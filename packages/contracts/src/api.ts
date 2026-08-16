@@ -357,6 +357,19 @@ export const ExtractionCorrectionSchema = Type.Object({
 
 export type ExtractionCorrection = Static<typeof ExtractionCorrectionSchema>;
 
+export const ReviewedExtractionQuestionSchema = Type.Object({
+  sourceItemId: Type.String({ minLength: 1 }),
+  prompt: Type.String({ minLength: 1, maxLength: 4_000 }),
+  studentAnswer: Type.Union([
+    Type.String({ minLength: 1, maxLength: 2_000 }),
+    Type.Null(),
+  ]),
+}, { additionalProperties: false });
+
+export type ReviewedExtractionQuestion = Static<
+  typeof ReviewedExtractionQuestionSchema
+>;
+
 export const ConfirmExtractionRequestSchema = Type.Object({
   expectedVersion: Type.Integer({ minimum: 0 }),
   confirmedItemIds: Type.Array(Type.String({ minLength: 1 }), {
@@ -364,7 +377,13 @@ export const ConfirmExtractionRequestSchema = Type.Object({
     uniqueItems: true,
   }),
   corrections: Type.Array(ExtractionCorrectionSchema),
-});
+  /** Student-reviewed question boundaries for real page-level OCR. Omitted for
+   * synthetic extraction and retained as optional for existing confirmations. */
+  reviewedQuestions: Type.Optional(Type.Array(ReviewedExtractionQuestionSchema, {
+    minItems: 1,
+    maxItems: 50,
+  })),
+}, { additionalProperties: false });
 
 export type ConfirmExtractionRequest = Static<
   typeof ConfirmExtractionRequestSchema

@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { CaseRecognitionReview, classifyUnknownRecovery, reviewBoundaryCopy, reviewStateMessage, type ReviewState } from "./case-recognition-review";
+import { CaseRecognitionReview, classifyUnknownRecovery, requiresManualOcrEntry, reviewBoundaryCopy, reviewStateMessage, type ReviewState } from "./case-recognition-review";
 
 vi.mock("next/image", () => ({
   default: ({ alt }: { alt: string }) => createElement("img", { alt }),
@@ -33,6 +33,15 @@ describe("CaseRecognitionReview component", () => {
     expect(source).toContain("原图将在 24 小时后自动删除");
     expect(source).toContain("已确认的文字内容会继续保留");
     expect(source).not.toContain("全部学习记录已删除");
+  });
+
+  it("recognizes only the bounded manual-entry marker and exposes recovery actions", () => {
+    expect(requiresManualOcrEntry("这页图片没有识别出可直接核对的文字，请根据原图手动输入题目。")).toBe(true);
+    expect(requiresManualOcrEntry("一道正常题目")).toBe(false);
+    const source = readFileSync(new URL("./case-recognition-review.tsx", import.meta.url), "utf8");
+    expect(source).toContain("为避免把乱码当成题目");
+    expect(source).toContain("重新上传清晰图片");
+    expect(source).toContain("直接手动输入");
   });
 
   it("keeps all bounded states neutral and actionable", () => {

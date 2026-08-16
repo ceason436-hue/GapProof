@@ -2,15 +2,15 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 技术设计文档（TDD）"
 document_role: "技术路线、系统边界、架构约束与工程验收的权威文档"
-version: "0.3.43"
+version: "0.3.44"
 status: "DRAFT_FOR_IMPLEMENTATION"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\TDD.md"
 repository_url: "https://github.com/ceason436-hue/GapProof.git"
 upstream_documents:
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.50"
-  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.42"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PROJECT_MASTER.md v0.1.51"
+  - "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\PRD.md Draft v0.1.43"
 ---
 
 # 知隙 GapProof 技术设计文档（TDD）
@@ -1614,6 +1614,7 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 
 | Push ID | 日期 | 分支 | 状态 | 提交摘要 | 主要内容 | 验证 |
 |---|---|---|---|---|---|---|
+| PUSH-036 | 2026-08-16 | `main` | `pushed` | `feat: complete OCR review and tutor continuity` | 真实 OCR 页面支持人工拆分最多 50 道题、逐题题干/选填原作答确认和乱码/低质结果恢复；导师公开并恢复最多六轮历史，下一轮携带最多五轮既有上下文，保留未知写入只读恢复与输出守卫；共享中止控制修复 `REPLACED`。首次学习范围改为 Today 内嵌品牌化五步选择，桌面双列、手机固定确认操作。人工拆题不冒充可靠自动逐题 OCR；审计确认真实 Case 后续固定 Fake 干预与固定 D1/D7 仍为下一 P0，不宣称真实个性化或学习效果 | 254 fast / 74 skipped、152 Web、隔离 PostgreSQL/API/Worker 73、双 TypeScript、Next production build、8 条浏览器主链、授权材料阿里云 OCR 单页 smoke 与 DeepSeek 双轮 synthetic smoke、凭据/隐私和 `git diff --check` 通过；共享库首次 2 项失败已确认由预览 Worker 争用队列导致，隔离复验全过且临时数据库已删除；Drizzle `check` 仍因本地版本兼容阻断；`.env`、授权测试材料、`next-env.d.ts`、本地 agent 文件、生成缓存与截图不纳入暂存 |
 | PUSH-035 | 2026-08-16 | `main` | `pushed` | `feat: add confirmed question archive and tutor recovery` | 新增同设备学生已确认真实 OCR item 的只读错题档案、人工修正/选填原作答及题目/任务详情；排除 synthetic/simulation 与未确认项，ready 任务复用权威提交链路。导师新增最新轮次恢复、NETWORK_UNKNOWN 只读恢复、按需提示与 nextAction；修正上传控件语义及三条浏览器 Fixture 漂移。当前 OCR item 可能对应整页，导师公开契约只返回最新一轮，不宣称可靠自动逐题切分、真实个性化或学习效果 | 242 fast、138 Web、72 串行 PostgreSQL/API/Worker（主 API 51 + 其余 21）、双 TypeScript、Next production build、7 条串行浏览器 fixture、DeepSeek structured 与导师全链路真实 synthetic smoke、授权材料阿里云 OCR 单页 smoke、凭据/隐私和 diff 检查通过；生产 OSS、完整导师历史、跨设备账号、正式 30–50 页基准与真实学生验收继续待办；`.env`、授权测试材料、`next-env.d.ts` 与本地 agent 文件不纳入暂存 |
 | PUSH-034 | 2026-08-16 | `main` | `pushed` | `feat: add factual student views and source retention` | 从权威 tasks 投影学生未来 7 日计划；从 Case/task/evidence 只读投影当前进步与事实报告，报告仅限 `repair_verified` / `support_required`，合成来源明确标注。真实 OCR 确认后原图保留缩短为 24 小时，新增设备所有权保护的主动删除、本地目录到期清理和上传队列物理移除；已确认文字/证据继续保留，不宣称生产 OSS 删除或永久掌握 | 235 fast、131 Web、71 PostgreSQL/API/Worker、双 TypeScript、Next production build、计划/进步/报告真实浏览器空状态、上传/核对/首次使用 3 条串行浏览器 fixture、留存 focused 11、凭据/隐私和 diff 检查通过；常驻 demo worker 停止后数据库套件完整通过；`.env`、授权测试材料、`next-env.d.ts` 与本地 agent 文件不纳入暂存 |
 | PUSH-033 | 2026-08-16 | `main` | `pushed` | `feat: add student continuity and Socratic guidance` | 新增 HttpOnly 匿名设备会话、SHA-256 token 存储与学生/Case/task/asset/OCR batch 所有权；Today/上传支持未完成 OCR 批次跨刷新继续。ready guided task 经中央 API/pg-boss/Worker 调用受约束 DeepSeek 单问导师，具备去标识、幂等、版本、轮次限额、输出守卫和规则降级且不改变 Case/任务。新增任务型错题本/回顾/ready 重做、真实导航/学习设置、错误/404 与学生文案治理；不把任务历史称为完整 OCR 原题档案 | 222 fast、127 Web、69 PostgreSQL/API/Worker、双 TypeScript、Next production build、实际 migration、真实 DeepSeek tutor synthetic 全链路 smoke、7 条串行 Playwright fixture（首次使用、多图上传/核对、导师、D1/D7、demo review）与凭据/隐私/diff 检查通过；Drizzle `check` 因本地版本兼容阻断，内置浏览器 localhost URL policy blocked 不计为通过；`.env`、授权测试材料、`next-env.d.ts` 与本地 agent 文件不纳入暂存 |
@@ -1651,6 +1652,12 @@ Git 远端：`https://github.com/ceason436-hue/GapProof.git`
 | PUSH-026 | 2026-08-16 | `main` | `pushed` | `fix: decouple demo readiness from product copy` | Demo 栈 Web readiness 从已移除的“真实 API 模式”可见文案改为稳定 `today-page` 页面结构信号，防止产品文案治理后 90 秒误判并停止 API/Worker/Web 子进程 | root typecheck、`git diff --check`、Web 200、API Today 200 且含 overview、Demo 父进程持续存活、3000/4000 监听及生成残留精确清理通过；同轮推送后核对本地/远端 SHA 一致 |
 
 ## 27. 变更日志
+
+### v0.3.44 — 2026-08-16
+
+- OCR 核对契约允许学生把一个 Provider 页面 item 人工拆为最多 50 个确认题目，每题保存题干与选填原作答；乱码/不可读输出在 Worker 归一化和页面层 fail closed，进入重新上传或手动录入恢复。该路径没有宣称 Provider 自动完成可靠题目切分。
+- 导师 contracts/repository/API 返回同任务最多六轮已完成历史；Worker 构造下一轮模型上下文时携带最多五轮历史，保留 PII、答案、单问和动作守卫。共享 AbortController 所有权避免旧请求的 `finally` 覆盖新请求状态。
+- Today 未完成档案直接渲染品牌化 `StudentProfileSetup`，仍使用版本化 PUT、UUIDv7 幂等和冲突保护；浏览器 fixture 使用隔离 Next distDir，避免与 3000 预览争锁。真实性审计确认 `FakeBuildInterventionAdapter` 与固定 D1/D7 不得进入真实 Case 证据链，下一 P0 必须在报告前消除该路径。同步 PROJECT_MASTER v0.1.51、PRD v0.1.43、DESIGN v0.2.41 与 PUSH-036。
 
 ### v0.3.43 — 2026-08-16
 

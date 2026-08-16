@@ -10,6 +10,7 @@ import {
   ExtractionViewSchema,
   DeletedCaseSourceAssetsViewSchema,
   type ConfirmExtractionRequest,
+  type ReviewedExtractionQuestion,
   type SubmitAttemptRequest,
   type ExtractionView,
 } from "@gapproof/contracts";
@@ -38,6 +39,16 @@ export function buildExtractionCorrections(
     if (answer) corrections.push({ itemId: item.itemId, field: "student_answer", value: answer });
     return corrections;
   });
+}
+
+export function buildReviewedQuestions(
+  drafts: readonly { sourceItemId: string; prompt: string; studentAnswer: string }[],
+): ReviewedExtractionQuestion[] {
+  return drafts.map(draft => ({
+    sourceItemId: draft.sourceItemId,
+    prompt: draft.prompt.trim(),
+    studentAnswer: draft.studentAnswer.trim() || null,
+  }));
 }
 
 export const extractionPath = (caseId: string): `/api/v1/${string}` =>
@@ -70,11 +81,15 @@ export function createConfirmExtractionIntent(
   confirmedItemIds: string[],
   corrections: ConfirmExtractionRequest["corrections"],
   createKey: () => string = createBrowserUuidV7,
+  reviewedQuestions?: ConfirmExtractionRequest["reviewedQuestions"],
 ): WriteIntent<ConfirmExtractionRequest> {
   const body = validateConfirm({
     expectedVersion,
     confirmedItemIds: [...confirmedItemIds],
     corrections: corrections.map(correction => ({ ...correction })),
+    ...(reviewedQuestions === undefined ? {} : {
+      reviewedQuestions: reviewedQuestions.map(question => ({ ...question })),
+    }),
   });
   return { body, idempotencyKey: createKey() };
 }

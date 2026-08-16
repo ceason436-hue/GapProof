@@ -100,10 +100,13 @@ import {
   StartRealOcrBatchViewSchema,
   type StartRealOcrBatchView,
   CreateTutorTurnRequestSchema,
+  TutorSessionViewSchema,
   TutorTurnViewSchema,
   TUTOR_POLICY_VERSION,
   isUuidV7,
   type CreateTutorTurnRequest,
+  type SocraticTutorContext,
+  type TutorSessionView,
   type TutorTurnView,
   DeletedCaseSourceAssetsViewSchema,
   type DeletedCaseSourceAssetsView,
@@ -160,6 +163,7 @@ import {
   removeOcrBatchPage,
   replaceOcrBatchPage,
   findLatestTutorTurn,
+  findTutorSessionHistory,
   queueTutorTurn,
   TutorTurnRejectedError,
   scheduleCaseSourceAssetRetention,
@@ -333,6 +337,13 @@ function extractionConfirmationPayload(
     expectedVersion: body.expectedVersion,
     confirmedItemIds: [...body.confirmedItemIds],
     corrections: body.corrections.map((correction) => ({ ...correction })),
+    ...(body.reviewedQuestions === undefined ? {} : {
+      reviewedQuestions: body.reviewedQuestions.map((question) => ({
+        sourceItemId: question.sourceItemId,
+        prompt: question.prompt.trim(),
+        studentAnswer: question.studentAnswer?.trim() || null,
+      })),
+    }),
   };
 }
 
@@ -444,15 +455,43 @@ function deidentifyTutorText(value: string): string {
 function tutorTurnView(turn: Awaited<ReturnType<typeof findLatestTutorTurn>>): TutorTurnView {
   if (turn === undefined) throw new ApiHttpError(404, "RESOURCE_NOT_FOUND", "Tutor turn was not found.");
   const response = turn.response;
+  const learnerText = isRecord(turn.context) && typeof turn.context.learnerText === "string"
+    ? turn.context.learnerText
+    : null;
+  if (learnerText === null || learnerText.length === 0) throw new Error("Tutor turn is missing its student-safe learner text.");
   return {
     turnId: turn.id,
     taskId: turn.taskId,
     status: turn.status,
+    learnerText,
     response: response !== null && isRecord(response) && typeof response.question === "string" && (typeof response.hint === "string" || response.hint === null) && typeof response.nextAction === "string"
       ? response as TutorTurnView["response"]
       : null,
     retryable: turn.status === "queued" || turn.status === "running" || turn.status === "failed",
   };
+}
+
+function tutorSessionView(taskId: string, turns: Awaited<ReturnType<typeof findTutorSessionHistory>>): TutorSessionView {
+  if (turns.length === 0) throw new ApiHttpError(404, "RESOURCE_NOT_FOUND", "Tutor session was not found.");
+  return { taskId, turns: turns.map(tutorTurnView) };
+}
+
+function tutorHistoryContext(turns: Awaited<ReturnType<typeof findTutorSessionHistory>>): NonNullable<SocraticTutorContext["history"]> {
+  return turns.flatMap(turn => {
+    if (turn.status !== "succeeded" && turn.status !== "fallback") return [];
+    const context = isRecord(turn.context) ? turn.context : undefined;
+    const response = isRecord(turn.response) ? turn.response : undefined;
+    if (
+      typeof context?.learnerText !== "string" || context.learnerText.length === 0 ||
+      typeof response?.question !== "string" || response.question.length === 0 ||
+      (response.hint !== null && typeof response.hint !== "string")
+    ) return [];
+    return [{
+      learnerText: context.learnerText,
+      question: response.question,
+      hint: response.hint,
+    }];
+  }).slice(-5);
 }
 
 function d1AttemptRequestPayload(
@@ -1572,6 +1611,48 @@ export async function buildApi(options: BuildApiOptions) {
           "Every correction must refer to a confirmed item.",
         );
       }
+      const realExtraction = extraction?.view.recognitionSource === "real_alibaba";
+      if (realExtraction && request.body.reviewedQuestions === undefined) {
+        throw new ApiHttpError(
+          400,
+          "INVALID_INPUT",
+          "Real extraction confirmation requires reviewed question boundaries.",
+        );
+      }
+      if (realExtraction && request.body.corrections.length > 0) {
+        throw new ApiHttpError(
+          400,
+          "INVALID_INPUT",
+          "Real extraction questions must use the reviewed question structure.",
+        );
+      }
+      if (!realExtraction && request.body.reviewedQuestions !== undefined) {
+        throw new ApiHttpError(
+          400,
+          "INVALID_INPUT",
+          "Reviewed question boundaries are only accepted for real extraction.",
+        );
+      }
+      if (request.body.reviewedQuestions?.some(
+        (question) =>
+          !confirmedItemIds.has(question.sourceItemId) ||
+          question.prompt.trim().length === 0 ||
+          (question.studentAnswer !== null && question.studentAnswer.trim().length === 0),
+      )) {
+        throw new ApiHttpError(
+          400,
+          "INVALID_INPUT",
+          "Every reviewed question must belong to a confirmed extraction item.",
+        );
+      }
+      const representedItemIds = new Set(request.body.reviewedQuestions?.map(question => question.sourceItemId) ?? []);
+      if (realExtraction && [...confirmedItemIds].some(itemId => !representedItemIds.has(itemId))) {
+        throw new ApiHttpError(
+          400,
+          "INVALID_INPUT",
+          "Every confirmed extraction item must contain at least one reviewed question.",
+        );
+      }
 
       const event = {
         eventId: uuidv7(),
@@ -2149,6 +2230,12 @@ export async function buildApi(options: BuildApiOptions) {
       if (student === undefined) throw new ResourceNotFoundError("Student", principal.studentId);
       const idempotencyKey = getIdempotencyKey(request);
       if (!isUuidV7(idempotencyKey)) throw new ApiHttpError(400, "INVALID_INPUT", "Idempotency-Key must be a UUIDv7.");
+      const previousTurns = await findTutorSessionHistory(options.database, {
+        taskId: task.id,
+        studentId: principal.studentId,
+        tenantId: principal.tenantId,
+      });
+      const history = tutorHistoryContext(previousTurns);
       const turnId = uuidv7();
       const sessionId = uuidv7();
       const queued = await queueTutorTurn(options.database, {
@@ -2169,6 +2256,7 @@ export async function buildApi(options: BuildApiOptions) {
           stepTitle: step.title,
           stepContent: step.content,
           learnerText,
+          ...(history.length === 0 ? {} : { history }),
         },
       });
       if (!queued.replayed && queued.turn.status === "queued") {
@@ -2185,7 +2273,7 @@ export async function buildApi(options: BuildApiOptions) {
       schema: {
         params: TaskIdParamsSchema,
         response: {
-          200: apiResponseSchema(TutorTurnViewSchema),
+          200: apiResponseSchema(TutorSessionViewSchema),
           "4xx": ApiErrorResponseSchema,
           500: ApiErrorResponseSchema,
         },
@@ -2194,9 +2282,18 @@ export async function buildApi(options: BuildApiOptions) {
     async (request) => {
       if (options.deviceSession === undefined) throw new ApiHttpError(503, "STUDENT_SESSION_REQUIRED", "A student session is required for tutor guidance.", false);
       const principal = await options.deviceSession.requirePrincipal(request.headers.cookie);
-      const latest = await findLatestTutorTurn(options.database, request.params.taskId, principal.studentId);
-      if (latest === undefined) throw new ResourceNotFoundError("Tutor session", request.params.taskId);
-      return success(request, tutorTurnView(latest));
+      const task = await findTaskById(options.database, request.params.taskId);
+      if (task === undefined) throw new ResourceNotFoundError("Tutor session", request.params.taskId);
+      const caseRow = await findCaseById(options.database, task.caseId);
+      if (caseRow === undefined || task.studentId !== principal.studentId || task.tenantId !== principal.tenantId || caseRow.studentId !== principal.studentId || caseRow.tenantId !== principal.tenantId) {
+        throw new ResourceNotFoundError("Tutor session", request.params.taskId);
+      }
+      const turns = await findTutorSessionHistory(options.database, {
+        taskId: task.id,
+        studentId: principal.studentId,
+        tenantId: principal.tenantId,
+      });
+      return success(request, tutorSessionView(task.id, turns));
     },
   );
 

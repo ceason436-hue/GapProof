@@ -49,6 +49,7 @@ const uploaded = { assetId, processingStatus: "uploaded", mimeType: "image/png",
 const inspection = { assetId, stage: "image_quality_check", processingStatus: "succeeded", mimeType: "image/png", byteSize: bytes.length, quality: { status: "passed", detectedMimeType: "image/png", width: 1200, height: 900, reasons: [], checkerVersion: "image-header-v1" } };
 const started = { batchId, caseId, status: "processing", processingNoticeAccepted: true };
 const extraction = { caseId, state: "awaiting_confirmation", stateVersion: 1, recognitionSource: "real_alibaba", uploadedAssetUsedForRecognition: true, items: [{ itemId: "item-real-1", prompt: "Choose the sentence that best describes the next step." }] };
+const lowQualityExtraction = { ...extraction, items: [{ itemId: "item-real-1", prompt: "这页图片没有识别出可直接核对的文字，请根据原图手动输入题目。" }] };
 const hypotheses = { caseId, stateVersion: 3, candidates: [{ id: "hypothesis-1", title: "顺序线索可能混在一起", explanation: "题目中的时间线索需要按先后顺序整理。", confidence: 0.8, evidenceRefs: ["evidence-1"] }, { id: "hypothesis-2", title: "规则边界需要再确认", explanation: "可以先找出这条规则适用的范围。", confidence: 0.7, evidenceRefs: ["evidence-2"] }], probe: { id: "probe-1", prompt: "哪一种整理方式最能帮助你继续？", choices: [{ id: "choice-a", label: "先按顺序列出已知信息" }, { id: "choice-b", label: "先圈出规则适用范围" }], testedHypothesisIds: ["hypothesis-1", "hypothesis-2"] } };
 const attempt = { attemptId: "0198c111-1111-7000-8000-000000000004", caseId, state: "intervention_ready", stateVersion: 4, probeId: "probe-1", selectedChoiceId: "choice-a", passed: false, selectedHypothesisId: null, scoringMethod: "exact_choice_v1" };
 const envelope = data => ({ data, requestId: `fixture-review-${scenario}-request`, traceId: `fixture-review-${scenario}-trace` });
@@ -106,7 +107,7 @@ const fixtureServer = createServer(async (request, response) => {
   if (request.method === "GET" && url === backendPath(extractionPath)) {
     extractionReads += 1;
     if (extractionReads === 1) { error(response, 409, "EXTRACTION_NOT_READY"); return; }
-    json(response, 200, envelope(extraction)); return;
+    json(response, 200, envelope(scenario === "low-quality" ? lowQualityExtraction : extraction)); return;
   }
   if (request.method === "POST" && url === backendPath(confirmPath)) {
     const body = await readBody(request); const entry = { body: JSON.parse(body.toString("utf8")), key: request.headers["idempotency-key"] }; confirmPosts.push(entry);
@@ -167,15 +168,35 @@ try {
   }
   const browser = await chromium.launch({ channel: "msedge", headless: true });
   try {
-    for (const currentScenario of ["success", "confirm-conflict", "confirm-network-unknown"]) {
+    for (const currentScenario of ["success", "low-quality", "confirm-conflict", "confirm-network-unknown"]) {
       reset(currentScenario);
       const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
       await visitReview(page);
-      const prompt = page.getByRole("textbox", { name: "本页识别内容" });
+      const prompt = page.getByRole("textbox", { name: "题干" });
       const learnerAnswer = page.getByRole("textbox", { name: "你当时的作答（选填）" });
       assert(await prompt.count() === 1 && await learnerAnswer.count() === 1, `${currentScenario}: extraction confirmation fields were not accessible.`);
       const extractionText = await page.locator(".case-review-panel").innerText();
       assert(!extractionText.includes("学生答案") && !extractionText.includes("置信度"), `${currentScenario}: student answer or precise confidence leaked.`);
+      if (currentScenario === "low-quality") {
+        assert(extractionText.includes("这页文字没有识别清楚"), "low-quality: readable recovery explanation missing.");
+        assert(!extractionText.includes("shc ce edt") && await prompt.inputValue() === "", "low-quality: garbled or placeholder content remained in the question field.");
+        assert(await page.getByRole("link", { name: "重新上传清晰图片" }).getAttribute("href") === "/materials/new", "low-quality: re-upload action missing.");
+        assert(await page.getByRole("link", { name: "直接手动输入" }).count() === 1, "low-quality: manual-entry action missing.");
+        assert(await page.getByRole("button", { name: "确认识别内容", exact: true }).isDisabled(), "low-quality: empty manual question could be confirmed.");
+        await prompt.fill("David went into the rainforest. What happened next?");
+        await page.getByRole("checkbox", { name: "我已核对本页识别内容" }).check();
+        await page.getByRole("button", { name: "确认识别内容", exact: true }).click();
+        await page.locator('[data-review-state="confirmed"]').waitFor();
+        assert(confirmPosts.length === 1 && confirmPosts[0].body.reviewedQuestions[0].prompt === "David went into the rainforest. What happened next?", "low-quality: manual question was not the confirmed payload.");
+        await page.close();
+        continue;
+      }
+      if (currentScenario === "success") {
+        await page.getByRole("button", { name: "继续拆出一道题" }).click();
+        const prompts = page.getByRole("textbox", { name: "题干" });
+        assert(await prompts.count() === 2, "success: adding a split question did not create another editable question.");
+        await prompts.nth(1).fill("Choose the best supporting detail.");
+      }
       await page.getByRole("checkbox", { name: "我已核对本页识别内容" }).check();
       await page.getByRole("button", { name: "确认识别内容", exact: true }).click();
       if (currentScenario === "confirm-conflict") {
@@ -214,7 +235,7 @@ try {
         assert(JSON.stringify(uploadPosts[0].body) === JSON.stringify({ studentId: fixtureStudentId }), "success: batch ownership did not use the device-session student.");
         assert(JSON.stringify(pagePosts[0].body) === JSON.stringify({ fileName, mimeType: "image/png", byteSize: bytes.length, sha256 }), "success: batch page upload metadata was not exact.");
         assert(JSON.stringify(startPosts[0].body) === JSON.stringify({ guardianConfirmed: true, processingNoticeAccepted: true }), "success: recognition consent body was not exact.");
-        assert(JSON.stringify(confirmPosts[0].body) === JSON.stringify({ expectedVersion: 1, confirmedItemIds: ["item-real-1"], corrections: [] }), "success: confirm body was not exact.");
+        assert(JSON.stringify(confirmPosts[0].body) === JSON.stringify({ expectedVersion: 1, confirmedItemIds: ["item-real-1"], corrections: [], reviewedQuestions: [{ sourceItemId: "item-real-1", prompt: "Choose the sentence that best describes the next step.", studentAnswer: null }, { sourceItemId: "item-real-1", prompt: "Choose the best supporting detail.", studentAnswer: null }] }), "success: split confirm body was not exact.");
         assert(JSON.stringify(runNextPosts[0].body) === JSON.stringify({ expectedVersion: 2 }) && JSON.stringify(runNextPosts[1].body) === JSON.stringify({ expectedVersion: 4 }), "success: run-next versions were not authoritative.");
         assert(JSON.stringify(attemptPosts[0].body) === JSON.stringify({ expectedVersion: 3, probeId: "probe-1", selectedChoiceId: "choice-a" }), "success: probe body was not exact.");
       }

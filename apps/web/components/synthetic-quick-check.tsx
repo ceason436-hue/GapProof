@@ -27,7 +27,7 @@ export function SyntheticQuickCheck() {
       setState(error instanceof TypeError ? "network_unknown" : "error");
       setMessage(error instanceof TypeError ? "题目读取结果未知，请确认网络后刷新页面。" : "暂时无法读取快速诊断题，请稍后再试。");
     });
-    return () => controller.abort("PAGE_LEFT");
+    return () => controller.abort();
   }, []);
 
   const isComplete = view?.questions.every(question => Boolean(answers[question.itemId])) ?? false;
@@ -41,7 +41,7 @@ export function SyntheticQuickCheck() {
       const response = await apiPost("/api/v1/quick-checks/synthetic/attempts", SyntheticQuickCheckResultSchema, body, idempotencyKey);
       setResult(response.data); setState("success"); setMessage("本次作答已检查完成。体验结果不会写入学习记录，也不会生成报告。");
     } catch (error) {
-      if (error instanceof TypeError) { setState("network_unknown"); setMessage("暂时无法确认是否提交成功。为避免重复操作，请重新进入快速检查后查看。"); }
+      if (error instanceof TypeError) { setState("network_unknown"); setMessage("暂时无法确认本次体验是否提交成功。体验结果不会写入正式学习记录；请不要把这次结果视为已完成，可以重新开始一次体验。"); }
       else { submittingRef.current = false; setState("error"); setMessage("这次检查没有完成，你可以确认答案后重新提交。"); }
     }
   };
@@ -62,6 +62,6 @@ export function SyntheticQuickCheck() {
     {result ? <article className="quick-check-result" data-quick-check-result><span className="status-chip">本次作答</span><h2>{result.correctCount} / {result.totalCount} 题正确</h2><p><strong>建议先复习：</strong>{findingLabels[result.finding]}</p><p>可以从这个知识点开始回顾，再用自己的错题做一次更完整的检查。</p><small>体验结果不会保存为正式学习记录，也不会生成报告。</small></article> : null}
     {result
       ? <div className="quick-check-links"><Link className="primary-blue" href="/materials/new">上传自己的错题继续</Link><button className="secondary-button" type="button" onClick={restart}>重新做 3 道题</button><Link className="ghost-link" href="/student/today">返回今日</Link></div>
-      : <div className="quick-check-links"><Link className="secondary-button" href="/materials/new">改为上传材料</Link><Link className="ghost-link" href="/student/today">返回今日</Link></div>}
+      : <div className="quick-check-links">{state === "network_unknown" ? <button className="primary-blue" type="button" onClick={restart}>重新开始一次体验</button> : null}<Link className="secondary-button" href="/materials/new">改为上传材料</Link><Link className="ghost-link" href="/student/today">返回今日</Link></div>}
   </section>;
 }

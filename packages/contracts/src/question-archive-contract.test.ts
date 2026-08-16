@@ -1,17 +1,35 @@
 import { FormatRegistry } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import { describe, expect, it } from "vitest";
-import { QuestionArchiveViewSchema } from "./api.ts";
+import { ConfirmExtractionRequestSchema, QuestionArchiveViewSchema } from "./api.ts";
 
 if (!FormatRegistry.Has("uuid")) FormatRegistry.Set("uuid", value => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value));
 if (!FormatRegistry.Has("date-time")) FormatRegistry.Set("date-time", value => !Number.isNaN(Date.parse(value)));
 
 describe("question archive contract", () => {
+  it("accepts bounded student-reviewed question splits without internal identifiers", () => {
+    expect(Value.Check(ConfirmExtractionRequestSchema, {
+      expectedVersion: 1,
+      confirmedItemIds: ["page-1"],
+      corrections: [],
+      reviewedQuestions: [
+        { sourceItemId: "page-1", prompt: "第一题", studentAnswer: "A" },
+        { sourceItemId: "page-1", prompt: "第二题", studentAnswer: null },
+      ],
+    })).toBe(true);
+    expect(Value.Check(ConfirmExtractionRequestSchema, {
+      expectedVersion: 1,
+      confirmedItemIds: ["page-1"],
+      corrections: [],
+      reviewedQuestions: [{ sourceItemId: "page-1", prompt: "", studentAnswer: null, answerKey: "A" }],
+    })).toBe(false);
+  });
+
   it("contains confirmed question text and task facts without private scoring fields", () => {
     const view = {
       timeZone: "Asia/Shanghai",
       items: [{
-        entryRef: "0198b111-1111-7000-8000-000000000001:0",
+        entryRef: "opaque_question_navigation_ref",
         source: "real_uploaded_material",
         sourceTitle: "英语练习",
         confirmedAt: "2026-08-16T04:00:00.000Z",

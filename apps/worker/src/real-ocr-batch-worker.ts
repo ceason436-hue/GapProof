@@ -11,7 +11,7 @@ import {
   type Database,
 } from "@gapproof/db";
 import { transitionCase } from "@gapproof/domain";
-import { createAlibabaEduPaperSdkTransportFromEnv } from "@gapproof/tools";
+import { ALIBABA_OCR_LOW_TEXT_QUALITY_WARNING, createAlibabaEduPaperSdkTransportFromEnv } from "@gapproof/tools";
 import type { JobQueue } from "@gapproof/jobs";
 
 type SourceStorage = { read(input: { readonly assetId: string; readonly objectKey: string }): Promise<Buffer> };
@@ -25,6 +25,15 @@ export interface RealOcrBatchWorkerOptions {
   readonly env?: Readonly<Record<string, string | undefined>>;
 }
 
+export const OCR_MANUAL_ENTRY_PROMPT = "这页图片没有识别出可直接核对的文字，请根据原图手动输入题目。";
+
+function manualEntryExtraction(order: number) {
+  return {
+    extraction: { page: order, items: [{ id: "item-1", prompt: OCR_MANUAL_ENTRY_PROMPT }], reviewRequired: true },
+    needsReview: true,
+  } as const;
+}
+
 export function providerOutcome(status: number): { status: "retryable_error" | "failed"; code: string } {
   if (status === 408) return { status: "retryable_error", code: "PROVIDER_TIMEOUT" };
   if (status === 429) return { status: "retryable_error", code: "RATE_LIMITED" };
@@ -35,10 +44,15 @@ export function providerOutcome(status: number): { status: "retryable_error" | "
 
 export function normalizedExtraction(value: unknown, order: number): { extraction: Record<string, unknown>; needsReview: boolean } {
   if (typeof value !== "object" || value === null || !Array.isArray((value as { items?: unknown }).items)) {
-    return { extraction: { page: order, items: [], reviewRequired: true }, needsReview: true };
+    return manualEntryExtraction(order);
   }
-  const parsed = value as { items: Array<{ id?: unknown; prompt?: unknown; confidence?: unknown }> };
+  const parsed = value as { items: Array<{ id?: unknown; prompt?: unknown; confidence?: unknown }>; warnings?: unknown };
+  const manualEntryRequired = Array.isArray(parsed.warnings) && parsed.warnings.includes(ALIBABA_OCR_LOW_TEXT_QUALITY_WARNING);
+  if (manualEntryRequired) {
+    return manualEntryExtraction(order);
+  }
   const items = parsed.items.flatMap((item, index) => typeof item.prompt === "string" && item.prompt.trim().length > 0 ? [{ id: `item-${index + 1}`, prompt: item.prompt.trim() }] : []);
+  if (items.length === 0) return manualEntryExtraction(order);
   const lowConfidence = parsed.items.some((item) => typeof item.confidence !== "number" || item.confidence < 0.8);
   return { extraction: { page: order, items, reviewRequired: lowConfidence || items.length === 0 }, needsReview: lowConfidence || items.length === 0 };
 }

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { QuestionArchiveItem, QuestionArchiveTaskFact } from "@gapproof/contracts";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { Database } from "./client.ts";
@@ -22,6 +23,37 @@ export function reconstructConfirmedMaterialItems(
     confirmedIds.add(value);
   }
   if (confirmedIds.size === 0) return undefined;
+
+  if (confirmationPayload.reviewedQuestions !== undefined) {
+    if (!Array.isArray(confirmationPayload.reviewedQuestions) || confirmationPayload.reviewedQuestions.length === 0 || confirmationPayload.reviewedQuestions.length > 50) return undefined;
+    const result: ConfirmedMaterialItem[] = [];
+    const representedItemIds = new Set<string>();
+    for (const raw of confirmationPayload.reviewedQuestions) {
+      if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return undefined;
+      const question = raw as Record<string, unknown>;
+      if (
+        typeof question.sourceItemId !== "string" ||
+        !confirmedIds.has(question.sourceItemId) ||
+        typeof question.prompt !== "string" ||
+        question.prompt.trim().length === 0 ||
+        question.prompt.length > 4_000 ||
+        (question.studentAnswer !== null && (typeof question.studentAnswer !== "string" || question.studentAnswer.trim().length === 0 || question.studentAnswer.length > 2_000))
+      ) return undefined;
+      result.push({
+        prompt: question.prompt.trim(),
+        studentAnswer: typeof question.studentAnswer === "string" ? question.studentAnswer.trim() : null,
+      });
+      representedItemIds.add(question.sourceItemId);
+    }
+    const extractionIds = new Set<string>();
+    for (const raw of extraction.items) {
+      if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return undefined;
+      const item = raw as Record<string, unknown>;
+      if (typeof item.itemId !== "string" || extractionIds.has(item.itemId)) return undefined;
+      extractionIds.add(item.itemId);
+    }
+    return [...confirmedIds].every((itemId) => extractionIds.has(itemId) && representedItemIds.has(itemId)) ? result : undefined;
+  }
 
   const corrections = new Map<string, { prompt?: string; studentAnswer?: string }>();
   for (const raw of confirmationPayload.corrections) {
@@ -129,7 +161,7 @@ export async function findStudentQuestionArchive(
     const items = reconstructConfirmedMaterialItems(extraction.payload, confirmation.payload);
     if (items === undefined) continue;
     items.forEach((item, index) => archive.push({
-      entryRef: `${caseRow.id}:${index}`,
+      entryRef: createHash("sha256").update(`${caseRow.id}:${index}`).digest("base64url").slice(0, 32),
       source: "real_uploaded_material",
       sourceTitle: caseRow.title?.trim() || "上传的学习材料",
       confirmedAt: confirmation.occurredAt.toISOString(),
