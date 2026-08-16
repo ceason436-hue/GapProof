@@ -2,9 +2,9 @@
 project_name: "知隙 GapProof"
 document_title: "GapProof 视觉与交互设计文档（DESIGN）"
 document_role: "信息架构、页面、视觉、交互、状态与可访问性的权威文档"
-version: "0.2.65"
+version: "0.2.66"
 status: "DRAFT_FOR_IMPLEMENTATION"
-current_design_stage: "PUSH-060 已发布：学习范围版本冲突可读取最新设置后继续；完整浏览器/移动端/真实学生验收仍 deferred"
+current_design_stage: "PUSH-061 已发布：Today、三题检查与上传页固定动作接入真实后续；完整浏览器/移动端/真实学生验收仍 deferred"
 last_updated: "2026-08-16"
 timezone: "Asia/Singapore"
 canonical_path: "D:\\Users\\Eason\\Documents\\ChatGPT\\知隙GapProof\\DESIGN.md"
@@ -1782,6 +1782,12 @@ MVP 不使用雷达图表示英语能力或掌握度，原因：
 ---
 
 ## 22. 版本记录
+
+### v0.2.66 — 2026-08-16
+
+- 正式 Today 的侧栏固定动作按当前状态定位当前任务、刷新安排或开始新检查；首次学习范围与三题检查定位到实际表单，上传页空闲态提供返回 Today，处理中继续显示状态而不鼓励离开。
+- 学生界面不再显示“本机存储”和“修复验证证据”，改为存储位置无关且可理解的事实文案；不把完成一轮复习表述为永久掌握。
+- 完整浏览器、移动端、视觉和真实学生验收继续 deferred。
 
 ### v0.2.65 — 2026-08-16
 
